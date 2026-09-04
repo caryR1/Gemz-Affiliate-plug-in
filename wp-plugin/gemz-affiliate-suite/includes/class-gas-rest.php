@@ -121,11 +121,27 @@ class GAS_REST {
 	}
 
 	public static function get_settings() {
-		return new WP_REST_Response( GAS_Settings::all(), 200 );
+		$settings                      = GAS_Settings::all();
+		$settings['signup_page_id']    = (int) get_option( 'gas_signup_page_id' );
+		$settings['dashboard_page_id'] = (int) get_option( 'gas_dashboard_page_id' );
+		return new WP_REST_Response( $settings, 200 );
 	}
 
 	public static function update_settings( WP_REST_Request $request ) {
-		$body    = $request->get_json_params();
+		$body = $request->get_json_params();
+
+		// signup_page_id / dashboard_page_id are separate raw options (not
+		// part of the gas_settings array) — used to point GAS_Frontend's
+		// signup_url()/dashboard_url() at a specific existing page, e.g.
+		// when cutting a site over onto this plugin without losing pages
+		// that already have nav menu items pointing at their post ID.
+		if ( array_key_exists( 'signup_page_id', $body ) ) {
+			update_option( 'gas_signup_page_id', absint( $body['signup_page_id'] ) );
+		}
+		if ( array_key_exists( 'dashboard_page_id', $body ) ) {
+			update_option( 'gas_dashboard_page_id', absint( $body['dashboard_page_id'] ) );
+		}
+
 		$allowed = array( 'site_name', 'partner_label', 'require_partner_at_signup', 'menu_icon' );
 
 		$values = array();
@@ -138,12 +154,16 @@ class GAS_REST {
 				: sanitize_text_field( $body[ $field ] );
 		}
 
-		if ( empty( $values ) ) {
+		if ( empty( $values ) && ! array_key_exists( 'signup_page_id', $body ) && ! array_key_exists( 'dashboard_page_id', $body ) ) {
 			return new WP_Error( 'gas_no_fields', 'No recognized settings fields to update.', array( 'status' => 400 ) );
 		}
 
+		if ( empty( $values ) ) {
+			return new WP_REST_Response( self::get_settings()->get_data(), 200 );
+		}
+
 		GAS_Settings::update( $values );
-		return new WP_REST_Response( GAS_Settings::all(), 200 );
+		return self::get_settings();
 	}
 
 	public static function update_partner( WP_REST_Request $request ) {

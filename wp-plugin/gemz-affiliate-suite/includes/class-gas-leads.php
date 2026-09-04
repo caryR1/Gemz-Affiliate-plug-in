@@ -21,6 +21,45 @@ class GAS_Leads {
 		add_action( 'admin_post_gas_submit_lead', array( __CLASS__, 'handle_submit' ) );
 		add_action( 'admin_post_nopriv_gas_submit_lead', array( __CLASS__, 'handle_submit' ) );
 		add_action( 'admin_post_gas_update_lead_status', array( __CLASS__, 'handle_update_status' ) );
+		add_action( 'gas_daily_stale_lead_check', array( __CLASS__, 'check_stale_leads' ) );
+	}
+
+	/**
+	 * Flags leads that have sat in an active (non-terminal) status for too
+	 * long without any update, and pings the site admin so a follow-up
+	 * actually happens instead of a lead silently rotting. Runs daily via
+	 * wp_schedule_event (see gemz-affiliate-suite.php's plugins_loaded
+	 * safety net, so this keeps working after a plain file redeploy
+	 * without a manual reactivate). Ported from gemz-referral-crm's
+	 * GRC_Admin::check_stale_leads().
+	 */
+	public static function check_stale_leads() {
+		global $wpdb;
+		$leads_table    = GAS_DB::table( 'leads' );
+		$partners_table = GAS_DB::table( 'partners' );
+
+		$stale_days = (int) apply_filters( 'gas_stale_lead_days', 5 );
+		$cutoff     = gmdate( 'Y-m-d H:i:s', strtotime( "-{$stale_days} days", current_time( 'timestamp' ) ) );
+
+		$stale_leads = $wpdb->get_results( $wpdb->prepare( "
+			SELECT l.*, p.name AS partner_name
+			FROM {$leads_table} l
+			LEFT JOIN {$partners_table} p ON p.id = l.partner_id
+			WHERE l.status IN ('new','accepted','in_progress')
+			AND COALESCE(l.updated_at, l.created_at) < %s
+		", $cutoff ) );
+
+		foreach ( $stale_leads as $lead ) {
+			$wpdb->update( $leads_table, array( 'status' => 'stale', 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $lead->id ) );
+
+			wp_mail(
+				get_option( 'admin_email' ),
+				'Stale lead: ' . $lead->customer_name,
+				"A lead hasn't been updated in {$stale_days}+ days and has been marked stale.\n\nCustomer: {$lead->customer_name}\nPartner: " . ( $lead->partner_name ?: 'Unknown partner' ) . "\nReceived: {$lead->created_at}\n\nFollow up with the partner, or check in wp-admin under Leads."
+			);
+
+			GAS_Admin::audit_log( 'lead', $lead->id, 'marked_stale', array( 'days_inactive' => $stale_days ) );
+		}
 	}
 
 	/**
@@ -218,6 +257,7 @@ class GAS_Leads {
 			array( 'status' => $status, 'updated_at' => current_time( 'mysql' ) ),
 			array( 'id' => $id )
 		);
+		GAS_Admin::audit_log( 'lead', $id, 'status_changed', array( 'status' => $status ) );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-leads&updated=1' ) );
 		exit;

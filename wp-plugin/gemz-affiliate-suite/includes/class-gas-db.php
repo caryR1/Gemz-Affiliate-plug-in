@@ -33,11 +33,12 @@ class GAS_DB {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$charset_collate = $wpdb->get_charset_collate();
 
-		$partners = self::table( 'partners' );
-		$codes    = self::table( 'codes' );
-		$clicks   = self::table( 'clicks' );
-		$payouts  = self::table( 'payouts' );
-		$leads    = self::table( 'leads' );
+		$partners  = self::table( 'partners' );
+		$codes     = self::table( 'codes' );
+		$clicks    = self::table( 'clicks' );
+		$payouts   = self::table( 'payouts' );
+		$leads     = self::table( 'leads' );
+		$audit_log = self::table( 'audit_log' );
 
 		$sql = "CREATE TABLE {$partners} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -144,6 +145,19 @@ class GAS_DB {
 			KEY partner_id (partner_id),
 			KEY code_id (code_id),
 			KEY status (status)
+		) {$charset_collate};
+
+		CREATE TABLE {$audit_log} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			user_id BIGINT UNSIGNED NULL,
+			object_type VARCHAR(20) NOT NULL,
+			object_id BIGINT UNSIGNED NULL,
+			action VARCHAR(60) NOT NULL,
+			details TEXT NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY object_type_id (object_type, object_id),
+			KEY created_at (created_at)
 		) {$charset_collate};";
 
 		dbDelta( $sql );

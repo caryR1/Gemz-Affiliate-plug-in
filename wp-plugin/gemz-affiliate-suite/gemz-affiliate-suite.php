@@ -11,8 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GAS_VERSION', '1.4.0' );
-define( 'GAS_DB_VERSION', '5' );
+define( 'GAS_VERSION', '1.5.0' );
+define( 'GAS_DB_VERSION', '6' );
 define( 'GAS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GAS_PLUGIN_FILE', __FILE__ );
 
@@ -38,6 +38,20 @@ add_action( 'plugins_loaded', array( 'GAS_DB', 'maybe_upgrade' ) );
 // and Manager roles on an already-active install without needing a DB
 // version bump or reactivation.
 add_action( 'plugins_loaded', array( 'GAS_Roles', 'add_role' ) );
+
+// Safety net for the daily stale-lead check: WP-Cron's scheduled-events
+// option isn't restored by re-uploading plugin files (only by the
+// activation hook, or an explicit check like this one), so this makes
+// sure the schedule exists on every request rather than only once at
+// activation — same reasoning gemz-referral-crm uses for its equivalent.
+add_action( 'plugins_loaded', function() {
+	if ( ! wp_next_scheduled( 'gas_daily_stale_lead_check' ) ) {
+		wp_schedule_event( time(), 'daily', 'gas_daily_stale_lead_check' );
+	}
+} );
+register_deactivation_hook( __FILE__, function() {
+	wp_clear_scheduled_hook( 'gas_daily_stale_lead_check' );
+} );
 
 GAS_Redirect::init();
 GAS_Leads::init();

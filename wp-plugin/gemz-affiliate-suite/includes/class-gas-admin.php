@@ -56,9 +56,34 @@ class GAS_Admin {
 		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP_PARTNERS, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Leads', 'Leads', self::CAP_LEADS, 'gas-leads', array( __CLASS__, 'render_leads_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Click Log', 'Click Log', self::CAP_REPORTS, 'gas-clicks', array( __CLASS__, 'render_clicks_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Reports', 'Reports', self::CAP_REPORTS, 'gas-reports', array( __CLASS__, 'render_reports_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Payout Calculator', 'Payout Calculator', self::CAP_COMMISSIONS, 'gas-calculator', array( __CLASS__, 'render_calculator_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Payout Ledger', 'Payout Ledger', self::CAP_COMMISSIONS, 'gas-ledger', array( __CLASS__, 'render_ledger_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Audit Log', 'Audit Log', 'gas_view_audit_log', 'gas-audit-log', array( __CLASS__, 'render_audit_log_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Settings', 'Settings', self::CAP_SETTINGS, 'gas-settings', array( __CLASS__, 'render_settings_page' ) );
+	}
+
+	/**
+	 * Records an admin-side mutation for later review — who did what to
+	 * which object, and when. Ported from gemz-referral-crm's
+	 * GRC_Admin::audit_log(). Called at the plugin's main mutation points
+	 * (partner/code/settings saves, payout entries, lead status changes,
+	 * automated payout runs) — not literally every possible action, but
+	 * the ones that matter for "who changed this and why."
+	 */
+	public static function audit_log( $object_type, $object_id, $action, $details = array() ) {
+		global $wpdb;
+		$wpdb->insert(
+			GAS_DB::table( 'audit_log' ),
+			array(
+				'user_id'     => get_current_user_id(),
+				'object_type' => $object_type,
+				'object_id'   => $object_id,
+				'action'      => $action,
+				'details'     => wp_json_encode( $details ),
+				'created_at'  => current_time( 'mysql' ),
+			)
+		);
 	}
 
 	private static function wrap_start( $title ) {
@@ -190,6 +215,8 @@ class GAS_Admin {
 			update_user_meta( $code->wp_user_id, 'gas_status', 'suspended' );
 		}
 
+		self::audit_log( 'code', $id, 'suspended' );
+
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-affiliates&suspended=1' ) );
 		exit;
 	}
@@ -216,6 +243,8 @@ class GAS_Admin {
 		if ( $code->wp_user_id ) {
 			update_user_meta( $code->wp_user_id, 'gas_status', 'active' );
 		}
+
+		self::audit_log( 'code', $id, 'reactivated' );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-affiliates&reactivated=1' ) );
 		exit;
@@ -345,9 +374,11 @@ class GAS_Admin {
 
 		if ( $id ) {
 			$wpdb->update( $table, $data, array( 'id' => $id ) );
+			self::audit_log( 'code', $id, 'updated', $data );
 		} else {
 			$data['created_at'] = current_time( 'mysql' );
 			$wpdb->insert( $table, $data );
+			self::audit_log( 'code', $wpdb->insert_id, 'created', $data );
 		}
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-codes&saved=1' ) );
@@ -363,6 +394,7 @@ class GAS_Admin {
 
 		global $wpdb;
 		$wpdb->delete( GAS_DB::table( 'codes' ), array( 'id' => $id ) );
+		self::audit_log( 'code', $id, 'deleted' );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-codes&deleted=1' ) );
 		exit;
@@ -564,6 +596,8 @@ class GAS_Admin {
 			)
 		);
 
+		self::audit_log( 'partner', $wpdb->insert_id, 'created', array( 'name' => $name ) );
+
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&added=1' ) );
 		exit;
 	}
@@ -613,6 +647,7 @@ class GAS_Admin {
 
 		$wpdb->update( GAS_DB::table( 'partners' ), $data, array( 'id' => $id ) );
 		GAS_Roles::provision_partner_account( $id );
+		self::audit_log( 'partner', $id, 'updated', $data );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&saved=1' ) );
 		exit;
@@ -928,6 +963,7 @@ class GAS_Admin {
 				)
 			);
 			$result['saved'] = true;
+			self::audit_log( 'payout', $wpdb->insert_id, 'entered', array( 'code' => $code->code, 'gross' => $gross, 'net' => $net ) );
 		}
 
 		set_transient( 'gas_calc_result_' . get_current_user_id(), $result, 60 );
@@ -1030,6 +1066,162 @@ class GAS_Admin {
 	}
 
 	/* ---------------------------------------------------------------- *
+	 * REPORTS
+	 * ---------------------------------------------------------------- */
+
+	public static function render_reports_page() {
+		if ( ! current_user_can( self::CAP_REPORTS ) ) {
+			return;
+		}
+		global $wpdb;
+		self::wrap_start( 'Reports' );
+
+		$payouts_table  = GAS_DB::table( 'payouts' );
+		$leads_table    = GAS_DB::table( 'leads' );
+		$partners_table = GAS_DB::table( 'partners' );
+		$codes_table    = GAS_DB::table( 'codes' );
+		$clicks_table   = GAS_DB::table( 'clicks' );
+
+		$money = $wpdb->get_row( "
+			SELECT
+				SUM(CASE WHEN status = 'unpaid' THEN subaffiliate_cut ELSE 0 END) AS cut_unpaid,
+				SUM(CASE WHEN status = 'paid'   THEN subaffiliate_cut ELSE 0 END) AS cut_paid,
+				SUM(cashback_amount) AS cashback_total,
+				SUM(tier2_amount + tier3_amount) AS override_total,
+				SUM(net_to_cary) AS net_total
+			FROM {$payouts_table}
+		" );
+
+		echo '<h2>Commission Summary</h2>';
+		echo '<table class="widefat striped" style="max-width:500px;"><tbody>';
+		echo '<tr><th>Sub-affiliate cut &mdash; unpaid</th><td>$' . esc_html( number_format( (float) ( $money->cut_unpaid ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Sub-affiliate cut &mdash; paid</th><td>$' . esc_html( number_format( (float) ( $money->cut_paid ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Buyer cash back (total)</th><td>$' . esc_html( number_format( (float) ( $money->cashback_total ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Sponsor overrides (total)</th><td>$' . esc_html( number_format( (float) ( $money->override_total ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Net to you (total)</th><td>$' . esc_html( number_format( (float) ( $money->net_total ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '</tbody></table>';
+
+		echo '<h2 style="margin-top:30px;">Partner Outcomes</h2>';
+		$partner_outcomes = $wpdb->get_results( "
+			SELECT p.name,
+				COUNT(l.id) AS total_leads,
+				SUM(CASE WHEN l.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+				SUM(CASE WHEN l.status = 'lost' THEN 1 ELSE 0 END) AS lost
+			FROM {$partners_table} p
+			LEFT JOIN {$leads_table} l ON l.partner_id = p.id
+			GROUP BY p.id
+			ORDER BY total_leads DESC
+		" );
+		echo '<table class="widefat striped"><thead><tr><th>Partner</th><th>Total Leads</th><th>Completed</th><th>Lost</th><th>Close Rate</th></tr></thead><tbody>';
+		if ( ! $partner_outcomes ) {
+			echo '<tr><td colspan="5">No leads yet.</td></tr>';
+		} else {
+			foreach ( $partner_outcomes as $row ) {
+				$rate = $row->total_leads > 0 ? round( ( $row->completed / $row->total_leads ) * 100 ) . '%' : '&mdash;';
+				echo '<tr>';
+				echo '<td>' . esc_html( $row->name ) . '</td>';
+				echo '<td>' . esc_html( $row->total_leads ) . '</td>';
+				echo '<td>' . esc_html( $row->completed ) . '</td>';
+				echo '<td>' . esc_html( $row->lost ) . '</td>';
+				echo '<td>' . esc_html( $rate ) . '</td>';
+				echo '</tr>';
+			}
+		}
+		echo '</tbody></table>';
+
+		echo '<h2 style="margin-top:30px;">Agent / Referrer Performance</h2>';
+		echo '<p class="description">Ranked by total earned, so your top senders are always at the top.</p>';
+		$agent_performance = $wpdb->get_results( "
+			SELECT c.id, c.code, c.sub_affiliate_name,
+				COUNT(DISTINCT cl.id) AS clicks,
+				COUNT(DISTINCT pay.id) AS conversions,
+				COALESCE(SUM(pay.subaffiliate_cut), 0) AS earned
+			FROM {$codes_table} c
+			LEFT JOIN {$clicks_table} cl ON cl.code_id = c.id
+			LEFT JOIN {$payouts_table} pay ON pay.code_id = c.id
+			GROUP BY c.id
+			ORDER BY earned DESC
+		" );
+		echo '<table class="widefat striped"><thead><tr><th>Code</th><th>Name</th><th>Clicks</th><th>Conversions</th><th>Conversion Rate</th><th>Total Earned</th></tr></thead><tbody>';
+		if ( ! $agent_performance ) {
+			echo '<tr><td colspan="6">No affiliates yet.</td></tr>';
+		} else {
+			foreach ( $agent_performance as $row ) {
+				$rate = $row->clicks > 0 ? round( ( $row->conversions / $row->clicks ) * 100, 1 ) . '%' : '&mdash;';
+				echo '<tr>';
+				echo '<td><code>' . esc_html( $row->code ) . '</code></td>';
+				echo '<td>' . esc_html( $row->sub_affiliate_name ) . '</td>';
+				echo '<td>' . esc_html( $row->clicks ) . '</td>';
+				echo '<td>' . esc_html( $row->conversions ) . '</td>';
+				echo '<td>' . esc_html( $rate ) . '</td>';
+				echo '<td>$' . esc_html( number_format( (float) $row->earned, 2 ) ) . '</td>';
+				echo '</tr>';
+			}
+		}
+		echo '</tbody></table>';
+
+		self::wrap_end();
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * AUDIT LOG
+	 * ---------------------------------------------------------------- */
+
+	public static function render_audit_log_page() {
+		if ( ! current_user_can( 'gas_view_audit_log' ) ) {
+			return;
+		}
+		global $wpdb;
+		self::wrap_start( 'Audit Log' );
+
+		$table    = GAS_DB::table( 'audit_log' );
+		$total    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		$per_page = 50;
+		$paged    = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+		$offset   = ( $paged - 1 ) * $per_page;
+
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$table} ORDER BY created_at DESC LIMIT %d OFFSET %d",
+			$per_page,
+			$offset
+		) );
+
+		echo '<p>' . esc_html( $total ) . ' total entries.</p>';
+
+		if ( ! $rows ) {
+			echo '<p>Nothing logged yet.</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>When</th><th>Who</th><th>Object</th><th>Action</th><th>Details</th></tr></thead><tbody>';
+			foreach ( $rows as $r ) {
+				$user = $r->user_id ? get_userdata( $r->user_id ) : null;
+				echo '<tr>';
+				echo '<td>' . esc_html( $r->created_at ) . '</td>';
+				echo '<td>' . ( $user ? esc_html( $user->display_name ) : '<em>system</em>' ) . '</td>';
+				echo '<td>' . esc_html( $r->object_type ) . ( $r->object_id ? ' #' . esc_html( $r->object_id ) : '' ) . '</td>';
+				echo '<td>' . esc_html( $r->action ) . '</td>';
+				echo '<td style="max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' . esc_html( $r->details ) . '</td>';
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+
+			$total_pages = (int) ceil( $total / $per_page );
+			if ( $total_pages > 1 ) {
+				echo '<p>';
+				for ( $i = 1; $i <= $total_pages; $i++ ) {
+					if ( $i === $paged ) {
+						echo '<strong>' . $i . '</strong> ';
+					} else {
+						echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-audit-log&paged=' . $i ) ) . '">' . $i . '</a> ';
+					}
+				}
+				echo '</p>';
+			}
+		}
+
+		self::wrap_end();
+	}
+
+	/* ---------------------------------------------------------------- *
 	 * AUTOMATED PAYOUTS (PayPal / Wise)
 	 * ---------------------------------------------------------------- */
 
@@ -1112,6 +1304,7 @@ class GAS_Admin {
 					esc_html( $result['currency'] )
 				),
 			);
+			self::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'paid_user_ids' => $result['paid_user_ids'], 'total' => $result['total'] ) );
 		}
 
 		set_transient( 'gas_payout_result_' . get_current_user_id(), $notice, 60 );
@@ -1137,6 +1330,10 @@ class GAS_Admin {
 				$reasons[]  = ( $user ? esc_html( $user->display_name ) : 'user #' . $uid ) . ': ' . esc_html( $reason );
 			}
 			$message .= ' ' . $failed_count . ' failed &mdash; ' . implode( '; ', $reasons );
+		}
+
+		if ( $paid_count ) {
+			self::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'paid' => $result['paid'], 'failed_count' => $failed_count ) );
 		}
 
 		set_transient( 'gas_payout_result_' . get_current_user_id(), array( 'error' => (bool) $failed_count && ! $paid_count, 'message' => $message ), 60 );
@@ -1199,6 +1396,7 @@ class GAS_Admin {
 
 		global $wpdb;
 		$wpdb->delete( GAS_DB::table( 'payouts' ), array( 'id' => $id ) );
+		self::audit_log( 'payout', $id, 'deleted' );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-ledger&deleted=1' ) );
 		exit;
@@ -1258,6 +1456,8 @@ class GAS_Admin {
 			'tier2_override_percent'    => isset( $_POST['tier2_override_percent'] ) ? (float) $_POST['tier2_override_percent'] : 10,
 			'tier3_override_percent'    => isset( $_POST['tier3_override_percent'] ) ? (float) $_POST['tier3_override_percent'] : 5,
 		) );
+
+		self::audit_log( 'settings', 0, 'updated' );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-settings&saved=1' ) );
 		exit;

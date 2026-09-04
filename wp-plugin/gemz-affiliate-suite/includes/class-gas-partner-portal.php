@@ -246,6 +246,7 @@ class GAS_Partner_Portal {
 			array( 'status' => $status, 'updated_at' => current_time( 'mysql' ) ),
 			array( 'id' => $lead_id )
 		);
+		GAS_Admin::audit_log( 'lead', $lead_id, 'status_changed_by_partner', array( 'status' => $status ) );
 
 		wp_safe_redirect( add_query_arg( 'updated', '1', self::page_url() ) );
 		exit;

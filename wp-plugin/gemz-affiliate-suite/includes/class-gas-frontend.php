@@ -139,6 +139,10 @@ class GAS_Frontend {
 				<input type="email" id="gas_email" name="email" required class="gas-input">
 			</p>
 			<p>
+				<label for="gas_phone">Phone (optional)</label><br>
+				<input type="tel" id="gas_phone" name="phone" class="gas-input">
+			</p>
+			<p>
 				<label for="gas_password">Choose a password</label><br>
 				<input type="password" id="gas_password" name="password" required minlength="8" class="gas-input">
 			</p>
@@ -170,6 +174,7 @@ class GAS_Frontend {
 
 		$name       = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
 		$email      = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+		$phone      = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
 		$password   = isset( $_POST['password'] ) ? (string) $_POST['password'] : '';
 		$password2  = isset( $_POST['password2'] ) ? (string) $_POST['password2'] : '';
 
@@ -204,6 +209,9 @@ class GAS_Frontend {
 		}
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
+		if ( '' !== $phone ) {
+			update_user_meta( $user_id, 'gas_phone', $phone );
+		}
 
 		$code = self::generate_unique_code( $name );
 
@@ -224,10 +232,8 @@ class GAS_Frontend {
 				'wp_user_id'         => $user_id,
 				'sponsor_code_id'    => $sponsor_code_id,
 				'status'             => 'active',
-				'cut_type'           => 'percent',
-				'cut_value'          => 0,
 				'active'             => 1,
-				'notes'              => "Self-signup, live immediately. No partner assigned yet — match to a partner and set the cut rate from {$site_name} > Codes.",
+				'notes'              => "Self-signup, live immediately. No partner assigned yet — match them to a partner from {$site_name} > Codes.",
 				'created_at'         => current_time( 'mysql' ),
 			)
 		);
@@ -235,7 +241,7 @@ class GAS_Frontend {
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New affiliate joined: ' . $name,
-			"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nCode: {$code}\n\nMatch them to a partner and set their cut rate in wp-admin under {$site_name} > Codes."
+			"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nCode: {$code}\n\nMatch them to a partner in wp-admin under {$site_name} > Codes."
 		);
 
 		// One-time attribution: clear the sponsor cookie now that it's been

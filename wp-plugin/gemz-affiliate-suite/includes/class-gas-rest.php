@@ -131,7 +131,6 @@ class GAS_REST {
 		}
 
 		$payout_type      = isset( $body['payout_type'] ) && in_array( $body['payout_type'], array( 'flat', 'percent' ), true ) ? $body['payout_type'] : 'flat';
-		$default_cut_type = isset( $body['default_cut_type'] ) && in_array( $body['default_cut_type'], array( 'flat', 'percent' ), true ) ? $body['default_cut_type'] : 'percent';
 		$cashback_type    = isset( $body['cashback_type'] ) && in_array( $body['cashback_type'], array( 'flat', 'percent' ), true ) ? $body['cashback_type'] : null;
 		$fulfillment_mode = isset( $body['fulfillment_mode'] ) && 'lead_capture' === $body['fulfillment_mode'] ? 'lead_capture' : 'redirect';
 
@@ -144,8 +143,6 @@ class GAS_REST {
 				'payout_amount'        => isset( $body['payout_amount'] ) ? (float) $body['payout_amount'] : null,
 				'payout_percent'       => isset( $body['payout_percent'] ) ? (float) $body['payout_percent'] : null,
 				'installments_json'    => ! empty( $body['installments'] ) ? wp_json_encode( $body['installments'] ) : null,
-				'default_cut_type'     => $default_cut_type,
-				'default_cut_value'    => isset( $body['default_cut_value'] ) ? (float) $body['default_cut_value'] : 0,
 				'cashback_type'        => $cashback_type,
 				'cashback_value'       => isset( $body['cashback_value'] ) ? (float) $body['cashback_value'] : 0,
 				'fulfillment_mode'     => $fulfillment_mode,
@@ -185,8 +182,8 @@ class GAS_REST {
 			update_option( 'gas_dashboard_page_id', absint( $body['dashboard_page_id'] ) );
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier2_override_percent', 'tier3_override_percent' );
-		$numeric  = array( 'tier2_override_percent', 'tier3_override_percent' );
+		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent' );
+		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent' );
 
 		$values = array();
 		foreach ( $allowed as $field ) {
@@ -224,15 +221,13 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'default_cut_type', 'default_cut_value', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'email', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'email', 'notes' );
 		$formats    = array();
 		$format_map = array(
 			'name'                 => '%s',
 			'payout_type'          => '%s',
 			'payout_amount'        => '%f',
 			'payout_percent'       => '%f',
-			'default_cut_type'     => '%s',
-			'default_cut_value'    => '%f',
 			'cashback_type'        => '%s',
 			'cashback_value'       => '%f',
 			'fulfillment_mode'     => '%s',
@@ -251,7 +246,7 @@ class GAS_REST {
 					$value = sanitize_email( $value );
 				} elseif ( 'notes' === $field || 'name' === $field ) {
 					$value = sanitize_text_field( $value );
-				} elseif ( in_array( $field, array( 'payout_type', 'default_cut_type' ), true ) ) {
+				} elseif ( 'payout_type' === $field ) {
 					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : 'percent';
 				} elseif ( 'cashback_type' === $field ) {
 					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : null;

@@ -20,15 +20,20 @@ class GAS_Settings {
 			'site_name'                 => get_bloginfo( 'name' ) ?: 'Affiliate Suite',
 			'partner_label'             => 'partner',
 			'menu_icon'                 => 'dashicons-groups',
-			// Multi-tier recruiting: an affiliate who recruits another
-			// affiliate (their "sponsor") earns an override on that
-			// recruit's sales, and again (smaller) on sales made by
-			// whoever the recruit themselves later recruits. These are a
-			// percent of gross commission, additive on top of the direct
-			// affiliate's own cut — recruiting never reduces what a
-			// sponsored affiliate earns on their own sales.
-			'tier2_override_percent'   => 10,
-			'tier3_override_percent'   => 5,
+			// Multi-tier recruiting commission model: FIXED pooled split,
+			// not additive. The gross commission on a sale is a fixed
+			// total pool, divided across up to 3 tiers (the direct
+			// affiliate, their sponsor, and their sponsor's sponsor) by
+			// these fixed percentages — the SAME split for every
+			// affiliate, not individually negotiable per code. Total
+			// payout never grows with chain depth: if a tier has no one
+			// in it (e.g. the affiliate has no sponsor), that tier's
+			// share simply isn't paid to anyone — it stays with the
+			// house (net_to_cary) rather than being redistributed to the
+			// tiers that do have someone in them.
+			'tier1_split_percent'      => 70,
+			'tier2_split_percent'      => 20,
+			'tier3_split_percent'      => 10,
 		);
 	}
 

@@ -155,26 +155,21 @@ class GAS_Admin {
 			return;
 		}
 
-		echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Email</th><th>Partner</th><th>Code</th><th>Cut rate</th><th>Status</th><th>Payment info</th><th>Actions</th></tr></thead><tbody>';
+		echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Email</th><th>Partner</th><th>Code</th><th>Status</th><th>Payment info</th><th>Actions</th></tr></thead><tbody>';
 		foreach ( $rows as $r ) {
 			$user    = get_userdata( $r->wp_user_id );
 			$email   = $user ? $user->user_email : '(deleted user)';
 			$payment = $r->wp_user_id ? GAS_Payouts::masked_summary( $r->wp_user_id ) : '';
-			$cut     = 'percent' === $r->cut_type ? esc_html( $r->cut_value ) . '%' : '$' . esc_html( number_format( (float) $r->cut_value, 2 ) ) . ' flat';
-			if ( 0.0 === (float) $r->cut_value ) {
-				$cut .= ' <span style="color:#b32d2e;">(0 &mdash; check this)</span>';
-			}
 
 			echo '<tr>';
 			echo '<td>' . esc_html( $r->sub_affiliate_name ) . '</td>';
 			echo '<td>' . esc_html( $email ) . '</td>';
 			echo '<td>' . esc_html( $r->partner_name ?: '(unassigned)' ) . '</td>';
 			echo '<td><code>' . esc_html( $r->code ) . '</code></td>';
-			echo '<td>' . $cut . '</td>';
 			echo '<td>' . esc_html( $r->status ) . '</td>';
 			echo '<td>' . ( $payment ? esc_html( $payment ) : '<em>not set</em>' ) . '</td>';
 			echo '<td>';
-			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $r->id ) ) . '">Edit rate</a> | ';
+			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $r->id ) ) . '">Edit</a> | ';
 
 			if ( 'suspended' === $r->status ) {
 				$url = wp_nonce_url( admin_url( 'admin-post.php?action=gas_reactivate_affiliate&id=' . $r->id ), 'gas_reactivate_affiliate_' . $r->id );
@@ -292,16 +287,6 @@ class GAS_Admin {
 		}
 		echo '</select> <p class="description">Which ' . esc_html( GAS_Settings::get( 'partner_label' ) ) . ' this sub-affiliate\'s traffic goes to.</p></td></tr>';
 
-		$cut_type = $editing->cut_type ?? 'percent';
-		echo '<tr><th>Sub-affiliate cut</th><td>';
-		echo '<select name="cut_type">';
-		echo '<option value="percent"' . selected( $cut_type, 'percent', false ) . '>Percent of commission</option>';
-		echo '<option value="flat"' . selected( $cut_type, 'flat', false ) . '>Flat dollar amount per sale</option>';
-		echo '</select> ';
-		echo '<input type="number" step="0.01" min="0" name="cut_value" value="' . esc_attr( $editing->cut_value ?? '' ) . '" placeholder="e.g. 50 for 50%, or 25.00 for $25 flat"> ';
-		echo '<p class="description">This is what YOU owe the sub-affiliate, out of your own commission, per sale attributed to this code. Rates can differ per partner &mdash; add a separate code per partner if the same person promotes more than one.</p>';
-		echo '</td></tr>';
-
 		echo '<tr><th><label for="active">Active</label></th><td><label><input type="checkbox" id="active" name="active" value="1"' . checked( $editing->active ?? 1, 1, false ) . '> Redirect and log clicks for this code</label></td></tr>';
 
 		echo '<tr><th><label for="notes">Notes</label></th><td><textarea id="notes" name="notes" class="large-text" rows="2">' . esc_textarea( $editing->notes ?? '' ) . '</textarea></td></tr>';
@@ -319,17 +304,15 @@ class GAS_Admin {
 		if ( ! $codes ) {
 			echo '<p>No codes yet.</p>';
 		} else {
-			echo '<table class="widefat striped"><thead><tr><th>Code</th><th>Link</th><th>Sub-affiliate</th><th>Sponsored by</th><th>Partner</th><th>Cut</th><th>Active</th><th>Actions</th></tr></thead><tbody>';
+			echo '<table class="widefat striped"><thead><tr><th>Code</th><th>Link</th><th>Sub-affiliate</th><th>Sponsored by</th><th>Partner</th><th>Active</th><th>Actions</th></tr></thead><tbody>';
 			foreach ( $codes as $c ) {
 				$link = home_url( '/go/' . rawurlencode( $c->code ) . '/' );
-				$cut  = 'percent' === $c->cut_type ? esc_html( $c->cut_value ) . '%' : '$' . esc_html( number_format( (float) $c->cut_value, 2 ) ) . ' flat';
 				echo '<tr>';
 				echo '<td><code>' . esc_html( $c->code ) . '</code></td>';
 				echo '<td><code>' . esc_html( $link ) . '</code></td>';
 				echo '<td>' . esc_html( $c->sub_affiliate_name ) . '</td>';
 				echo '<td>' . esc_html( $c->sponsor_name ?: '&mdash;' ) . '</td>';
 				echo '<td>' . esc_html( $c->partner_name ?: '(none)' ) . '</td>';
-				echo '<td>' . $cut . '</td>';
 				echo '<td>' . ( $c->active ? 'Yes' : 'No' ) . '</td>';
 				echo '<td>';
 				echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $c->id ) ) . '">Edit</a> | ';
@@ -357,8 +340,6 @@ class GAS_Admin {
 		$code               = isset( $_POST['code'] ) ? sanitize_title( wp_unslash( $_POST['code'] ) ) : '';
 		$sub_affiliate_name = isset( $_POST['sub_affiliate_name'] ) ? sanitize_text_field( wp_unslash( $_POST['sub_affiliate_name'] ) ) : '';
 		$partner_id         = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
-		$cut_type           = isset( $_POST['cut_type'] ) && 'flat' === $_POST['cut_type'] ? 'flat' : 'percent';
-		$cut_value          = isset( $_POST['cut_value'] ) ? (float) $_POST['cut_value'] : 0;
 		$active             = isset( $_POST['active'] ) ? 1 : 0;
 		$notes              = isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
 
@@ -366,8 +347,6 @@ class GAS_Admin {
 			'code'               => $code,
 			'sub_affiliate_name' => $sub_affiliate_name,
 			'partner_id'         => $partner_id,
-			'cut_type'           => $cut_type,
-			'cut_value'          => $cut_value,
 			'active'             => $active,
 			'notes'              => $notes,
 		);
@@ -454,15 +433,6 @@ class GAS_Admin {
 			echo 'is <input type="number" step="0.01" min="0" max="100" name="inst2_pct" value="' . esc_attr( $inst2_frac ) . '" style="width:80px"> % of the total commission';
 			echo '</td></tr>';
 
-			echo '<tr><th>Default sub-affiliate cut</th><td>';
-			echo '<select name="default_cut_type">';
-			echo '<option value="percent"' . selected( $editing->default_cut_type ?? 'percent', 'percent', false ) . '>Percent of commission</option>';
-			echo '<option value="flat"' . selected( $editing->default_cut_type ?? 'percent', 'flat', false ) . '>Flat dollar amount per sale</option>';
-			echo '</select> ';
-			echo '<input type="number" step="0.01" min="0" name="default_cut_value" value="' . esc_attr( $editing->default_cut_value ?? '0' ) . '"> ';
-			echo '<p class="description">Applied automatically to new self-signup affiliates for this partner, when signup requires choosing a partner up front. You can still override any individual affiliate\'s rate later from the Codes screen.</p>';
-			echo '</td></tr>';
-
 			echo '<tr><th>Buyer cash back</th><td>';
 			echo '<select name="cashback_type">';
 			echo '<option value=""' . selected( $editing->cashback_type ?? '', '', false ) . '>None</option>';
@@ -512,7 +482,7 @@ class GAS_Admin {
 			if ( ! $partners ) {
 				echo '<p>No partners yet. Add one above to get started.</p>';
 			} else {
-				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Default sub-affiliate cut</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
+				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
 				foreach ( $partners as $p ) {
 					if ( 'flat' === $p->payout_type ) {
 						$structure = $p->payout_amount ? '$' . number_format( (float) $p->payout_amount, 2 ) . ' flat' : '<em>not set</em>';
@@ -528,11 +498,9 @@ class GAS_Admin {
 						}
 					}
 					echo '<tr>';
-					$default_cut = 'percent' === $p->default_cut_type ? esc_html( $p->default_cut_value ) . '%' : '$' . esc_html( number_format( (float) $p->default_cut_value, 2 ) ) . ' flat';
-					$cashback    = $p->cashback_type ? ( 'percent' === $p->cashback_type ? esc_html( $p->cashback_value ) . '%' : '$' . esc_html( number_format( (float) $p->cashback_value, 2 ) ) . ' flat' ) : '<em>none</em>';
+					$cashback = $p->cashback_type ? ( 'percent' === $p->cashback_type ? esc_html( $p->cashback_value ) . '%' : '$' . esc_html( number_format( (float) $p->cashback_value, 2 ) ) . ' flat' ) : '<em>none</em>';
 					echo '<td>' . esc_html( $p->name ) . '</td>';
 					echo '<td>' . $structure . '</td>';
-					echo '<td>' . $default_cut . '</td>';
 					echo '<td>' . $cashback . '</td>';
 					echo '<td>' . esc_html( self::fulfillment_mode_label( $p->fulfillment_mode ) ) . '</td>';
 					echo '<td>' . ( $p->destination_url ? '<code>' . esc_html( $p->destination_url ) . '</code>' : '<em>not set yet</em>' ) . '</td>';
@@ -583,8 +551,6 @@ class GAS_Admin {
 				'payout_amount'     => null,
 				'payout_percent'    => null,
 				'installments_json' => null,
-				'default_cut_type'  => 'percent',
-				'default_cut_value' => 0,
 				'cashback_type'     => null,
 				'cashback_value'    => 0,
 				'fulfillment_mode'  => 'redirect',
@@ -634,8 +600,6 @@ class GAS_Admin {
 			'payout_amount'     => '' !== $_POST['payout_amount'] ? (float) $_POST['payout_amount'] : null,
 			'payout_percent'    => '' !== $_POST['payout_percent'] ? (float) $_POST['payout_percent'] : null,
 			'installments_json' => $installments ? wp_json_encode( $installments ) : null,
-			'default_cut_type'  => isset( $_POST['default_cut_type'] ) && 'flat' === $_POST['default_cut_type'] ? 'flat' : 'percent',
-			'default_cut_value' => isset( $_POST['default_cut_value'] ) ? (float) $_POST['default_cut_value'] : 0,
 			'cashback_type'     => isset( $_POST['cashback_type'] ) && in_array( $_POST['cashback_type'], array( 'flat', 'percent' ), true ) ? $_POST['cashback_type'] : null,
 			'cashback_value'    => isset( $_POST['cashback_value'] ) ? (float) $_POST['cashback_value'] : 0,
 			'fulfillment_mode'  => isset( $_POST['fulfillment_mode'] ) && 'lead_capture' === $_POST['fulfillment_mode'] ? 'lead_capture' : 'redirect',
@@ -794,15 +758,15 @@ class GAS_Admin {
 			if ( $result ) {
 				echo '<div class="notice notice-success"><h2 style="margin-top:0">Result</h2>';
 				echo '<p><strong>Gross commission (yours from the partner):</strong> $' . esc_html( number_format( $result['gross'], 2 ) ) . '</p>';
-				echo '<p><strong>Sub-affiliate cut:</strong> $' . esc_html( number_format( $result['cut'], 2 ) ) . '</p>';
+				echo '<p><strong>Tier 1 share (' . esc_html( $result['tier1_pct'] ) . '% &mdash; the affiliate):</strong> $' . esc_html( number_format( $result['cut'], 2 ) ) . '</p>';
 				if ( $result['cashback'] > 0 ) {
 					echo '<p><strong>Buyer cash back:</strong> $' . esc_html( number_format( $result['cashback'], 2 ) ) . '</p>';
 				}
 				if ( $result['tier2_amount'] > 0 ) {
-					echo '<p><strong>Sponsor override (' . esc_html( $result['tier2_name'] ) . '):</strong> $' . esc_html( number_format( $result['tier2_amount'], 2 ) ) . '</p>';
+					echo '<p><strong>Tier 2 share (' . esc_html( $result['tier2_pct'] ) . '% &mdash; ' . esc_html( $result['tier2_name'] ) . '):</strong> $' . esc_html( number_format( $result['tier2_amount'], 2 ) ) . '</p>';
 				}
 				if ( $result['tier3_amount'] > 0 ) {
-					echo '<p><strong>Sponsor\'s sponsor override (' . esc_html( $result['tier3_name'] ) . '):</strong> $' . esc_html( number_format( $result['tier3_amount'], 2 ) ) . '</p>';
+					echo '<p><strong>Tier 3 share (' . esc_html( $result['tier3_pct'] ) . '% &mdash; ' . esc_html( $result['tier3_name'] ) . '):</strong> $' . esc_html( number_format( $result['tier3_amount'], 2 ) ) . '</p>';
 				}
 				echo '<p><strong>Net to you:</strong> $' . esc_html( number_format( $result['net'], 2 ) ) . '</p>';
 				if ( ! empty( $result['saved'] ) ) {
@@ -897,15 +861,9 @@ class GAS_Admin {
 			}
 		}
 
-		if ( 'flat' === $code->cut_type ) {
-			$cut = (float) $code->cut_value;
-		} else {
-			$cut = $gross * ( (float) $code->cut_value / 100 );
-		}
-
-		// Buyer cash back comes out of the gross commission, same base as
-		// the sub-affiliate cut — the two are independent shares of the
-		// same gross, not stacked on top of each other.
+		// Buyer cash back comes out of the gross commission independently
+		// of the tier split below — a separate deduction, not part of the
+		// pool that gets divided among tiers.
 		if ( $partner->cashback_type ) {
 			$cashback = 'flat' === $partner->cashback_type
 				? (float) $partner->cashback_value
@@ -914,28 +872,40 @@ class GAS_Admin {
 			$cashback = 0.0;
 		}
 
-		// Multi-tier recruiting overrides: whoever recruited this affiliate
-		// (and, one level further, whoever recruited THEM) earns a percent
-		// of gross on top of everything above — additive, not carved out
-		// of the direct affiliate's own cut, so recruiting never reduces
-		// what a sponsored affiliate earns on their own sales.
+		// Multi-tier recruiting commissions: FIXED pooled split, not
+		// additive. Gross commission is a fixed total pool, divided across
+		// up to 3 tiers (direct affiliate, their sponsor, their sponsor's
+		// sponsor) by fixed percentages from Settings — the same split for
+		// every affiliate, never individually negotiated per code. Total
+		// payout never grows with chain depth: a tier with no one in it
+		// (e.g. this affiliate has no sponsor) simply isn't paid to
+		// anyone — that share stays with the house (net_to_cary) rather
+		// than being redistributed to the tiers that DO have someone.
 		global $wpdb;
 		$codes_table = GAS_DB::table( 'codes' );
 		$tier2_code  = $code->sponsor_code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $code->sponsor_code_id ) ) : null;
 		$tier3_code  = $tier2_code && $tier2_code->sponsor_code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $tier2_code->sponsor_code_id ) ) : null;
 
-		$tier2_amount = $tier2_code ? round( $gross * ( (float) GAS_Settings::get( 'tier2_override_percent' ) / 100 ), 2 ) : 0.0;
-		$tier3_amount = $tier3_code ? round( $gross * ( (float) GAS_Settings::get( 'tier3_override_percent' ) / 100 ), 2 ) : 0.0;
+		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
+		$tier2_pct = (float) GAS_Settings::get( 'tier2_split_percent' );
+		$tier3_pct = (float) GAS_Settings::get( 'tier3_split_percent' );
 
-		$net = $gross - $cut - $cashback - $tier2_amount - $tier3_amount;
+		$tier1_amount = round( $gross * ( $tier1_pct / 100 ), 2 );
+		$tier2_amount = $tier2_code ? round( $gross * ( $tier2_pct / 100 ), 2 ) : 0.0;
+		$tier3_amount = $tier3_code ? round( $gross * ( $tier3_pct / 100 ), 2 ) : 0.0;
+
+		$net = $gross - $cashback - $tier1_amount - $tier2_amount - $tier3_amount;
 
 		$result = array(
 			'gross'         => $gross,
-			'cut'           => $cut,
+			'cut'           => $tier1_amount,
+			'tier1_pct'     => $tier1_pct,
 			'cashback'      => $cashback,
 			'tier2_amount'  => $tier2_amount,
+			'tier2_pct'     => $tier2_pct,
 			'tier2_name'    => $tier2_code ? $tier2_code->sub_affiliate_name : '',
 			'tier3_amount'  => $tier3_amount,
+			'tier3_pct'     => $tier3_pct,
 			'tier3_name'    => $tier3_code ? $tier3_code->sub_affiliate_name : '',
 			'net'           => $net,
 			'saved'         => false,
@@ -951,7 +921,7 @@ class GAS_Admin {
 					'sale_amount'       => $sale_amount,
 					'installment_label' => $installment_label,
 					'gross_commission'  => $gross,
-					'subaffiliate_cut'  => $cut,
+					'subaffiliate_cut'  => $tier1_amount,
 					'cashback_amount'   => $cashback,
 					'tier2_code_id'     => $tier2_code ? $tier2_code->id : null,
 					'tier2_amount'      => $tier2_amount,
@@ -1012,7 +982,7 @@ class GAS_Admin {
 			$total_cashback = 0;
 			$total_override = 0;
 			$total_net      = 0;
-			echo '<table class="widefat striped"><thead><tr><th>Date</th><th>Code</th><th>Partner</th><th>Sale</th><th>Installment</th><th>Gross</th><th>Sub-affiliate cut</th><th>Buyer cash back</th><th>Sponsor overrides</th><th>Net to you</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>';
+			echo '<table class="widefat striped"><thead><tr><th>Date</th><th>Code</th><th>Partner</th><th>Sale</th><th>Installment</th><th>Gross</th><th>Tier 1 share</th><th>Buyer cash back</th><th>Tier 2/3 shares</th><th>Net to you</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>';
 			foreach ( $rows as $r ) {
 				$total_gross    += (float) $r->gross_commission;
 				$total_cut      += (float) $r->subaffiliate_cut;
@@ -1094,10 +1064,10 @@ class GAS_Admin {
 
 		echo '<h2>Commission Summary</h2>';
 		echo '<table class="widefat striped" style="max-width:500px;"><tbody>';
-		echo '<tr><th>Sub-affiliate cut &mdash; unpaid</th><td>$' . esc_html( number_format( (float) ( $money->cut_unpaid ?? 0 ), 2 ) ) . '</td></tr>';
-		echo '<tr><th>Sub-affiliate cut &mdash; paid</th><td>$' . esc_html( number_format( (float) ( $money->cut_paid ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Tier 1 share &mdash; unpaid</th><td>$' . esc_html( number_format( (float) ( $money->cut_unpaid ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Tier 1 share &mdash; paid</th><td>$' . esc_html( number_format( (float) ( $money->cut_paid ?? 0 ), 2 ) ) . '</td></tr>';
 		echo '<tr><th>Buyer cash back (total)</th><td>$' . esc_html( number_format( (float) ( $money->cashback_total ?? 0 ), 2 ) ) . '</td></tr>';
-		echo '<tr><th>Sponsor overrides (total)</th><td>$' . esc_html( number_format( (float) ( $money->override_total ?? 0 ), 2 ) ) . '</td></tr>';
+		echo '<tr><th>Tier 2/3 shares (total)</th><td>$' . esc_html( number_format( (float) ( $money->override_total ?? 0 ), 2 ) ) . '</td></tr>';
 		echo '<tr><th>Net to you (total)</th><td>$' . esc_html( number_format( (float) ( $money->net_total ?? 0 ), 2 ) ) . '</td></tr>';
 		echo '</tbody></table>';
 
@@ -1429,9 +1399,12 @@ class GAS_Admin {
 
 		echo '<tr><th><label for="menu_icon">Admin menu icon</label></th><td><input type="text" id="menu_icon" name="menu_icon" class="regular-text" value="' . esc_attr( $settings['menu_icon'] ) . '"> <p class="description">A <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank" rel="noopener">dashicon</a> slug, e.g. dashicons-groups.</p></td></tr>';
 
-		echo '<tr><th><label for="tier2_override_percent">Sponsor override (tier 2)</label></th><td><input type="number" step="0.01" min="0" max="100" id="tier2_override_percent" name="tier2_override_percent" value="' . esc_attr( $settings['tier2_override_percent'] ) . '" style="width:80px"> % of gross commission <p class="description">When an affiliate recruits another affiliate (sharing their "invite others" link from the dashboard), the recruiter earns this percent of gross on every sale their recruit makes &mdash; on top of the recruit\'s own cut, not carved out of it.</p></td></tr>';
-
-		echo '<tr><th><label for="tier3_override_percent">Sponsor override (tier 3)</label></th><td><input type="number" step="0.01" min="0" max="100" id="tier3_override_percent" name="tier3_override_percent" value="' . esc_attr( $settings['tier3_override_percent'] ) . '" style="width:80px"> % of gross commission <p class="description">Same idea, one level further up the recruiting chain &mdash; whoever recruited the recruiter.</p></td></tr>';
+		echo '<tr><th>Commission tier split</th><td>';
+		echo '<p class="description">The gross commission on a sale is a fixed pool, split across up to 3 tiers by these percentages &mdash; the same split for every affiliate, not individually negotiable. Total payout never grows with recruiting depth: if a tier has no one in it (e.g. the affiliate has no sponsor), that tier\'s share simply stays with you rather than going to anyone else.</p>';
+		echo 'Tier 1 (the affiliate): <input type="number" step="0.01" min="0" max="100" name="tier1_split_percent" value="' . esc_attr( $settings['tier1_split_percent'] ) . '" style="width:80px"> % &nbsp; ';
+		echo 'Tier 2 (their sponsor): <input type="number" step="0.01" min="0" max="100" name="tier2_split_percent" value="' . esc_attr( $settings['tier2_split_percent'] ) . '" style="width:80px"> % &nbsp; ';
+		echo 'Tier 3 (sponsor\'s sponsor): <input type="number" step="0.01" min="0" max="100" name="tier3_split_percent" value="' . esc_attr( $settings['tier3_split_percent'] ) . '" style="width:80px"> %';
+		echo '</td></tr>';
 
 		echo '</tbody></table>';
 		submit_button( 'Save Settings' );
@@ -1450,8 +1423,9 @@ class GAS_Admin {
 			'site_name'                 => isset( $_POST['site_name'] ) ? sanitize_text_field( wp_unslash( $_POST['site_name'] ) ) : '',
 			'partner_label'             => isset( $_POST['partner_label'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_label'] ) ) : 'partner',
 			'menu_icon'                 => isset( $_POST['menu_icon'] ) ? sanitize_text_field( wp_unslash( $_POST['menu_icon'] ) ) : 'dashicons-groups',
-			'tier2_override_percent'    => isset( $_POST['tier2_override_percent'] ) ? (float) $_POST['tier2_override_percent'] : 10,
-			'tier3_override_percent'    => isset( $_POST['tier3_override_percent'] ) ? (float) $_POST['tier3_override_percent'] : 5,
+			'tier1_split_percent'       => isset( $_POST['tier1_split_percent'] ) ? (float) $_POST['tier1_split_percent'] : 70,
+			'tier2_split_percent'       => isset( $_POST['tier2_split_percent'] ) ? (float) $_POST['tier2_split_percent'] : 20,
+			'tier3_split_percent'       => isset( $_POST['tier3_split_percent'] ) ? (float) $_POST['tier3_split_percent'] : 10,
 		) );
 
 		self::audit_log( 'settings', 0, 'updated' );

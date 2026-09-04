@@ -1,0 +1,8 @@
+# Credentials — never commit
+.secrets/
+
+# Build artifacts — regenerate from wp-plugin/gemz-affiliate-suite/ source instead
+wp-plugin/*.zip
+
+# Scratch/debug output from local testing
+*.log

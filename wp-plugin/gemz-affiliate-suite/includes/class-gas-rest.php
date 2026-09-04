@@ -28,6 +28,22 @@ class GAS_REST {
 			'permission_callback' => array( __CLASS__, 'permission_check' ),
 		) );
 
+		// Ingests a batch of candidate fulfillment partners found by a
+		// research pass (the actual searching happens outside PHP, e.g. a
+		// Claude Code session asked to research partners for this site's
+		// category/region — this just lands the results safely). Every
+		// accepted candidate is 'new' outreach_status and has no
+		// destination_url, so it can never start receiving real traffic
+		// until an admin reviews it, sets a destination, and assigns a
+		// code to it — ported in spirit from gemz-referral-crm's
+		// ingest_partner_research_batch(), simplified since GAS has no
+		// automatic lead-to-partner geo-matching to gate.
+		register_rest_route( 'gas/v1', '/partners/research-batch', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'ingest_partner_research_batch' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
 		register_rest_route( 'gas/v1', '/partners', array(
 			'methods'             => 'POST',
 			'callback'            => array( __CLASS__, 'create_partner' ),
@@ -112,6 +128,104 @@ class GAS_REST {
 		return new WP_REST_Response( $rows, 200 );
 	}
 
+	/**
+	 * Normalizes a website URL for dedup matching: strips scheme, "www.",
+	 * and any trailing slash/path, lowercased. Good enough to catch the
+	 * common "same company, slightly different URL" case without being a
+	 * full URL-equivalence engine.
+	 */
+	private static function normalize_website( $url ) {
+		$url = strtolower( trim( (string) $url ) );
+		$url = preg_replace( '#^https?://#', '', $url );
+		$url = preg_replace( '#^www\.#', '', $url );
+		$url = rtrim( explode( '/', $url )[0] );
+		return $url;
+	}
+
+	public static function ingest_partner_research_batch( WP_REST_Request $request ) {
+		global $wpdb;
+		$table   = GAS_DB::table( 'partners' );
+		$body    = $request->get_json_params();
+		$batch_id     = isset( $body['batch_id'] ) ? sanitize_text_field( $body['batch_id'] ) : wp_generate_password( 12, false );
+		$candidates   = isset( $body['candidates'] ) && is_array( $body['candidates'] ) ? $body['candidates'] : array();
+
+		if ( ! $candidates ) {
+			return new WP_Error( 'gas_no_candidates', 'No candidates provided.', array( 'status' => 400 ) );
+		}
+
+		// Existing partners, for dedup — by normalized website first, name second.
+		$existing        = $wpdb->get_results( "SELECT name, source_url, destination_url FROM {$table}" );
+		$known_websites  = array();
+		$known_names     = array();
+		foreach ( $existing as $e ) {
+			$w = self::normalize_website( $e->source_url ?: $e->destination_url );
+			if ( $w ) {
+				$known_websites[] = $w;
+			}
+			$known_names[] = strtolower( trim( $e->name ) );
+		}
+
+		$inserted = array();
+		$skipped  = array();
+		$now      = current_time( 'mysql' );
+
+		foreach ( $candidates as $c ) {
+			$name    = isset( $c['name'] ) ? sanitize_text_field( $c['name'] ) : '';
+			$website = isset( $c['website'] ) ? esc_url_raw( $c['website'] ) : '';
+			if ( '' === $name ) {
+				continue;
+			}
+
+			$norm_website = self::normalize_website( $website );
+			$norm_name    = strtolower( trim( $name ) );
+
+			if ( ( $norm_website && in_array( $norm_website, $known_websites, true ) ) || in_array( $norm_name, $known_names, true ) ) {
+				$skipped[] = $name;
+				continue;
+			}
+
+			$slug = sanitize_title( $name );
+			$base = $slug;
+			$i    = 0;
+			while ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE slug = %s", $slug ) ) ) {
+				$i++;
+				$slug = $base . '-' . $i;
+			}
+
+			$wpdb->insert(
+				$table,
+				array(
+					'slug'                     => $slug,
+					'name'                     => $name,
+					'payout_type'              => 'flat',
+					'service_area_description' => isset( $c['service_area_description'] ) ? sanitize_text_field( $c['service_area_description'] ) : '',
+					'source_url'               => $website,
+					'discovered_via'           => 'research',
+					'outreach_status'          => 'new',
+					'research_batch_id'        => $batch_id,
+					'notes'                    => isset( $c['notes'] ) ? sanitize_textarea_field( $c['notes'] ) : '',
+					'created_at'               => $now,
+				)
+			);
+
+			GAS_Admin::audit_log( 'partner', $wpdb->insert_id, 'research_added', array( 'batch_id' => $batch_id, 'source_url' => $website ) );
+
+			// Prevents duplicates within this same batch, not just against
+			// what already existed before it started.
+			if ( $norm_website ) {
+				$known_websites[] = $norm_website;
+			}
+			$known_names[] = $norm_name;
+			$inserted[]    = $name;
+		}
+
+		return new WP_REST_Response( array(
+			'batch_id' => $batch_id,
+			'inserted' => $inserted,
+			'skipped_duplicates' => $skipped,
+		), 200 );
+	}
+
 	public static function create_partner( WP_REST_Request $request ) {
 		global $wpdb;
 		$table = GAS_DB::table( 'partners' );
@@ -148,6 +262,8 @@ class GAS_REST {
 				'fulfillment_mode'     => $fulfillment_mode,
 				'requires_appointment' => array_key_exists( 'requires_appointment', $body ) ? (int) (bool) $body['requires_appointment'] : 1,
 				'destination_url'      => isset( $body['destination_url'] ) ? esc_url_raw( $body['destination_url'] ) : '',
+				'typical_sale_amount'  => isset( $body['typical_sale_amount'] ) ? (float) $body['typical_sale_amount'] : null,
+				'service_area_description' => isset( $body['service_area_description'] ) ? sanitize_text_field( $body['service_area_description'] ) : '',
 				'email'                => isset( $body['email'] ) ? sanitize_email( $body['email'] ) : '',
 				'notes'                => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
 				'created_at'           => current_time( 'mysql' ),
@@ -155,6 +271,9 @@ class GAS_REST {
 		);
 
 		GAS_Roles::provision_partner_account( $wpdb->insert_id );
+		if ( ! empty( $body['email'] ) ) {
+			GAS_Contacts::upsert( $body['email'], 'partner', array( 'name' => $name, 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $wpdb->insert_id ) );
+		}
 
 		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
 		return new WP_REST_Response( $created, 201 );
@@ -221,18 +340,21 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'email', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'outreach_status', 'email', 'notes' );
 		$formats    = array();
 		$format_map = array(
 			'name'                 => '%s',
 			'payout_type'          => '%s',
 			'payout_amount'        => '%f',
 			'payout_percent'       => '%f',
+			'typical_sale_amount'  => '%f',
 			'cashback_type'        => '%s',
 			'cashback_value'       => '%f',
 			'fulfillment_mode'     => '%s',
 			'requires_appointment' => '%d',
 			'destination_url'      => '%s',
+			'service_area_description' => '%s',
+			'outreach_status'      => '%s',
 			'email'                => '%s',
 			'notes'                => '%s',
 		);
@@ -244,7 +366,7 @@ class GAS_REST {
 					$value = esc_url_raw( $value );
 				} elseif ( 'email' === $field ) {
 					$value = sanitize_email( $value );
-				} elseif ( 'notes' === $field || 'name' === $field ) {
+				} elseif ( 'notes' === $field || 'name' === $field || 'service_area_description' === $field ) {
 					$value = sanitize_text_field( $value );
 				} elseif ( 'payout_type' === $field ) {
 					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : 'percent';
@@ -254,6 +376,8 @@ class GAS_REST {
 					$value = 'lead_capture' === $value ? 'lead_capture' : 'redirect';
 				} elseif ( 'requires_appointment' === $field ) {
 					$value = (int) (bool) $value;
+				} elseif ( 'outreach_status' === $field ) {
+					$value = in_array( $value, array( 'new', 'contacted', 'approved', 'declined' ), true ) ? $value : 'approved';
 				} else {
 					$value = (float) $value;
 				}
@@ -268,6 +392,10 @@ class GAS_REST {
 
 		$wpdb->update( $table, $data, array( 'id' => $id ), $formats, array( '%d' ) );
 		GAS_Roles::provision_partner_account( $id );
+		if ( ! empty( $data['email'] ) ) {
+			$name_for_contact = $data['name'] ?? $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$table} WHERE id = %d", $id ) );
+			GAS_Contacts::upsert( $data['email'], 'partner', array( 'name' => $name_for_contact, 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $id ) );
+		}
 
 		$updated = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
 		return new WP_REST_Response( $updated, 200 );

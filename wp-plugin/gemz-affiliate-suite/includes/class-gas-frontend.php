@@ -238,6 +238,14 @@ class GAS_Frontend {
 			)
 		);
 
+		GAS_Contacts::upsert( $email, 'affiliate', array(
+			'name'          => $name,
+			'phone'         => $phone,
+			'source'        => 'signup',
+			'related_table' => 'codes',
+			'related_id'    => $wpdb->insert_id,
+		) );
+
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New affiliate joined: ' . $name,
@@ -333,13 +341,14 @@ class GAS_Frontend {
 		}
 
 		echo '<div class="gas-dashboard">';
-		echo '<p>Welcome back, ' . esc_html( $user->display_name ) . '. <a href="' . esc_url( wp_logout_url( self::dashboard_url() ) ) . '">Log out</a></p>';
+		echo '<p>Welcome back, ' . esc_html( $user->display_name ) . '. <a href="' . esc_url( wp_logout_url( self::dashboard_url() ) ) . '">Log out</a> &middot; <a href="' . esc_url( GAS_Help::page_url() ) . '">Help</a></p>';
 
 		if ( 'suspended' === $status ) {
 			echo '<div class="gas-notice gas-notice-error">Your affiliate account is currently suspended and your link is inactive. Contact us if you have questions.</div>';
 		}
 
 		self::render_stats_section( $user_id );
+		self::render_downline_section( $user_id );
 		self::render_password_section();
 		self::render_payment_section( $user_id );
 
@@ -422,6 +431,101 @@ class GAS_Frontend {
 		if ( $totals['override_unpaid'] > 0 || $totals['override_paid'] > 0 ) {
 			echo '<p class="gas-fineprint">Of which $' . esc_html( number_format( $totals['override_unpaid'] + $totals['override_paid'], 2 ) ) . ' is from people you\'ve recruited.</p>';
 		}
+
+		self::render_pending_and_finalized_section( $user_id );
+	}
+
+	/**
+	 * Pending (this month, still open) vs. finalized (prior months, exact)
+	 * earnings by tier. Pending is deliberately shown as a range (count ×
+	 * tier_dollar_range()) rather than an exact figure — only once a month
+	 * closes does the dashboard show the real dollar amount, matching the
+	 * admin-vs-affiliate display split decided for this feature.
+	 */
+	private static function render_pending_and_finalized_section( $user_id ) {
+		$pending   = GAS_Payouts::pending_tier_counts( $user_id );
+		$finalized = GAS_Payouts::finalized_tier_totals( $user_id );
+
+		echo '<h2>Earnings by tier</h2>';
+		echo '<p class="gas-fineprint">This month is still open, so it shows an estimated range rather than an exact amount. Once the month closes, it moves into your finalized total below with the exact dollar amount you earned.</p>';
+
+		echo '<table class="widefat striped"><thead><tr><th>Tier</th><th>This month (pending)</th><th>Finalized (prior months)</th></tr></thead><tbody>';
+		foreach ( array( 1, 2, 3 ) as $tier ) {
+			$count = $pending[ $tier ];
+			$range = GAS_Payouts::tier_dollar_range( $tier );
+
+			echo '<tr><td>Tier ' . esc_html( $tier ) . '</td><td>';
+			if ( 0 === $count ) {
+				echo '&mdash;';
+			} elseif ( $range ) {
+				echo esc_html( $count ) . ' sale' . ( 1 === $count ? '' : 's' ) . ' &mdash; est. $' . esc_html( number_format( $range['min'] * $count, 2 ) ) . '&ndash;$' . esc_html( number_format( $range['max'] * $count, 2 ) );
+			} else {
+				echo esc_html( $count ) . ' sale' . ( 1 === $count ? '' : 's' );
+			}
+			echo '</td><td>$' . esc_html( number_format( $finalized[ $tier ], 2 ) ) . '</td></tr>';
+		}
+		echo '</tbody></table>';
+	}
+
+	/**
+	 * An affiliate's own downline — people they personally recruited
+	 * (their direct tier-2 team) and, one level further, the people THOSE
+	 * recruits brought in (tier 3). Strictly this affiliate's own tree
+	 * going downward: found via sponsor_code_id chains rooted at their
+	 * own code(s), never a sideways lookup into anyone else's downline.
+	 */
+	private static function render_downline_section( $user_id ) {
+		global $wpdb;
+		$codes_table = GAS_DB::table( 'codes' );
+
+		$my_code_ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$codes_table} WHERE wp_user_id = %d", $user_id ) );
+		if ( ! $my_code_ids ) {
+			return;
+		}
+		$placeholders = implode( ',', array_fill( 0, count( $my_code_ids ), '%d' ) );
+
+		$direct = $wpdb->get_results( $wpdb->prepare(
+			"SELECT * FROM {$codes_table} WHERE sponsor_code_id IN ({$placeholders})",
+			$my_code_ids
+		) );
+
+		$direct_ids = wp_list_pluck( $direct, 'id' );
+		$indirect   = array();
+		if ( $direct_ids ) {
+			$placeholders2 = implode( ',', array_fill( 0, count( $direct_ids ), '%d' ) );
+			$indirect = $wpdb->get_results( $wpdb->prepare(
+				"SELECT * FROM {$codes_table} WHERE sponsor_code_id IN ({$placeholders2})",
+				$direct_ids
+			) );
+		}
+
+		echo '<h2>Your team</h2>';
+		echo '<p class="gas-fineprint">People you\'ve personally recruited, and the people they\'ve recruited in turn — your own tree only.</p>';
+		echo '<div class="gas-stat-row">';
+		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( count( $direct ) ) . '</span><span class="gas-stat-label">Direct recruits</span></div>';
+		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( count( $indirect ) ) . '</span><span class="gas-stat-label">Their recruits</span></div>';
+		echo '</div>';
+
+		if ( $direct ) {
+			echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Contact</th><th>Level</th></tr></thead><tbody>';
+			foreach ( $direct as $d ) {
+				self::render_downline_row( $d, 'Direct' );
+			}
+			foreach ( $indirect as $i ) {
+				self::render_downline_row( $i, 'Their recruit' );
+			}
+			echo '</tbody></table>';
+		}
+	}
+
+	private static function render_downline_row( $code, $level ) {
+		$user  = $code->wp_user_id ? get_userdata( $code->wp_user_id ) : null;
+		$phone = $code->wp_user_id ? get_user_meta( $code->wp_user_id, 'gas_phone', true ) : '';
+		echo '<tr>';
+		echo '<td>' . esc_html( $code->sub_affiliate_name ) . '</td>';
+		echo '<td>' . ( $user ? esc_html( $user->user_email ) : '' ) . ( $phone ? '<br>' . esc_html( $phone ) : '' ) . '</td>';
+		echo '<td>' . esc_html( $level ) . '</td>';
+		echo '</tr>';
 	}
 
 	private static function render_password_section() {

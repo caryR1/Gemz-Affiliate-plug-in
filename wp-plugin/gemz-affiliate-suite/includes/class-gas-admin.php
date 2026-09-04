@@ -16,6 +16,7 @@ class GAS_Admin {
 	const CAP_COMMISSIONS = 'gas_manage_commissions';
 	const CAP_REPORTS     = 'gas_view_reports';
 	const CAP_SETTINGS    = 'gas_manage_settings';
+	const CAP_CONTACTS    = 'gas_manage_contacts';
 
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
@@ -32,6 +33,10 @@ class GAS_Admin {
 		add_action( 'admin_post_gas_save_payout_api_settings', array( __CLASS__, 'handle_save_payout_api_settings' ) );
 		add_action( 'admin_post_gas_paypal_payout_now', array( __CLASS__, 'handle_paypal_payout_now' ) );
 		add_action( 'admin_post_gas_wise_payout_now', array( __CLASS__, 'handle_wise_payout_now' ) );
+		add_action( 'admin_post_gas_reassign_contact', array( __CLASS__, 'handle_reassign_contact' ) );
+		add_action( 'admin_post_gas_export_contacts_csv', array( __CLASS__, 'handle_export_contacts_csv' ) );
+		add_action( 'admin_post_gas_save_lead_magnet', array( __CLASS__, 'handle_save_lead_magnet' ) );
+		add_action( 'admin_post_gas_toggle_lead_magnet', array( __CLASS__, 'handle_toggle_lead_magnet' ) );
 	}
 
 	private static function fulfillment_mode_label( $mode ) {
@@ -60,6 +65,8 @@ class GAS_Admin {
 		add_submenu_page( 'gas-affiliates', 'Payout Calculator', 'Payout Calculator', self::CAP_COMMISSIONS, 'gas-calculator', array( __CLASS__, 'render_calculator_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Payout Ledger', 'Payout Ledger', self::CAP_COMMISSIONS, 'gas-ledger', array( __CLASS__, 'render_ledger_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Audit Log', 'Audit Log', 'gas_view_audit_log', 'gas-audit-log', array( __CLASS__, 'render_audit_log_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Segments', 'Segments', self::CAP_CONTACTS, 'gas-segments', array( __CLASS__, 'render_segments_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Lead Magnets', 'Lead Magnets', self::CAP_CONTACTS, 'gas-lead-magnets', array( __CLASS__, 'render_lead_magnets_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Settings', 'Settings', self::CAP_SETTINGS, 'gas-settings', array( __CLASS__, 'render_settings_page' ) );
 	}
 
@@ -419,6 +426,8 @@ class GAS_Admin {
 
 			echo '<tr><th>Percent (%)</th><td><input type="number" step="0.01" min="0" max="100" name="payout_percent" value="' . esc_attr( $editing->payout_percent ?? '' ) . '"> <p class="description">Used only if payout type is Percent, e.g. 8 for 8%.</p></td></tr>';
 
+			echo '<tr><th>Typical sale amount ($)</th><td><input type="number" step="0.01" min="0" name="typical_sale_amount" value="' . esc_attr( $editing->typical_sale_amount ?? '' ) . '"> <p class="description">Only used (for Percent-type payout) to estimate the earnings range shown to affiliates &mdash; has no effect on real payout calculations, which always use the actual sale amount entered in the Calculator. Leave blank if unsure; this partner is simply left out of the affiliate-facing range until it\'s set.</p></td></tr>';
+
 			$installments = $editing->installments_json ? json_decode( $editing->installments_json, true ) : array();
 			$inst1_label  = $installments[0]['label'] ?? '';
 			$inst1_frac   = isset( $installments[0]['fraction'] ) ? $installments[0]['fraction'] * 100 : '';
@@ -454,6 +463,16 @@ class GAS_Admin {
 
 			echo '<tr><th>Destination URL</th><td><input type="url" name="destination_url" class="regular-text" value="' . esc_attr( $editing->destination_url ?? '' ) . '" placeholder="https://... (your real referral tracking link with this partner)"> <p class="description">Only used in "Redirect to partner site" mode. Leave blank until the partnership/affiliate application is approved &mdash; codes for this partner will redirect visitors to the homepage in the meantime, but clicks still get logged.</p></td></tr>';
 
+			echo '<tr><th>Service area</th><td><input type="text" name="service_area_description" class="regular-text" value="' . esc_attr( $editing->service_area_description ?? '' ) . '" placeholder="e.g. Tampa Bay area, FL, or Nationwide"> <p class="description">Free-text, for your own reference.</p></td></tr>';
+
+			echo '<tr><th>Source</th><td>' . ( $editing->source_url ? '<a href="' . esc_url( $editing->source_url ) . '" target="_blank" rel="noopener">' . esc_html( $editing->source_url ) . '</a>' : '<em>added manually</em>' ) . '</td></tr>';
+
+			echo '<tr><th>Outreach status</th><td><select name="outreach_status">';
+			foreach ( array( 'new' => 'New (found, not yet contacted)', 'contacted' => 'Contacted', 'approved' => 'Approved / active', 'declined' => 'Declined' ) as $val => $label ) {
+				echo '<option value="' . esc_attr( $val ) . '"' . selected( $editing->outreach_status ?? 'approved', $val, false ) . '>' . esc_html( $label ) . '</option>';
+			}
+			echo '</select></td></tr>';
+
 			echo '<tr><th>Partner login</th><td><input type="email" name="email" class="regular-text" value="' . esc_attr( $editing->email ?? '' ) . '" placeholder="partner@example.com">';
 			if ( $editing->user_id ?? 0 ) {
 				echo ' <span style="color:#1a7a3c;">Has portal access</span>';
@@ -482,7 +501,7 @@ class GAS_Admin {
 			if ( ! $partners ) {
 				echo '<p>No partners yet. Add one above to get started.</p>';
 			} else {
-				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
+				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Outreach</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
 				foreach ( $partners as $p ) {
 					if ( 'flat' === $p->payout_type ) {
 						$structure = $p->payout_amount ? '$' . number_format( (float) $p->payout_amount, 2 ) . ' flat' : '<em>not set</em>';
@@ -499,7 +518,10 @@ class GAS_Admin {
 					}
 					echo '<tr>';
 					$cashback = $p->cashback_type ? ( 'percent' === $p->cashback_type ? esc_html( $p->cashback_value ) . '%' : '$' . esc_html( number_format( (float) $p->cashback_value, 2 ) ) . ' flat' ) : '<em>none</em>';
+					$outreach_colors = array( 'new' => '#b32d2e', 'contacted' => '#8a6d00', 'approved' => '#1a7a3c', 'declined' => '#666' );
+					$outreach_color  = $outreach_colors[ $p->outreach_status ] ?? '#666';
 					echo '<td>' . esc_html( $p->name ) . '</td>';
+					echo '<td style="color:' . esc_attr( $outreach_color ) . ';">' . esc_html( ucfirst( $p->outreach_status ) ) . '</td>';
 					echo '<td>' . $structure . '</td>';
 					echo '<td>' . $cashback . '</td>';
 					echo '<td>' . esc_html( self::fulfillment_mode_label( $p->fulfillment_mode ) ) . '</td>';
@@ -599,18 +621,24 @@ class GAS_Admin {
 			'payout_type'       => 'percent' === $_POST['payout_type'] ? 'percent' : 'flat',
 			'payout_amount'     => '' !== $_POST['payout_amount'] ? (float) $_POST['payout_amount'] : null,
 			'payout_percent'    => '' !== $_POST['payout_percent'] ? (float) $_POST['payout_percent'] : null,
+			'typical_sale_amount' => isset( $_POST['typical_sale_amount'] ) && '' !== $_POST['typical_sale_amount'] ? (float) $_POST['typical_sale_amount'] : null,
 			'installments_json' => $installments ? wp_json_encode( $installments ) : null,
 			'cashback_type'     => isset( $_POST['cashback_type'] ) && in_array( $_POST['cashback_type'], array( 'flat', 'percent' ), true ) ? $_POST['cashback_type'] : null,
 			'cashback_value'    => isset( $_POST['cashback_value'] ) ? (float) $_POST['cashback_value'] : 0,
 			'fulfillment_mode'  => isset( $_POST['fulfillment_mode'] ) && 'lead_capture' === $_POST['fulfillment_mode'] ? 'lead_capture' : 'redirect',
 			'requires_appointment' => isset( $_POST['requires_appointment'] ) ? 1 : 0,
 			'destination_url'   => isset( $_POST['destination_url'] ) ? esc_url_raw( wp_unslash( $_POST['destination_url'] ) ) : '',
+			'service_area_description' => isset( $_POST['service_area_description'] ) ? sanitize_text_field( wp_unslash( $_POST['service_area_description'] ) ) : '',
+			'outreach_status'   => isset( $_POST['outreach_status'] ) && in_array( $_POST['outreach_status'], array( 'new', 'contacted', 'approved', 'declined' ), true ) ? $_POST['outreach_status'] : 'approved',
 			'email'             => isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '',
 			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
 		);
 
 		$wpdb->update( GAS_DB::table( 'partners' ), $data, array( 'id' => $id ) );
 		GAS_Roles::provision_partner_account( $id );
+		if ( ! empty( $data['email'] ) ) {
+			GAS_Contacts::upsert( $data['email'], 'partner', array( 'name' => $data['name'], 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $id ) );
+		}
 		self::audit_log( 'partner', $id, 'updated', $data );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&saved=1' ) );
@@ -1189,6 +1217,226 @@ class GAS_Admin {
 		}
 
 		self::wrap_end();
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * SEGMENTS (contacts / mailing list)
+	 * ---------------------------------------------------------------- */
+
+	public static function render_segments_page() {
+		if ( ! current_user_can( self::CAP_CONTACTS ) ) {
+			return;
+		}
+		global $wpdb;
+		self::wrap_start( 'Segments' );
+
+		if ( isset( $_GET['reassigned'] ) ) {
+			echo '<div class="notice notice-success"><p>Contact moved.</p></div>';
+		}
+
+		$table  = GAS_DB::table( 'contacts' );
+		$filter = isset( $_GET['contact_type'] ) && in_array( $_GET['contact_type'], GAS_Contacts::TYPES, true ) ? sanitize_key( $_GET['contact_type'] ) : '';
+
+		echo '<p>';
+		echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-segments' ) ) . '"' . ( '' === $filter ? ' style="font-weight:bold;"' : '' ) . '>All</a> | ';
+		foreach ( GAS_Contacts::TYPES as $t ) {
+			$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE contact_type = %s", $t ) );
+			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-segments&contact_type=' . $t ) ) . '"' . ( $filter === $t ? ' style="font-weight:bold;"' : '' ) . '>' . esc_html( ucfirst( $t ) ) . ' (' . $count . ')</a> | ';
+		}
+		echo '</p>';
+
+		echo '<p><a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_export_contacts_csv' . ( $filter ? '&contact_type=' . $filter : '' ) ), 'gas_export_contacts_csv' ) ) . '" class="button">Export CSV</a></p>';
+
+		$sql = "SELECT * FROM {$table}";
+		if ( $filter ) {
+			$sql = $wpdb->prepare( $sql . ' WHERE contact_type = %s', $filter );
+		}
+		$rows = $wpdb->get_results( $sql . ' ORDER BY created_at DESC' );
+
+		if ( ! $rows ) {
+			echo '<p>No contacts yet.</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Type</th><th>Source</th><th>Subscribed</th><th>Added</th><th>Move to</th></tr></thead><tbody>';
+			foreach ( $rows as $r ) {
+				echo '<tr>';
+				echo '<td>' . esc_html( $r->name ) . '</td>';
+				echo '<td>' . esc_html( $r->email ) . '</td>';
+				echo '<td>' . esc_html( $r->phone ) . '</td>';
+				echo '<td>' . esc_html( ucfirst( $r->contact_type ) ) . '</td>';
+				echo '<td>' . esc_html( $r->source ) . '</td>';
+				echo '<td>' . ( $r->subscribed ? 'Yes' : 'No' ) . '</td>';
+				echo '<td>' . esc_html( $r->created_at ) . '</td>';
+				echo '<td>';
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline;">';
+				wp_nonce_field( 'gas_reassign_contact_' . $r->id );
+				echo '<input type="hidden" name="action" value="gas_reassign_contact">';
+				echo '<input type="hidden" name="id" value="' . esc_attr( $r->id ) . '">';
+				echo '<select name="contact_type" onchange="this.form.submit()">';
+				foreach ( GAS_Contacts::TYPES as $t ) {
+					echo '<option value="' . esc_attr( $t ) . '"' . selected( $r->contact_type, $t, false ) . '>' . esc_html( ucfirst( $t ) ) . '</option>';
+				}
+				echo '</select>';
+				echo '</form>';
+				echo '</td>';
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+		}
+
+		self::wrap_end();
+	}
+
+	public static function handle_reassign_contact() {
+		if ( ! current_user_can( self::CAP_CONTACTS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		$id = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+		check_admin_referer( 'gas_reassign_contact_' . $id );
+
+		$type = isset( $_POST['contact_type'] ) && in_array( $_POST['contact_type'], GAS_Contacts::TYPES, true ) ? $_POST['contact_type'] : 'customer';
+
+		global $wpdb;
+		$wpdb->update( GAS_DB::table( 'contacts' ), array( 'contact_type' => $type, 'updated_at' => current_time( 'mysql' ) ), array( 'id' => $id ) );
+		self::audit_log( 'contact', $id, 'reassigned', array( 'contact_type' => $type ) );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-segments&reassigned=1' ) );
+		exit;
+	}
+
+	public static function handle_export_contacts_csv() {
+		if ( ! current_user_can( self::CAP_CONTACTS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		check_admin_referer( 'gas_export_contacts_csv' );
+
+		global $wpdb;
+		$table  = GAS_DB::table( 'contacts' );
+		$filter = isset( $_GET['contact_type'] ) && in_array( $_GET['contact_type'], GAS_Contacts::TYPES, true ) ? sanitize_key( $_GET['contact_type'] ) : '';
+
+		$sql = "SELECT * FROM {$table}";
+		if ( $filter ) {
+			$sql = $wpdb->prepare( $sql . ' WHERE contact_type = %s', $filter );
+		}
+		$rows = $wpdb->get_results( $sql . ' ORDER BY created_at DESC' );
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="contacts-' . ( $filter ?: 'all' ) . '-' . gmdate( 'Y-m-d' ) . '.csv"' );
+
+		$out = fopen( 'php://output', 'w' );
+		fputcsv( $out, array( 'Name', 'Email', 'Phone', 'Type', 'Source', 'Subscribed', 'Added' ) );
+		foreach ( $rows as $r ) {
+			fputcsv( $out, array( $r->name, $r->email, $r->phone, $r->contact_type, $r->source, $r->subscribed ? 'yes' : 'no', $r->created_at ) );
+		}
+		fclose( $out );
+		exit;
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * LEAD MAGNETS
+	 * ---------------------------------------------------------------- */
+
+	public static function render_lead_magnets_page() {
+		if ( ! current_user_can( self::CAP_CONTACTS ) ) {
+			return;
+		}
+		global $wpdb;
+		self::wrap_start( 'Lead Magnets' );
+
+		if ( isset( $_GET['saved'] ) ) {
+			echo '<div class="notice notice-success"><p>Saved.</p></div>';
+		}
+
+		echo '<h2>Add a lead magnet</h2>';
+		echo '<p class="description">Upload a PDF (a guide, checklist, etc.) and give it a title. Drop the shortcode shown after saving onto any page — visitors who enter their email get it sent to them, and land in your Customer segment.</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" enctype="multipart/form-data">';
+		wp_nonce_field( 'gas_save_lead_magnet' );
+		echo '<input type="hidden" name="action" value="gas_save_lead_magnet">';
+		echo '<table class="form-table"><tbody>';
+		echo '<tr><th>Title</th><td><input type="text" name="title" class="regular-text" required></td></tr>';
+		echo '<tr><th>Description</th><td><textarea name="description" class="large-text" rows="2"></textarea></td></tr>';
+		echo '<tr><th>PDF file</th><td><input type="file" name="pdf_file" accept="application/pdf" required></td></tr>';
+		echo '</tbody></table>';
+		submit_button( 'Add Lead Magnet' );
+		echo '</form>';
+
+		echo '<h2>Existing lead magnets</h2>';
+		$magnets = $wpdb->get_results( 'SELECT * FROM ' . GAS_DB::table( 'lead_magnets' ) . ' ORDER BY created_at DESC' );
+		if ( ! $magnets ) {
+			echo '<p>None yet.</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>Title</th><th>Shortcode</th><th>Downloads</th><th>Active</th><th>Actions</th></tr></thead><tbody>';
+			foreach ( $magnets as $m ) {
+				echo '<tr>';
+				echo '<td>' . esc_html( $m->title ) . '</td>';
+				echo '<td><code>[gas_lead_magnet id="' . esc_html( $m->id ) . '"]</code></td>';
+				echo '<td>' . esc_html( $m->download_count ) . '</td>';
+				echo '<td>' . ( $m->active ? 'Yes' : 'No' ) . '</td>';
+				echo '<td>';
+				$toggle_url = wp_nonce_url( admin_url( 'admin-post.php?action=gas_toggle_lead_magnet&id=' . $m->id ), 'gas_toggle_lead_magnet_' . $m->id );
+				echo '<a href="' . esc_url( $toggle_url ) . '">' . ( $m->active ? 'Deactivate' : 'Activate' ) . '</a>';
+				echo '</td>';
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+		}
+
+		self::wrap_end();
+	}
+
+	public static function handle_save_lead_magnet() {
+		if ( ! current_user_can( self::CAP_CONTACTS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		check_admin_referer( 'gas_save_lead_magnet' );
+
+		$title       = isset( $_POST['title'] ) ? sanitize_text_field( wp_unslash( $_POST['title'] ) ) : '';
+		$description = isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '';
+
+		if ( '' === $title || empty( $_FILES['pdf_file']['name'] ) ) {
+			wp_die( 'Title and a PDF file are both required.' );
+		}
+
+		require_once ABSPATH . 'wp-admin/includes/file.php';
+		require_once ABSPATH . 'wp-admin/includes/media.php';
+		require_once ABSPATH . 'wp-admin/includes/image.php';
+
+		$attachment_id = media_handle_upload( 'pdf_file', 0 );
+		if ( is_wp_error( $attachment_id ) ) {
+			wp_die( 'Upload failed: ' . esc_html( $attachment_id->get_error_message() ) );
+		}
+
+		global $wpdb;
+		$wpdb->insert(
+			GAS_DB::table( 'lead_magnets' ),
+			array(
+				'title'         => $title,
+				'description'   => $description,
+				'attachment_id' => $attachment_id,
+				'active'        => 1,
+				'created_at'    => current_time( 'mysql' ),
+			)
+		);
+		self::audit_log( 'lead_magnet', $wpdb->insert_id, 'created', array( 'title' => $title ) );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-lead-magnets&saved=1' ) );
+		exit;
+	}
+
+	public static function handle_toggle_lead_magnet() {
+		if ( ! current_user_can( self::CAP_CONTACTS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+		check_admin_referer( 'gas_toggle_lead_magnet_' . $id );
+
+		global $wpdb;
+		$table   = GAS_DB::table( 'lead_magnets' );
+		$current = (int) $wpdb->get_var( $wpdb->prepare( "SELECT active FROM {$table} WHERE id = %d", $id ) );
+		$wpdb->update( $table, array( 'active' => $current ? 0 : 1 ), array( 'id' => $id ) );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-lead-magnets&saved=1' ) );
+		exit;
 	}
 
 	/* ---------------------------------------------------------------- *

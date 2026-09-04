@@ -223,6 +223,10 @@ class GAS_Leads {
 			)
 		);
 
+		if ( $email ) {
+			GAS_Contacts::upsert( $email, 'customer', array( 'name' => $name, 'phone' => $phone, 'source' => 'lead_form', 'related_table' => 'leads', 'related_id' => $wpdb->insert_id ) );
+		}
+
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New lead: ' . $name . ' for ' . $partner->name,

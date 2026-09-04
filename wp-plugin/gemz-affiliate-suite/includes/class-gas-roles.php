@@ -36,6 +36,7 @@ class GAS_Roles {
 			'gas_view_reports',
 			'gas_view_audit_log',
 			'gas_manage_settings',
+			'gas_manage_contacts',
 		);
 	}
 

@@ -147,6 +147,106 @@ class GAS_Payouts {
 	}
 
 	/**
+	 * Affiliate-facing dollar range for one tier, computed across every
+	 * active partner's configured payout structure — deliberately NOT
+	 * personalized to one affiliate's actual sponsor chain, and never the
+	 * exact per-partner numbers an admin sees, so an affiliate can't
+	 * back-calculate real margins from it. Flat-payout partners contribute
+	 * an exact figure; percent-of-sale partners only contribute one if
+	 * `typical_sale_amount` is set (there's no single sale amount to base
+	 * a percent on otherwise) — a partner with neither is simply left out
+	 * of the range rather than guessed at.
+	 */
+	public static function tier_dollar_range( $tier_num ) {
+		global $wpdb;
+		$partners = $wpdb->get_results( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . " WHERE outreach_status = 'approved'" );
+
+		$pct_key = 'tier' . absint( $tier_num ) . '_split_percent';
+		$pct     = (float) GAS_Settings::get( $pct_key );
+
+		$amounts = array();
+		foreach ( $partners as $p ) {
+			if ( 'flat' === $p->payout_type ) {
+				$gross = (float) $p->payout_amount;
+			} elseif ( $p->typical_sale_amount ) {
+				$gross = (float) $p->typical_sale_amount * ( (float) $p->payout_percent / 100 );
+			} else {
+				continue; // no basis to estimate this partner's gross
+			}
+			if ( $gross > 0 ) {
+				$amounts[] = round( $gross * ( $pct / 100 ), 2 );
+			}
+		}
+
+		if ( ! $amounts ) {
+			return null;
+		}
+		return array( 'min' => min( $amounts ), 'max' => max( $amounts ) );
+	}
+
+	/**
+	 * Current-month (still-open, not yet finalized) sale counts per tier
+	 * for one affiliate — used with tier_dollar_range() to show a pending
+	 * earnings ESTIMATE rather than the exact number, since exact tier
+	 * amounts aren't shown to affiliates until the month closes.
+	 */
+	public static function pending_tier_counts( $user_id ) {
+		global $wpdb;
+		$payouts_table = GAS_DB::table( 'payouts' );
+		$codes_table   = GAS_DB::table( 'codes' );
+		$month_start   = gmdate( 'Y-m-01 00:00:00', current_time( 'timestamp' ) );
+
+		$tier1 = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$payouts_table} pay INNER JOIN {$codes_table} c ON c.id = pay.code_id
+			 WHERE c.wp_user_id = %d AND pay.entered_at >= %s",
+			$user_id, $month_start
+		) );
+		$tier2 = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$payouts_table} pay INNER JOIN {$codes_table} c ON c.id = pay.tier2_code_id
+			 WHERE c.wp_user_id = %d AND pay.entered_at >= %s",
+			$user_id, $month_start
+		) );
+		$tier3 = (int) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM {$payouts_table} pay INNER JOIN {$codes_table} c ON c.id = pay.tier3_code_id
+			 WHERE c.wp_user_id = %d AND pay.entered_at >= %s",
+			$user_id, $month_start
+		) );
+
+		return array( 1 => $tier1, 2 => $tier2, 3 => $tier3 );
+	}
+
+	/**
+	 * Exact finalized totals per tier for one affiliate, for everything
+	 * BEFORE the current (still-open) month — real numbers, not an
+	 * estimate, since these sales are done and the amounts are exactly
+	 * what's already stored on those payout rows.
+	 */
+	public static function finalized_tier_totals( $user_id ) {
+		global $wpdb;
+		$payouts_table = GAS_DB::table( 'payouts' );
+		$codes_table   = GAS_DB::table( 'codes' );
+		$month_start   = gmdate( 'Y-m-01 00:00:00', current_time( 'timestamp' ) );
+
+		$tier1 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.subaffiliate_cut),0) FROM {$payouts_table} pay INNER JOIN {$codes_table} c ON c.id = pay.code_id
+			 WHERE c.wp_user_id = %d AND pay.entered_at < %s",
+			$user_id, $month_start
+		) );
+		$tier2 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.tier2_amount),0) FROM {$payouts_table} pay INNER JOIN {$codes_table} c ON c.id = pay.tier2_code_id
+			 WHERE c.wp_user_id = %d AND pay.entered_at < %s",
+			$user_id, $month_start
+		) );
+		$tier3 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.tier3_amount),0) FROM {$payouts_table} pay INNER JOIN {$codes_table} c ON c.id = pay.tier3_code_id
+			 WHERE c.wp_user_id = %d AND pay.entered_at < %s",
+			$user_id, $month_start
+		) );
+
+		return array( 1 => $tier1, 2 => $tier2, 3 => $tier3 );
+	}
+
+	/**
 	 * Every affiliate (distinct wp_user_id on gas_codes) whose payout method
 	 * is $method and who currently has an unpaid balance greater than zero.
 	 * Returns rows shaped for the payout processors: user_id, unpaid amount,

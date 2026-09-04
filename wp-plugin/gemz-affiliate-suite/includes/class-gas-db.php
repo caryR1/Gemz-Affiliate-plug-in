@@ -33,12 +33,14 @@ class GAS_DB {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$charset_collate = $wpdb->get_charset_collate();
 
-		$partners  = self::table( 'partners' );
-		$codes     = self::table( 'codes' );
-		$clicks    = self::table( 'clicks' );
-		$payouts   = self::table( 'payouts' );
-		$leads     = self::table( 'leads' );
-		$audit_log = self::table( 'audit_log' );
+		$partners     = self::table( 'partners' );
+		$codes        = self::table( 'codes' );
+		$clicks       = self::table( 'clicks' );
+		$payouts      = self::table( 'payouts' );
+		$leads        = self::table( 'leads' );
+		$audit_log    = self::table( 'audit_log' );
+		$contacts     = self::table( 'contacts' );
+		$lead_magnets = self::table( 'lead_magnets' );
 
 		$sql = "CREATE TABLE {$partners} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -57,11 +59,18 @@ class GAS_DB {
 			destination_url VARCHAR(500) NULL,
 			email VARCHAR(191) NULL,
 			user_id BIGINT UNSIGNED NULL,
+			service_area_description VARCHAR(500) NULL,
+			source_url VARCHAR(500) NULL,
+			discovered_via VARCHAR(20) NOT NULL DEFAULT 'manual',
+			outreach_status VARCHAR(20) NOT NULL DEFAULT 'approved',
+			research_batch_id VARCHAR(40) NULL,
+			typical_sale_amount DECIMAL(10,2) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
-			KEY user_id (user_id)
+			KEY user_id (user_id),
+			KEY outreach_status (outreach_status)
 		) {$charset_collate};
 
 		CREATE TABLE {$codes} (
@@ -158,6 +167,34 @@ class GAS_DB {
 			PRIMARY KEY  (id),
 			KEY object_type_id (object_type, object_id),
 			KEY created_at (created_at)
+		) {$charset_collate};
+
+		CREATE TABLE {$contacts} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			contact_type VARCHAR(20) NOT NULL,
+			name VARCHAR(191) NULL,
+			email VARCHAR(191) NOT NULL,
+			phone VARCHAR(64) NULL,
+			source VARCHAR(30) NOT NULL DEFAULT 'manual',
+			related_table VARCHAR(20) NULL,
+			related_id BIGINT UNSIGNED NULL,
+			subscribed TINYINT(1) NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY email (email),
+			KEY contact_type (contact_type)
+		) {$charset_collate};
+
+		CREATE TABLE {$lead_magnets} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			title VARCHAR(191) NOT NULL,
+			description TEXT NULL,
+			attachment_id BIGINT UNSIGNED NOT NULL,
+			download_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			active TINYINT(1) NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id)
 		) {$charset_collate};";
 
 		dbDelta( $sql );

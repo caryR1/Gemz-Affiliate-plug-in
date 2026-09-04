@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GAS_VERSION', '1.1.0' );
+define( 'GAS_VERSION', '1.2.0' );
 define( 'GAS_DB_VERSION', '3' );
 define( 'GAS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GAS_PLUGIN_FILE', __FILE__ );
@@ -32,6 +32,11 @@ register_activation_hook( __FILE__, array( 'GAS_DB', 'activate' ) );
 register_deactivation_hook( __FILE__, array( 'GAS_Redirect', 'deactivate' ) );
 
 add_action( 'plugins_loaded', array( 'GAS_DB', 'maybe_upgrade' ) );
+// Re-applied on every request (cheap — WP caches roles), not just at
+// activation/upgrade, so a new gas_ capability reaches the Administrator
+// and Manager roles on an already-active install without needing a DB
+// version bump or reactivation.
+add_action( 'plugins_loaded', array( 'GAS_Roles', 'add_role' ) );
 
 GAS_Redirect::init();
 GAS_Leads::init();

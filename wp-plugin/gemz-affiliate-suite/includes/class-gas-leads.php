@@ -201,7 +201,7 @@ class GAS_Leads {
 	 * in the meantime.
 	 */
 	public static function handle_update_status() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'gas_manage_leads' ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		$id = isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0;

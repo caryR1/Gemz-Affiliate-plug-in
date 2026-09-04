@@ -5,7 +5,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class GAS_Admin {
 
-	const CAP = 'manage_options';
+	// Per-screen capabilities (granted to Administrator and GAS_Roles::MANAGER_ROLE,
+	// see class-gas-roles.php) — replaced the old blanket manage_options
+	// check so a non-Administrator "Affiliate Program Manager" can run
+	// this plugin day-to-day without also being able to install plugins,
+	// manage users, or touch general WordPress settings.
+	const CAP_CODES       = 'gas_manage_codes';
+	const CAP_PARTNERS    = 'gas_manage_partners';
+	const CAP_LEADS       = 'gas_manage_leads';
+	const CAP_COMMISSIONS = 'gas_manage_commissions';
+	const CAP_REPORTS     = 'gas_view_reports';
+	const CAP_SETTINGS    = 'gas_manage_settings';
 
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
@@ -35,20 +45,20 @@ class GAS_Admin {
 		add_menu_page(
 			$site_name,
 			$site_name,
-			self::CAP,
+			GAS_Roles::ACCESS_ADMIN_CAP,
 			'gas-affiliates',
 			array( __CLASS__, 'render_affiliates_page' ),
 			$icon,
 			58
 		);
-		add_submenu_page( 'gas-affiliates', 'Affiliates', 'Affiliates', self::CAP, 'gas-affiliates', array( __CLASS__, 'render_affiliates_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Sub-Affiliate Codes', 'Codes', self::CAP, 'gas-codes', array( __CLASS__, 'render_codes_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Leads', 'Leads', self::CAP, 'gas-leads', array( __CLASS__, 'render_leads_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Click Log', 'Click Log', self::CAP, 'gas-clicks', array( __CLASS__, 'render_clicks_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Payout Calculator', 'Payout Calculator', self::CAP, 'gas-calculator', array( __CLASS__, 'render_calculator_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Payout Ledger', 'Payout Ledger', self::CAP, 'gas-ledger', array( __CLASS__, 'render_ledger_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Settings', 'Settings', self::CAP, 'gas-settings', array( __CLASS__, 'render_settings_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Affiliates', 'Affiliates', self::CAP_CODES, 'gas-affiliates', array( __CLASS__, 'render_affiliates_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Sub-Affiliate Codes', 'Codes', self::CAP_CODES, 'gas-codes', array( __CLASS__, 'render_codes_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP_PARTNERS, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Leads', 'Leads', self::CAP_LEADS, 'gas-leads', array( __CLASS__, 'render_leads_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Click Log', 'Click Log', self::CAP_REPORTS, 'gas-clicks', array( __CLASS__, 'render_clicks_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Payout Calculator', 'Payout Calculator', self::CAP_COMMISSIONS, 'gas-calculator', array( __CLASS__, 'render_calculator_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Payout Ledger', 'Payout Ledger', self::CAP_COMMISSIONS, 'gas-ledger', array( __CLASS__, 'render_ledger_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Settings', 'Settings', self::CAP_SETTINGS, 'gas-settings', array( __CLASS__, 'render_settings_page' ) );
 	}
 
 	private static function wrap_start( $title ) {
@@ -90,7 +100,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_affiliates_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_CODES ) ) {
 			return;
 		}
 		self::wrap_start( 'Affiliates' );
@@ -157,7 +167,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_suspend_affiliate() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_CODES ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
@@ -184,7 +194,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_reactivate_affiliate() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_CODES ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
@@ -215,7 +225,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_codes_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_CODES ) ) {
 			return;
 		}
 		$edit_id  = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
@@ -304,7 +314,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_save_code() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_CODES ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_save_code' );
@@ -343,7 +353,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_delete_code() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_CODES ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
@@ -361,7 +371,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_partners_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_PARTNERS ) ) {
 			return;
 		}
 		$edit_id  = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
@@ -495,7 +505,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_add_partner() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_PARTNERS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_add_partner' );
@@ -541,7 +551,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_save_partner() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_PARTNERS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_save_partner' );
@@ -593,7 +603,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_leads_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_LEADS ) ) {
 			return;
 		}
 		global $wpdb;
@@ -654,7 +664,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_clicks_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_REPORTS ) ) {
 			return;
 		}
 		global $wpdb;
@@ -717,7 +727,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_calculator_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			return;
 		}
 		self::wrap_start( 'Payout Calculator' );
@@ -791,7 +801,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_calculate_payout() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_calculate_payout' );
@@ -885,7 +895,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_ledger_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			return;
 		}
 		global $wpdb;
@@ -1005,7 +1015,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_save_payout_api_settings() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_save_payout_api_settings' );
@@ -1025,7 +1035,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_paypal_payout_now() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_paypal_payout_now' );
@@ -1053,7 +1063,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_wise_payout_now() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_wise_payout_now' );
@@ -1078,7 +1088,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_export_ledger_csv() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_export_ledger_csv' );
@@ -1120,7 +1130,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_delete_payout() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
@@ -1138,7 +1148,7 @@ class GAS_Admin {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_settings_page() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_SETTINGS ) ) {
 			return;
 		}
 		$settings = GAS_Settings::all();
@@ -1170,7 +1180,7 @@ class GAS_Admin {
 	}
 
 	public static function handle_save_settings() {
-		if ( ! current_user_can( self::CAP ) ) {
+		if ( ! current_user_can( self::CAP_SETTINGS ) ) {
 			wp_die( 'Not allowed.' );
 		}
 		check_admin_referer( 'gas_save_settings' );

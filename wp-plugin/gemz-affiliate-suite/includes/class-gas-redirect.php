@@ -8,19 +8,68 @@ class GAS_Redirect {
 	const COOKIE_NAME = 'gas_affiliate_code';
 	const COOKIE_DAYS = 180;
 
+	// Separate cookie for recruiting (an affiliate inviting someone to
+	// become an affiliate themselves), distinct from the customer-referral
+	// cookie above — the two can be live at once (e.g. someone clicks a
+	// recruiting link, decides not to sign up yet, but later clicks the
+	// same person's customer link too) without one clobbering the other.
+	const SPONSOR_COOKIE_NAME = 'gas_sponsor_code';
+
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'add_rewrite_rule' ) );
 		add_filter( 'query_vars', array( __CLASS__, 'add_query_var' ) );
 		add_action( 'template_redirect', array( __CLASS__, 'handle_redirect' ) );
+		add_action( 'template_redirect', array( __CLASS__, 'handle_join_redirect' ) );
 	}
 
 	public static function add_rewrite_rule() {
 		add_rewrite_rule( '^go/([a-zA-Z0-9_-]+)/?$', 'index.php?gas_code=$matches[1]', 'top' );
+		add_rewrite_rule( '^join/([a-zA-Z0-9_-]+)/?$', 'index.php?gas_sponsor=$matches[1]', 'top' );
 	}
 
 	public static function add_query_var( $vars ) {
 		$vars[] = 'gas_code';
+		$vars[] = 'gas_sponsor';
 		return $vars;
+	}
+
+	/**
+	 * On /join/{code}: a recruiting link, not a customer-referral one.
+	 * Sets the sponsor cookie and sends the visitor to the signup page —
+	 * GAS_Frontend::handle_signup() reads the cookie to set the new
+	 * affiliate's sponsor_code_id. Unknown/inactive codes fall through to
+	 * signup with no sponsor attributed, same spirit as an unknown /go/
+	 * code 404ing rather than silently attributing to nothing.
+	 */
+	public static function handle_join_redirect() {
+		$code = get_query_var( 'gas_sponsor' );
+		if ( empty( $code ) ) {
+			return;
+		}
+
+		global $wpdb;
+		$codes_table = GAS_DB::table( 'codes' );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, code, active, wp_user_id FROM {$codes_table} WHERE code = %s", $code ) );
+
+		if ( $row && $row->active ) {
+			$is_self = $row->wp_user_id && is_user_logged_in() && get_current_user_id() === (int) $row->wp_user_id;
+			if ( ! $is_self ) {
+				setcookie(
+					self::SPONSOR_COOKIE_NAME,
+					$row->code,
+					array(
+						'expires'  => time() + self::COOKIE_DAYS * DAY_IN_SECONDS,
+						'path'     => '/',
+						'secure'   => is_ssl(),
+						'httponly' => true,
+						'samesite' => 'Lax',
+					)
+				);
+			}
+		}
+
+		wp_redirect( GAS_Frontend::signup_url(), 302 );
+		exit;
 	}
 
 	public static function deactivate() {

@@ -18,6 +18,15 @@ class GAS_Settings {
 			'partner_label'             => 'partner',
 			'require_partner_at_signup' => false,
 			'menu_icon'                 => 'dashicons-groups',
+			// Multi-tier recruiting: an affiliate who recruits another
+			// affiliate (their "sponsor") earns an override on that
+			// recruit's sales, and again (smaller) on sales made by
+			// whoever the recruit themselves later recruits. These are a
+			// percent of gross commission, additive on top of the direct
+			// affiliate's own cut — recruiting never reduces what a
+			// sponsored affiliate earns on their own sales.
+			'tier2_override_percent'   => 10,
+			'tier3_override_percent'   => 5,
 		);
 	}
 

@@ -63,7 +63,7 @@ class GAS_Frontend {
 		return $id ? get_permalink( $id ) : home_url( '/affiliate-dashboard/' );
 	}
 
-	private static function signup_url() {
+	public static function signup_url() {
 		$id = get_option( 'gas_signup_page_id' );
 		return $id ? get_permalink( $id ) : home_url( '/become-an-affiliate/' );
 	}
@@ -71,6 +71,23 @@ class GAS_Frontend {
 	private static function get_active_partners() {
 		global $wpdb;
 		return $wpdb->get_results( 'SELECT id, name FROM ' . GAS_DB::table( 'partners' ) . ' ORDER BY name ASC' );
+	}
+
+	/**
+	 * Resolves the sponsor cookie (set by GAS_Redirect::handle_join_redirect()
+	 * on a /join/{code} visit) to that code's id, if it's still a real,
+	 * active code — used once at signup to set the new affiliate's
+	 * sponsor_code_id for multi-tier commission overrides.
+	 */
+	private static function get_sponsor_code_id() {
+		if ( empty( $_COOKIE[ GAS_Redirect::SPONSOR_COOKIE_NAME ] ) ) {
+			return null;
+		}
+		global $wpdb;
+		$code  = sanitize_text_field( wp_unslash( $_COOKIE[ GAS_Redirect::SPONSOR_COOKIE_NAME ] ) );
+		$table = GAS_DB::table( 'codes' );
+		$id    = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE code = %s AND active = 1", $code ) );
+		return $id ? (int) $id : null;
 	}
 
 	private static function generate_unique_code( $name ) {
@@ -213,7 +230,8 @@ class GAS_Frontend {
 		$code = self::generate_unique_code( $name );
 
 		global $wpdb;
-		$site_name = GAS_Settings::get( 'site_name' );
+		$site_name       = GAS_Settings::get( 'site_name' );
+		$sponsor_code_id = self::get_sponsor_code_id();
 
 		if ( $require_partner ) {
 			$partners_table = GAS_DB::table( 'partners' );
@@ -228,6 +246,7 @@ class GAS_Frontend {
 					'sub_affiliate_name' => $name,
 					'partner_id'         => $partner_id,
 					'wp_user_id'         => $user_id,
+					'sponsor_code_id'    => $sponsor_code_id,
 					'status'             => 'active',
 					'cut_type'           => $cut_type,
 					'cut_value'          => $cut_value,
@@ -250,6 +269,7 @@ class GAS_Frontend {
 					'sub_affiliate_name' => $name,
 					'partner_id'         => 0,
 					'wp_user_id'         => $user_id,
+					'sponsor_code_id'    => $sponsor_code_id,
 					'status'             => 'active',
 					'cut_type'           => 'percent',
 					'cut_value'          => 0,
@@ -264,6 +284,13 @@ class GAS_Frontend {
 				'New affiliate joined: ' . $name,
 				"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nCode: {$code}\n\nMatch them to a partner and set their cut rate in wp-admin under {$site_name} > Codes."
 			);
+		}
+
+		// One-time attribution: clear the sponsor cookie now that it's been
+		// applied, so it can't also attribute some later, unrelated signup
+		// in the same browser (e.g. a shared/kiosk device).
+		if ( $sponsor_code_id ) {
+			setcookie( GAS_Redirect::SPONSOR_COOKIE_NAME, '', array( 'expires' => time() - HOUR_IN_SECONDS, 'path' => '/' ) );
 		}
 
 		// Log them in so their dashboard is ready immediately.
@@ -415,12 +442,14 @@ class GAS_Frontend {
 		$totals = GAS_Payouts::totals_for_affiliate( $user_id );
 
 		foreach ( $codes as $c ) {
-			$link        = home_url( '/go/' . rawurlencode( $c->code ) . '/' );
-			$click_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE code_id = %d", $c->id ) );
+			$link         = home_url( '/go/' . rawurlencode( $c->code ) . '/' );
+			$recruit_link = home_url( '/join/' . rawurlencode( $c->code ) . '/' );
+			$click_count  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE code_id = %d", $c->id ) );
 
 			echo '<div class="gas-code-card">';
 			echo '<p><strong>' . esc_html( $c->partner_name ?: '(unassigned)' ) . '</strong> &mdash; status: ' . esc_html( $c->status ) . '</p>';
 			echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
+			echo '<p>Invite others to become an affiliate too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
 			echo '<div class="gas-stat-row">';
 			echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $click_count ) . '</span><span class="gas-stat-label">Clicks</span></div>';
 			echo '</div>';
@@ -431,6 +460,10 @@ class GAS_Frontend {
 		echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['unpaid'], 2 ) ) . '</span><span class="gas-stat-label">Unpaid balance</span></div>';
 		echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['paid'], 2 ) ) . '</span><span class="gas-stat-label">Paid to date</span></div>';
 		echo '</div>';
+
+		if ( $totals['override_unpaid'] > 0 || $totals['override_paid'] > 0 ) {
+			echo '<p class="gas-fineprint">Of which $' . esc_html( number_format( $totals['override_unpaid'] + $totals['override_paid'], 2 ) ) . ' is from people you\'ve recruited.</p>';
+		}
 	}
 
 	private static function render_password_section() {

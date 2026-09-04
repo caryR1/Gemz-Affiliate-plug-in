@@ -66,6 +66,7 @@ class GAS_DB {
 			sub_affiliate_name VARCHAR(191) NOT NULL,
 			partner_id BIGINT UNSIGNED NOT NULL,
 			wp_user_id BIGINT UNSIGNED NULL,
+			sponsor_code_id BIGINT UNSIGNED NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'active',
 			cut_type VARCHAR(20) NOT NULL DEFAULT 'percent',
 			cut_value DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -75,7 +76,8 @@ class GAS_DB {
 			PRIMARY KEY  (id),
 			UNIQUE KEY code (code),
 			KEY partner_id (partner_id),
-			KEY wp_user_id (wp_user_id)
+			KEY wp_user_id (wp_user_id),
+			KEY sponsor_code_id (sponsor_code_id)
 		) {$charset_collate};
 
 		CREATE TABLE {$clicks} (
@@ -106,13 +108,21 @@ class GAS_DB {
 			cashback_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 			cashback_paid TINYINT(1) NOT NULL DEFAULT 0,
 			cashback_paid_at DATETIME NULL,
+			tier2_code_id BIGINT UNSIGNED NULL,
+			tier2_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+			tier2_paid TINYINT(1) NOT NULL DEFAULT 0,
+			tier3_code_id BIGINT UNSIGNED NULL,
+			tier3_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+			tier3_paid TINYINT(1) NOT NULL DEFAULT 0,
 			status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
 			paid_at DATETIME NULL,
 			entered_at DATETIME NOT NULL,
 			notes TEXT NULL,
 			PRIMARY KEY  (id),
 			KEY code_id (code_id),
-			KEY status (status)
+			KEY status (status),
+			KEY tier2_code_id (tier2_code_id),
+			KEY tier3_code_id (tier3_code_id)
 		) {$charset_collate};
 
 		CREATE TABLE {$leads} (

@@ -86,15 +86,20 @@ class GAS_Payouts {
 	}
 
 	/**
-	 * Unpaid + paid totals for one affiliate, summed from gas_payouts joined
-	 * through gas_codes (payouts don't store wp_user_id directly).
+	 * Unpaid + paid totals for one affiliate. Combines three income
+	 * sources that can each land on a different payout row: their own
+	 * direct sub-affiliate cut (tracked by that row's shared `status`),
+	 * and any tier-2/tier-3 sponsor overrides earned on OTHER people's
+	 * sales (tracked independently via tier2_paid/tier3_paid, since a
+	 * payout row's direct affiliate and its sponsor(s) are different
+	 * people who get paid on their own schedules).
 	 */
 	public static function totals_for_affiliate( $user_id ) {
 		global $wpdb;
 		$payouts_table = GAS_DB::table( 'payouts' );
 		$codes_table   = GAS_DB::table( 'codes' );
 
-		$row = $wpdb->get_row(
+		$direct = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT
 					COALESCE(SUM(CASE WHEN pay.status = 'unpaid' THEN pay.subaffiliate_cut ELSE 0 END), 0) AS unpaid,
@@ -106,9 +111,38 @@ class GAS_Payouts {
 			)
 		);
 
+		$tier2 = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT
+					COALESCE(SUM(CASE WHEN pay.tier2_paid = 0 THEN pay.tier2_amount ELSE 0 END), 0) AS unpaid,
+					COALESCE(SUM(CASE WHEN pay.tier2_paid = 1 THEN pay.tier2_amount ELSE 0 END), 0) AS paid
+				 FROM {$payouts_table} pay
+				 INNER JOIN {$codes_table} c ON c.id = pay.tier2_code_id
+				 WHERE c.wp_user_id = %d",
+				$user_id
+			)
+		);
+
+		$tier3 = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT
+					COALESCE(SUM(CASE WHEN pay.tier3_paid = 0 THEN pay.tier3_amount ELSE 0 END), 0) AS unpaid,
+					COALESCE(SUM(CASE WHEN pay.tier3_paid = 1 THEN pay.tier3_amount ELSE 0 END), 0) AS paid
+				 FROM {$payouts_table} pay
+				 INNER JOIN {$codes_table} c ON c.id = pay.tier3_code_id
+				 WHERE c.wp_user_id = %d",
+				$user_id
+			)
+		);
+
+		$unpaid = ( $direct ? (float) $direct->unpaid : 0.0 ) + ( $tier2 ? (float) $tier2->unpaid : 0.0 ) + ( $tier3 ? (float) $tier3->unpaid : 0.0 );
+		$paid   = ( $direct ? (float) $direct->paid : 0.0 ) + ( $tier2 ? (float) $tier2->paid : 0.0 ) + ( $tier3 ? (float) $tier3->paid : 0.0 );
+
 		return array(
-			'unpaid' => $row ? (float) $row->unpaid : 0.0,
-			'paid'   => $row ? (float) $row->paid : 0.0,
+			'unpaid'         => $unpaid,
+			'paid'           => $paid,
+			'override_unpaid' => ( $tier2 ? (float) $tier2->unpaid : 0.0 ) + ( $tier3 ? (float) $tier3->unpaid : 0.0 ),
+			'override_paid'   => ( $tier2 ? (float) $tier2->paid : 0.0 ) + ( $tier3 ? (float) $tier3->paid : 0.0 ),
 		);
 	}
 
@@ -145,14 +179,19 @@ class GAS_Payouts {
 	}
 
 	/**
-	 * Marks every currently-unpaid payout row belonging to this affiliate as
-	 * paid. Only called after a payment API has confirmed the money is on
-	 * its way — never speculatively.
+	 * Marks this affiliate's currently-unpaid money as paid — their own
+	 * direct sub-affiliate cut, and separately any tier-2/tier-3 sponsor
+	 * overrides they're owed on other people's sales, since those live on
+	 * payout rows that may belong to a different affiliate entirely and
+	 * whose own direct-cut payment status must not be touched by this.
+	 * Only called after a payment API has confirmed the money is on its
+	 * way — never speculatively.
 	 */
 	public static function mark_affiliate_paid( $user_id ) {
 		global $wpdb;
 		$payouts_table = GAS_DB::table( 'payouts' );
 		$codes_table   = GAS_DB::table( 'codes' );
+		$now           = current_time( 'mysql' );
 
 		$wpdb->query(
 			$wpdb->prepare(
@@ -160,7 +199,27 @@ class GAS_Payouts {
 				 SET status = 'paid', paid_at = %s
 				 WHERE status = 'unpaid'
 				 AND code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
-				current_time( 'mysql' ),
+				$now,
+				$user_id
+			)
+		);
+
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$payouts_table}
+				 SET tier2_paid = 1
+				 WHERE tier2_paid = 0
+				 AND tier2_code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
+				$user_id
+			)
+		);
+
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$payouts_table}
+				 SET tier3_paid = 1
+				 WHERE tier3_paid = 0
+				 AND tier3_code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
 				$user_id
 			)
 		);

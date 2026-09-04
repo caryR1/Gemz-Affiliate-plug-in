@@ -151,10 +151,13 @@ class GAS_REST {
 				'fulfillment_mode'     => $fulfillment_mode,
 				'requires_appointment' => array_key_exists( 'requires_appointment', $body ) ? (int) (bool) $body['requires_appointment'] : 1,
 				'destination_url'      => isset( $body['destination_url'] ) ? esc_url_raw( $body['destination_url'] ) : '',
+				'email'                => isset( $body['email'] ) ? sanitize_email( $body['email'] ) : '',
 				'notes'                => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
 				'created_at'           => current_time( 'mysql' ),
 			)
 		);
+
+		GAS_Roles::provision_partner_account( $wpdb->insert_id );
 
 		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
 		return new WP_REST_Response( $created, 201 );
@@ -223,7 +226,7 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'default_cut_type', 'default_cut_value', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'default_cut_type', 'default_cut_value', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'email', 'notes' );
 		$formats    = array();
 		$format_map = array(
 			'name'                 => '%s',
@@ -237,6 +240,7 @@ class GAS_REST {
 			'fulfillment_mode'     => '%s',
 			'requires_appointment' => '%d',
 			'destination_url'      => '%s',
+			'email'                => '%s',
 			'notes'                => '%s',
 		);
 
@@ -245,6 +249,8 @@ class GAS_REST {
 				$value = $body[ $field ];
 				if ( 'destination_url' === $field ) {
 					$value = esc_url_raw( $value );
+				} elseif ( 'email' === $field ) {
+					$value = sanitize_email( $value );
 				} elseif ( 'notes' === $field || 'name' === $field ) {
 					$value = sanitize_text_field( $value );
 				} elseif ( in_array( $field, array( 'payout_type', 'default_cut_type' ), true ) ) {
@@ -268,6 +274,7 @@ class GAS_REST {
 		}
 
 		$wpdb->update( $table, $data, array( 'id' => $id ), $formats, array( '%d' ) );
+		GAS_Roles::provision_partner_account( $id );
 
 		$updated = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
 		return new WP_REST_Response( $updated, 200 );

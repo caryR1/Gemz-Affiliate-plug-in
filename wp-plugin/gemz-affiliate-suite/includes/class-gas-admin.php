@@ -452,6 +452,14 @@ class GAS_Admin {
 
 			echo '<tr><th>Destination URL</th><td><input type="url" name="destination_url" class="regular-text" value="' . esc_attr( $editing->destination_url ?? '' ) . '" placeholder="https://... (your real referral tracking link with this partner)"> <p class="description">Only used in "Redirect to partner site" mode. Leave blank until the partnership/affiliate application is approved &mdash; codes for this partner will redirect visitors to the homepage in the meantime, but clicks still get logged.</p></td></tr>';
 
+			echo '<tr><th>Partner login</th><td><input type="email" name="email" class="regular-text" value="' . esc_attr( $editing->email ?? '' ) . '" placeholder="partner@example.com">';
+			if ( $editing->user_id ?? 0 ) {
+				echo ' <span style="color:#1a7a3c;">Has portal access</span>';
+			} elseif ( $editing->email ?? '' ) {
+				echo ' <span style="color:#b32d2e;">Save to send them portal access</span>';
+			}
+			echo '<p class="description">Give this partner their own login to <a href="' . esc_url( GAS_Partner_Portal::page_url() ) . '">the Partner Portal</a>, where they can see and update the status of their own leads instead of you having to chase them. Saving with an email here sends them a "set your password" email the first time; leave blank if they don\'t need portal access.</p></td></tr>';
+
 			echo '<tr><th>Notes</th><td><textarea name="notes" class="large-text" rows="3">' . esc_textarea( $editing->notes ?? '' ) . '</textarea></td></tr>';
 
 			echo '</tbody></table>';
@@ -472,7 +480,7 @@ class GAS_Admin {
 			if ( ! $partners ) {
 				echo '<p>No partners yet. Add one above to get started.</p>';
 			} else {
-				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Default sub-affiliate cut</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Actions</th></tr></thead><tbody>';
+				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Default sub-affiliate cut</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
 				foreach ( $partners as $p ) {
 					if ( 'flat' === $p->payout_type ) {
 						$structure = $p->payout_amount ? '$' . number_format( (float) $p->payout_amount, 2 ) . ' flat' : '<em>not set</em>';
@@ -496,6 +504,13 @@ class GAS_Admin {
 					echo '<td>' . $cashback . '</td>';
 					echo '<td>' . esc_html( self::fulfillment_mode_label( $p->fulfillment_mode ) ) . '</td>';
 					echo '<td>' . ( $p->destination_url ? '<code>' . esc_html( $p->destination_url ) . '</code>' : '<em>not set yet</em>' ) . '</td>';
+					if ( $p->user_id ) {
+						echo '<td style="color:#1a7a3c;">Has access</td>';
+					} elseif ( $p->email ) {
+						echo '<td style="color:#b32d2e;">Pending</td>';
+					} else {
+						echo '<td><em>none</em></td>';
+					}
 					echo '<td><a href="' . esc_url( admin_url( 'admin.php?page=gas-partners&edit=' . $p->id ) ) . '">Edit</a></td>';
 					echo '</tr>';
 				}
@@ -543,6 +558,7 @@ class GAS_Admin {
 				'fulfillment_mode'  => 'redirect',
 				'requires_appointment' => 1,
 				'destination_url'   => '',
+				'email'             => '',
 				'notes'             => '',
 				'created_at'        => current_time( 'mysql' ),
 			)
@@ -591,10 +607,12 @@ class GAS_Admin {
 			'fulfillment_mode'  => isset( $_POST['fulfillment_mode'] ) && 'lead_capture' === $_POST['fulfillment_mode'] ? 'lead_capture' : 'redirect',
 			'requires_appointment' => isset( $_POST['requires_appointment'] ) ? 1 : 0,
 			'destination_url'   => isset( $_POST['destination_url'] ) ? esc_url_raw( wp_unslash( $_POST['destination_url'] ) ) : '',
+			'email'             => isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '',
 			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
 		);
 
 		$wpdb->update( GAS_DB::table( 'partners' ), $data, array( 'id' => $id ) );
+		GAS_Roles::provision_partner_account( $id );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&saved=1' ) );
 		exit;

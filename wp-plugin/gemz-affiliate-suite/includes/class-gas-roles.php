@@ -115,4 +115,57 @@ class GAS_Roles {
 		$user = $user ? $user : wp_get_current_user();
 		return $user && in_array( self::PARTNER_ROLE, (array) $user->roles, true );
 	}
+
+	/**
+	 * Auto-provisions (or links) a WP user account for a partner so they
+	 * can log in to their own portal — called whenever a partner is saved
+	 * with an email and doesn't have one yet. If that email already
+	 * belongs to a WP user, the partner role is ADDED to that account
+	 * rather than creating a duplicate, so one person can hold both an
+	 * affiliate account and a partner account without two disconnected
+	 * logins. Ported from gemz-referral-crm's GRC_Roles::provision_partner_account().
+	 */
+	public static function provision_partner_account( $partner_id ) {
+		global $wpdb;
+		$table   = GAS_DB::table( 'partners' );
+		$partner = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $partner_id ) );
+
+		if ( ! $partner || empty( $partner->email ) || ! empty( $partner->user_id ) ) {
+			return; // no email to invite, or already has an account
+		}
+
+		$existing_user = get_user_by( 'email', $partner->email );
+
+		if ( $existing_user ) {
+			$existing_user->add_role( self::PARTNER_ROLE );
+			$wpdb->update( $table, array( 'user_id' => $existing_user->ID ), array( 'id' => $partner_id ) );
+			return;
+		}
+
+		$base_username = sanitize_user( current( explode( '@', $partner->email ) ), true );
+		$username      = $base_username ?: 'partner';
+		$suffix        = 1;
+		while ( username_exists( $username ) ) {
+			$username = $base_username . $suffix;
+			$suffix++;
+		}
+
+		$user_id = wp_insert_user( array(
+			'user_login'   => $username,
+			'user_email'   => $partner->email,
+			'user_pass'    => wp_generate_password( 20 ),
+			'display_name' => $partner->name,
+			'role'         => self::PARTNER_ROLE,
+		) );
+
+		if ( is_wp_error( $user_id ) ) {
+			return;
+		}
+
+		$wpdb->update( $table, array( 'user_id' => $user_id ), array( 'id' => $partner_id ) );
+
+		// WP core's standard "set your new password" email, same mechanism
+		// as the "forgot password" flow, just triggered proactively.
+		retrieve_password( $partner->email );
+	}
 }

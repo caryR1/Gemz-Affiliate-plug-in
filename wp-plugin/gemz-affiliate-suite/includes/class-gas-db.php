@@ -54,10 +54,13 @@ class GAS_DB {
 			fulfillment_mode VARCHAR(20) NOT NULL DEFAULT 'redirect',
 			requires_appointment TINYINT(1) NOT NULL DEFAULT 1,
 			destination_url VARCHAR(500) NULL,
+			email VARCHAR(191) NULL,
+			user_id BIGINT UNSIGNED NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
-			UNIQUE KEY slug (slug)
+			UNIQUE KEY slug (slug),
+			KEY user_id (user_id)
 		) {$charset_collate};
 
 		CREATE TABLE {$codes} (

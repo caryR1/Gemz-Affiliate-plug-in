@@ -28,6 +28,24 @@ class GAS_REST {
 			'permission_callback' => array( __CLASS__, 'permission_check' ),
 		) );
 
+		register_rest_route( 'gas/v1', '/partners', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'create_partner' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
+		register_rest_route( 'gas/v1', '/settings', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'get_settings' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
+		register_rest_route( 'gas/v1', '/settings', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'update_settings' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
 		register_rest_route( 'gas/v1', '/partners/(?P<id>\d+)', array(
 			'methods'             => 'POST',
 			'callback'            => array( __CLASS__, 'update_partner' ),
@@ -58,6 +76,74 @@ class GAS_REST {
 			unset( $r['installments_json'] );
 		}
 		return new WP_REST_Response( $rows, 200 );
+	}
+
+	public static function create_partner( WP_REST_Request $request ) {
+		global $wpdb;
+		$table = GAS_DB::table( 'partners' );
+		$body  = $request->get_json_params();
+
+		$name = isset( $body['name'] ) ? sanitize_text_field( $body['name'] ) : '';
+		if ( '' === $name ) {
+			return new WP_Error( 'gas_missing_name', 'Partner name is required.', array( 'status' => 400 ) );
+		}
+
+		$slug = sanitize_title( $name );
+		$base = $slug;
+		$i    = 0;
+		while ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE slug = %s", $slug ) ) ) {
+			$i++;
+			$slug = $base . '-' . $i;
+		}
+
+		$payout_type      = isset( $body['payout_type'] ) && in_array( $body['payout_type'], array( 'flat', 'percent' ), true ) ? $body['payout_type'] : 'flat';
+		$default_cut_type = isset( $body['default_cut_type'] ) && in_array( $body['default_cut_type'], array( 'flat', 'percent' ), true ) ? $body['default_cut_type'] : 'percent';
+
+		$wpdb->insert(
+			$table,
+			array(
+				'slug'              => $slug,
+				'name'              => $name,
+				'payout_type'       => $payout_type,
+				'payout_amount'     => isset( $body['payout_amount'] ) ? (float) $body['payout_amount'] : null,
+				'payout_percent'    => isset( $body['payout_percent'] ) ? (float) $body['payout_percent'] : null,
+				'installments_json' => ! empty( $body['installments'] ) ? wp_json_encode( $body['installments'] ) : null,
+				'default_cut_type'  => $default_cut_type,
+				'default_cut_value' => isset( $body['default_cut_value'] ) ? (float) $body['default_cut_value'] : 0,
+				'destination_url'   => isset( $body['destination_url'] ) ? esc_url_raw( $body['destination_url'] ) : '',
+				'notes'             => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
+				'created_at'        => current_time( 'mysql' ),
+			)
+		);
+
+		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
+		return new WP_REST_Response( $created, 201 );
+	}
+
+	public static function get_settings() {
+		return new WP_REST_Response( GAS_Settings::all(), 200 );
+	}
+
+	public static function update_settings( WP_REST_Request $request ) {
+		$body    = $request->get_json_params();
+		$allowed = array( 'site_name', 'partner_label', 'require_partner_at_signup', 'menu_icon' );
+
+		$values = array();
+		foreach ( $allowed as $field ) {
+			if ( ! array_key_exists( $field, $body ) ) {
+				continue;
+			}
+			$values[ $field ] = 'require_partner_at_signup' === $field
+				? (bool) $body[ $field ]
+				: sanitize_text_field( $body[ $field ] );
+		}
+
+		if ( empty( $values ) ) {
+			return new WP_Error( 'gas_no_fields', 'No recognized settings fields to update.', array( 'status' => 400 ) );
+		}
+
+		GAS_Settings::update( $values );
+		return new WP_REST_Response( GAS_Settings::all(), 200 );
 	}
 
 	public static function update_partner( WP_REST_Request $request ) {

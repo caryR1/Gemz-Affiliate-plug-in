@@ -1425,9 +1425,7 @@ class GAS_Admin {
 
 		echo '<tr><th><label for="site_name">Program name</label></th><td><input type="text" id="site_name" name="site_name" class="regular-text" required value="' . esc_attr( $settings['site_name'] ) . '"> <p class="description">Shown as the admin menu label and page heading.</p></td></tr>';
 
-		echo '<tr><th><label for="partner_label">Partner label</label></th><td><input type="text" id="partner_label" name="partner_label" class="regular-text" required value="' . esc_attr( $settings['partner_label'] ) . '"> <p class="description">The word used for "partner" in the self-signup form, e.g. "solar partner" or "builder".</p></td></tr>';
-
-		echo '<tr><th><label for="require_partner_at_signup">Require partner at signup</label></th><td><label><input type="checkbox" id="require_partner_at_signup" name="require_partner_at_signup" value="1"' . checked( $settings['require_partner_at_signup'], true, false ) . '> New affiliates must choose a partner when they self-sign-up</label> <p class="description">If unchecked, new affiliates go live immediately unassigned, and an admin matches them to a partner and sets their cut rate afterward from the Codes screen. If checked, the partner\'s default cut rate is applied automatically at signup.</p></td></tr>';
+		echo '<tr><th><label for="partner_label">Partner label</label></th><td><input type="text" id="partner_label" name="partner_label" class="regular-text" required value="' . esc_attr( $settings['partner_label'] ) . '"> <p class="description">The word used for "partner" in admin screens, e.g. "solar partner" or "builder". New affiliates never choose or see a partner at signup on any project &mdash; they always go live unassigned, and an admin matches them to a partner afterward from the Codes screen.</p></td></tr>';
 
 		echo '<tr><th><label for="menu_icon">Admin menu icon</label></th><td><input type="text" id="menu_icon" name="menu_icon" class="regular-text" value="' . esc_attr( $settings['menu_icon'] ) . '"> <p class="description">A <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank" rel="noopener">dashicon</a> slug, e.g. dashicons-groups.</p></td></tr>';
 
@@ -1451,7 +1449,6 @@ class GAS_Admin {
 		GAS_Settings::update( array(
 			'site_name'                 => isset( $_POST['site_name'] ) ? sanitize_text_field( wp_unslash( $_POST['site_name'] ) ) : '',
 			'partner_label'             => isset( $_POST['partner_label'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_label'] ) ) : 'partner',
-			'require_partner_at_signup' => ! empty( $_POST['require_partner_at_signup'] ),
 			'menu_icon'                 => isset( $_POST['menu_icon'] ) ? sanitize_text_field( wp_unslash( $_POST['menu_icon'] ) ) : 'dashicons-groups',
 			'tier2_override_percent'    => isset( $_POST['tier2_override_percent'] ) ? (float) $_POST['tier2_override_percent'] : 10,
 			'tier3_override_percent'    => isset( $_POST['tier3_override_percent'] ) ? (float) $_POST['tier3_override_percent'] : 5,

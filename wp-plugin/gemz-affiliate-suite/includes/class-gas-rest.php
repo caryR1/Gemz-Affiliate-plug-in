@@ -185,7 +185,7 @@ class GAS_REST {
 			update_option( 'gas_dashboard_page_id', absint( $body['dashboard_page_id'] ) );
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'require_partner_at_signup', 'menu_icon', 'tier2_override_percent', 'tier3_override_percent' );
+		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier2_override_percent', 'tier3_override_percent' );
 		$numeric  = array( 'tier2_override_percent', 'tier3_override_percent' );
 
 		$values = array();
@@ -193,9 +193,7 @@ class GAS_REST {
 			if ( ! array_key_exists( $field, $body ) ) {
 				continue;
 			}
-			if ( 'require_partner_at_signup' === $field ) {
-				$values[ $field ] = (bool) $body[ $field ];
-			} elseif ( in_array( $field, $numeric, true ) ) {
+			if ( in_array( $field, $numeric, true ) ) {
 				$values[ $field ] = (float) $body[ $field ];
 			} else {
 				$values[ $field ] = sanitize_text_field( $body[ $field ] );

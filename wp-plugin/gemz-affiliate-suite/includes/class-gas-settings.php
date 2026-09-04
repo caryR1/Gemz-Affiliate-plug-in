@@ -5,8 +5,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /**
  * Per-site configuration, stored as one option so every site running this
- * plugin can set its own program name, partner terminology, and whether
- * self-signup requires picking a partner up front, without editing code.
+ * plugin can set its own program name and partner terminology without
+ * editing code. Note: an affiliate never chooses (or sees) which
+ * fulfillment partner handles their referrals on any project — that's
+ * always resolved by an admin afterward, from the Codes screen. There is
+ * deliberately no setting that changes this.
  */
 class GAS_Settings {
 
@@ -16,7 +19,6 @@ class GAS_Settings {
 		return array(
 			'site_name'                 => get_bloginfo( 'name' ) ?: 'Affiliate Suite',
 			'partner_label'             => 'partner',
-			'require_partner_at_signup' => false,
 			'menu_icon'                 => 'dashicons-groups',
 			// Multi-tier recruiting: an affiliate who recruits another
 			// affiliate (their "sponsor") earns an override on that

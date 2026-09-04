@@ -68,11 +68,6 @@ class GAS_Frontend {
 		return $id ? get_permalink( $id ) : home_url( '/become-an-affiliate/' );
 	}
 
-	private static function get_active_partners() {
-		global $wpdb;
-		return $wpdb->get_results( 'SELECT id, name FROM ' . GAS_DB::table( 'partners' ) . ' ORDER BY name ASC' );
-	}
-
 	/**
 	 * Resolves the sponsor cookie (set by GAS_Redirect::handle_join_redirect()
 	 * on a /join/{code} visit) to that code's id, if it's still a real,
@@ -127,9 +122,6 @@ class GAS_Frontend {
 			echo '<div class="gas-notice gas-notice-error"><p>' . esc_html( $error ) . '</p></div>';
 		}
 
-		$require_partner = (bool) GAS_Settings::get( 'require_partner_at_signup' );
-		$partner_label   = GAS_Settings::get( 'partner_label' );
-		$partners        = $require_partner ? self::get_active_partners() : array();
 		?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">
 			<?php wp_nonce_field( 'gas_affiliate_signup' ); ?>
@@ -146,17 +138,6 @@ class GAS_Frontend {
 				<label for="gas_email">Email</label><br>
 				<input type="email" id="gas_email" name="email" required class="gas-input">
 			</p>
-			<?php if ( $require_partner ) : ?>
-			<p>
-				<label for="gas_partner">Which <?php echo esc_html( $partner_label ); ?> do you want to promote?</label><br>
-				<select id="gas_partner" name="partner_id" required class="gas-input">
-					<option value="">-- choose one --</option>
-					<?php foreach ( $partners as $p ) : ?>
-						<option value="<?php echo esc_attr( $p->id ); ?>"><?php echo esc_html( $p->name ); ?></option>
-					<?php endforeach; ?>
-				</select>
-			</p>
-			<?php endif; ?>
 			<p>
 				<label for="gas_password">Choose a password</label><br>
 				<input type="password" id="gas_password" name="password" required minlength="8" class="gas-input">
@@ -187,11 +168,8 @@ class GAS_Frontend {
 			exit;
 		}
 
-		$require_partner = (bool) GAS_Settings::get( 'require_partner_at_signup' );
-
 		$name       = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
 		$email      = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
-		$partner_id = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
 		$password   = isset( $_POST['password'] ) ? (string) $_POST['password'] : '';
 		$password2  = isset( $_POST['password2'] ) ? (string) $_POST['password2'] : '';
 
@@ -200,7 +178,7 @@ class GAS_Frontend {
 			exit;
 		};
 
-		if ( '' === $name || ! is_email( $email ) || ( $require_partner && ! $partner_id ) || strlen( $password ) < 8 ) {
+		if ( '' === $name || ! is_email( $email ) || strlen( $password ) < 8 ) {
 			$fail( 'Please fill in every field. Passwords need to be at least 8 characters.' );
 		}
 		if ( $password !== $password2 ) {
@@ -233,58 +211,32 @@ class GAS_Frontend {
 		$site_name       = GAS_Settings::get( 'site_name' );
 		$sponsor_code_id = self::get_sponsor_code_id();
 
-		if ( $require_partner ) {
-			$partners_table = GAS_DB::table( 'partners' );
-			$partner        = $wpdb->get_row( $wpdb->prepare( "SELECT default_cut_type, default_cut_value FROM {$partners_table} WHERE id = %d", $partner_id ) );
-			$cut_type       = $partner && 'flat' === $partner->default_cut_type ? 'flat' : 'percent';
-			$cut_value      = $partner ? (float) $partner->default_cut_value : 0;
+		// An affiliate never chooses (or sees) which fulfillment partner
+		// handles their referrals, on any project this plugin runs — an
+		// admin always matches them to a partner afterward, from the
+		// Codes screen. No exceptions.
+		$wpdb->insert(
+			GAS_DB::table( 'codes' ),
+			array(
+				'code'               => $code,
+				'sub_affiliate_name' => $name,
+				'partner_id'         => 0,
+				'wp_user_id'         => $user_id,
+				'sponsor_code_id'    => $sponsor_code_id,
+				'status'             => 'active',
+				'cut_type'           => 'percent',
+				'cut_value'          => 0,
+				'active'             => 1,
+				'notes'              => "Self-signup, live immediately. No partner assigned yet — match to a partner and set the cut rate from {$site_name} > Codes.",
+				'created_at'         => current_time( 'mysql' ),
+			)
+		);
 
-			$wpdb->insert(
-				GAS_DB::table( 'codes' ),
-				array(
-					'code'               => $code,
-					'sub_affiliate_name' => $name,
-					'partner_id'         => $partner_id,
-					'wp_user_id'         => $user_id,
-					'sponsor_code_id'    => $sponsor_code_id,
-					'status'             => 'active',
-					'cut_type'           => $cut_type,
-					'cut_value'          => $cut_value,
-					'active'             => 1,
-					'notes'              => 'Self-signup, live immediately at the partner\'s default cut rate.',
-					'created_at'         => current_time( 'mysql' ),
-				)
-			);
-
-			wp_mail(
-				get_option( 'admin_email' ),
-				'New affiliate joined: ' . $name,
-				"A new affiliate signed up and is live immediately.\n\nName: {$name}\nEmail: {$email}\nCode: {$code}\nCut rate applied: " . ( 'flat' === $cut_type ? '$' . number_format( $cut_value, 2 ) . ' flat' : $cut_value . '%' ) . "\n\nYou can suspend them or adjust their rate anytime in wp-admin under {$site_name} > Affiliates."
-			);
-		} else {
-			$wpdb->insert(
-				GAS_DB::table( 'codes' ),
-				array(
-					'code'               => $code,
-					'sub_affiliate_name' => $name,
-					'partner_id'         => 0,
-					'wp_user_id'         => $user_id,
-					'sponsor_code_id'    => $sponsor_code_id,
-					'status'             => 'active',
-					'cut_type'           => 'percent',
-					'cut_value'          => 0,
-					'active'             => 1,
-					'notes'              => "Self-signup, live immediately. No partner assigned yet — match to a partner and set the cut rate from {$site_name} > Codes.",
-					'created_at'         => current_time( 'mysql' ),
-				)
-			);
-
-			wp_mail(
-				get_option( 'admin_email' ),
-				'New affiliate joined: ' . $name,
-				"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nCode: {$code}\n\nMatch them to a partner and set their cut rate in wp-admin under {$site_name} > Codes."
-			);
-		}
+		wp_mail(
+			get_option( 'admin_email' ),
+			'New affiliate joined: ' . $name,
+			"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nCode: {$code}\n\nMatch them to a partner and set their cut rate in wp-admin under {$site_name} > Codes."
+		);
 
 		// One-time attribution: clear the sponsor cookie now that it's been
 		// applied, so it can't also attribute some later, unrelated signup

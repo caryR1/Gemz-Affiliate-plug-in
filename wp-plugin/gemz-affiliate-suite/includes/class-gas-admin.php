@@ -24,6 +24,10 @@ class GAS_Admin {
 		add_action( 'admin_post_gas_wise_payout_now', array( __CLASS__, 'handle_wise_payout_now' ) );
 	}
 
+	private static function fulfillment_mode_label( $mode ) {
+		return 'lead_capture' === $mode ? 'On-site lead capture' : 'Redirect to partner site';
+	}
+
 	public static function add_menu() {
 		$site_name = GAS_Settings::get( 'site_name' );
 		$icon      = GAS_Settings::get( 'menu_icon' );
@@ -40,6 +44,7 @@ class GAS_Admin {
 		add_submenu_page( 'gas-affiliates', 'Affiliates', 'Affiliates', self::CAP, 'gas-affiliates', array( __CLASS__, 'render_affiliates_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Sub-Affiliate Codes', 'Codes', self::CAP, 'gas-codes', array( __CLASS__, 'render_codes_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Leads', 'Leads', self::CAP, 'gas-leads', array( __CLASS__, 'render_leads_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Click Log', 'Click Log', self::CAP, 'gas-clicks', array( __CLASS__, 'render_clicks_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Payout Calculator', 'Payout Calculator', self::CAP, 'gas-calculator', array( __CLASS__, 'render_calculator_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Payout Ledger', 'Payout Ledger', self::CAP, 'gas-ledger', array( __CLASS__, 'render_ledger_page' ) );
@@ -414,7 +419,26 @@ class GAS_Admin {
 			echo '<p class="description">Applied automatically to new self-signup affiliates for this partner, when signup requires choosing a partner up front. You can still override any individual affiliate\'s rate later from the Codes screen.</p>';
 			echo '</td></tr>';
 
-			echo '<tr><th>Destination URL</th><td><input type="url" name="destination_url" class="regular-text" value="' . esc_attr( $editing->destination_url ?? '' ) . '" placeholder="https://... (your real referral tracking link with this partner)"> <p class="description">Leave blank until the partnership/affiliate application is approved &mdash; codes for this partner will redirect visitors to the homepage in the meantime, but clicks still get logged.</p></td></tr>';
+			echo '<tr><th>Buyer cash back</th><td>';
+			echo '<select name="cashback_type">';
+			echo '<option value=""' . selected( $editing->cashback_type ?? '', '', false ) . '>None</option>';
+			echo '<option value="percent"' . selected( $editing->cashback_type ?? '', 'percent', false ) . '>Percent of commission</option>';
+			echo '<option value="flat"' . selected( $editing->cashback_type ?? '', 'flat', false ) . '>Flat dollar amount per sale</option>';
+			echo '</select> ';
+			echo '<input type="number" step="0.01" min="0" name="cashback_value" value="' . esc_attr( $editing->cashback_value ?? '0' ) . '"> ';
+			echo '<p class="description">What the referred customer gets back, paid from the gross commission before the sub-affiliate cut and your net are figured. $0 (None) means no cash back is offered for this partner.</p>';
+			echo '</td></tr>';
+
+			echo '<tr><th>Fulfillment</th><td>';
+			echo '<select name="fulfillment_mode" id="fulfillment_mode">';
+			echo '<option value="redirect"' . selected( $editing->fulfillment_mode ?? 'redirect', 'redirect', false ) . '>Redirect to partner site</option>';
+			echo '<option value="lead_capture"' . selected( $editing->fulfillment_mode ?? 'redirect', 'lead_capture', false ) . '>Capture the lead on this site</option>';
+			echo '</select> ';
+			echo '<label><input type="checkbox" name="requires_appointment" value="1"' . checked( $editing->requires_appointment ?? 1, 1, false ) . '> Requires picking an appointment time</label>';
+			echo '<p class="description">"Redirect" sends clicks straight to the Destination URL below (today\'s behavior). "Capture the lead on this site" instead shows an on-site form and records a Lead here for you to work &mdash; use this for projects that don\'t have (or don\'t want to rely on) a partner-hosted booking flow. The appointment checkbox only matters in capture mode: leave it unchecked for projects that just want contact info, no scheduled appointment.</p>';
+			echo '</td></tr>';
+
+			echo '<tr><th>Destination URL</th><td><input type="url" name="destination_url" class="regular-text" value="' . esc_attr( $editing->destination_url ?? '' ) . '" placeholder="https://... (your real referral tracking link with this partner)"> <p class="description">Only used in "Redirect to partner site" mode. Leave blank until the partnership/affiliate application is approved &mdash; codes for this partner will redirect visitors to the homepage in the meantime, but clicks still get logged.</p></td></tr>';
 
 			echo '<tr><th>Notes</th><td><textarea name="notes" class="large-text" rows="3">' . esc_textarea( $editing->notes ?? '' ) . '</textarea></td></tr>';
 
@@ -436,7 +460,7 @@ class GAS_Admin {
 			if ( ! $partners ) {
 				echo '<p>No partners yet. Add one above to get started.</p>';
 			} else {
-				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Default sub-affiliate cut</th><th>Destination URL</th><th>Actions</th></tr></thead><tbody>';
+				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Payout structure</th><th>Default sub-affiliate cut</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Actions</th></tr></thead><tbody>';
 				foreach ( $partners as $p ) {
 					if ( 'flat' === $p->payout_type ) {
 						$structure = $p->payout_amount ? '$' . number_format( (float) $p->payout_amount, 2 ) . ' flat' : '<em>not set</em>';
@@ -453,9 +477,12 @@ class GAS_Admin {
 					}
 					echo '<tr>';
 					$default_cut = 'percent' === $p->default_cut_type ? esc_html( $p->default_cut_value ) . '%' : '$' . esc_html( number_format( (float) $p->default_cut_value, 2 ) ) . ' flat';
+					$cashback    = $p->cashback_type ? ( 'percent' === $p->cashback_type ? esc_html( $p->cashback_value ) . '%' : '$' . esc_html( number_format( (float) $p->cashback_value, 2 ) ) . ' flat' ) : '<em>none</em>';
 					echo '<td>' . esc_html( $p->name ) . '</td>';
 					echo '<td>' . $structure . '</td>';
 					echo '<td>' . $default_cut . '</td>';
+					echo '<td>' . $cashback . '</td>';
+					echo '<td>' . esc_html( self::fulfillment_mode_label( $p->fulfillment_mode ) ) . '</td>';
 					echo '<td>' . ( $p->destination_url ? '<code>' . esc_html( $p->destination_url ) . '</code>' : '<em>not set yet</em>' ) . '</td>';
 					echo '<td><a href="' . esc_url( admin_url( 'admin.php?page=gas-partners&edit=' . $p->id ) ) . '">Edit</a></td>';
 					echo '</tr>';
@@ -499,6 +526,10 @@ class GAS_Admin {
 				'installments_json' => null,
 				'default_cut_type'  => 'percent',
 				'default_cut_value' => 0,
+				'cashback_type'     => null,
+				'cashback_value'    => 0,
+				'fulfillment_mode'  => 'redirect',
+				'requires_appointment' => 1,
 				'destination_url'   => '',
 				'notes'             => '',
 				'created_at'        => current_time( 'mysql' ),
@@ -543,6 +574,10 @@ class GAS_Admin {
 			'installments_json' => $installments ? wp_json_encode( $installments ) : null,
 			'default_cut_type'  => isset( $_POST['default_cut_type'] ) && 'flat' === $_POST['default_cut_type'] ? 'flat' : 'percent',
 			'default_cut_value' => isset( $_POST['default_cut_value'] ) ? (float) $_POST['default_cut_value'] : 0,
+			'cashback_type'     => isset( $_POST['cashback_type'] ) && in_array( $_POST['cashback_type'], array( 'flat', 'percent' ), true ) ? $_POST['cashback_type'] : null,
+			'cashback_value'    => isset( $_POST['cashback_value'] ) ? (float) $_POST['cashback_value'] : 0,
+			'fulfillment_mode'  => isset( $_POST['fulfillment_mode'] ) && 'lead_capture' === $_POST['fulfillment_mode'] ? 'lead_capture' : 'redirect',
+			'requires_appointment' => isset( $_POST['requires_appointment'] ) ? 1 : 0,
 			'destination_url'   => isset( $_POST['destination_url'] ) ? esc_url_raw( wp_unslash( $_POST['destination_url'] ) ) : '',
 			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
 		);
@@ -551,6 +586,67 @@ class GAS_Admin {
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&saved=1' ) );
 		exit;
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * LEADS (on-site capture, for lead_capture partners)
+	 * ---------------------------------------------------------------- */
+
+	public static function render_leads_page() {
+		if ( ! current_user_can( self::CAP ) ) {
+			return;
+		}
+		global $wpdb;
+		self::wrap_start( 'Leads' );
+
+		if ( isset( $_GET['updated'] ) ) {
+			echo '<div class="notice notice-success"><p>Status updated.</p></div>';
+		}
+
+		$leads_table    = GAS_DB::table( 'leads' );
+		$partners_table = GAS_DB::table( 'partners' );
+
+		$rows = $wpdb->get_results(
+			"SELECT l.*, p.name AS partner_name FROM {$leads_table} l
+			 LEFT JOIN {$partners_table} p ON p.id = l.partner_id
+			 ORDER BY l.created_at DESC"
+		);
+
+		if ( ! $rows ) {
+			echo '<p>No leads yet. Leads show up here when a visitor submits the on-site form for a partner set to "Capture the lead on this site" &mdash; see the Partners screen.</p>';
+			self::wrap_end();
+			return;
+		}
+
+		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
+		foreach ( $rows as $l ) {
+			echo '<tr>';
+			echo '<td>' . esc_html( $l->created_at ) . '</td>';
+			echo '<td>' . esc_html( $l->customer_name ) . '</td>';
+			echo '<td>' . esc_html( $l->customer_email ) . ( $l->customer_email && $l->customer_phone ? '<br>' : '' ) . esc_html( $l->customer_phone ) . '</td>';
+			echo '<td>' . esc_html( $l->partner_name ?: '&mdash;' ) . '</td>';
+			echo '<td>' . ( $l->appointment_at ? esc_html( $l->appointment_at ) : '&mdash;' ) . '</td>';
+			echo '<td>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			wp_nonce_field( 'gas_update_lead_status_' . $l->id );
+			echo '<input type="hidden" name="action" value="gas_update_lead_status">';
+			echo '<input type="hidden" name="lead_id" value="' . esc_attr( $l->id ) . '">';
+			echo '<select name="status" onchange="this.form.submit()">';
+			if ( ! in_array( $l->status, GAS_Leads::SETTABLE_STATUSES, true ) ) {
+				echo '<option value="" disabled selected>' . esc_html( ucwords( str_replace( '_', ' ', $l->status ) ) ) . '</option>';
+			}
+			foreach ( GAS_Leads::SETTABLE_STATUSES as $s ) {
+				echo '<option value="' . esc_attr( $s ) . '"' . selected( $l->status, $s, false ) . '>' . esc_html( ucwords( str_replace( '_', ' ', $s ) ) ) . '</option>';
+			}
+			echo '</select>';
+			echo '<noscript><button type="submit" class="button">Update</button></noscript>';
+			echo '</form>';
+			echo '</td>';
+			echo '</tr>';
+		}
+		echo '</tbody></table>';
+
+		self::wrap_end();
 	}
 
 	/* ---------------------------------------------------------------- *
@@ -634,6 +730,9 @@ class GAS_Admin {
 				echo '<div class="notice notice-success"><h2 style="margin-top:0">Result</h2>';
 				echo '<p><strong>Gross commission (yours from the partner):</strong> $' . esc_html( number_format( $result['gross'], 2 ) ) . '</p>';
 				echo '<p><strong>Sub-affiliate cut:</strong> $' . esc_html( number_format( $result['cut'], 2 ) ) . '</p>';
+				if ( $result['cashback'] > 0 ) {
+					echo '<p><strong>Buyer cash back:</strong> $' . esc_html( number_format( $result['cashback'], 2 ) ) . '</p>';
+				}
 				echo '<p><strong>Net to you:</strong> $' . esc_html( number_format( $result['net'], 2 ) ) . '</p>';
 				if ( ! empty( $result['saved'] ) ) {
 					echo '<p>Saved to the <a href="' . esc_url( admin_url( 'admin.php?page=gas-ledger' ) ) . '">Payout Ledger</a>.</p>';
@@ -733,13 +832,25 @@ class GAS_Admin {
 			$cut = $gross * ( (float) $code->cut_value / 100 );
 		}
 
-		$net = $gross - $cut;
+		// Buyer cash back comes out of the gross commission, same base as
+		// the sub-affiliate cut — the two are independent shares of the
+		// same gross, not stacked on top of each other.
+		if ( $partner->cashback_type ) {
+			$cashback = 'flat' === $partner->cashback_type
+				? (float) $partner->cashback_value
+				: $gross * ( (float) $partner->cashback_value / 100 );
+		} else {
+			$cashback = 0.0;
+		}
+
+		$net = $gross - $cut - $cashback;
 
 		$result = array(
-			'gross' => $gross,
-			'cut'   => $cut,
-			'net'   => $net,
-			'saved' => false,
+			'gross'    => $gross,
+			'cut'      => $cut,
+			'cashback' => $cashback,
+			'net'      => $net,
+			'saved'    => false,
 		);
 
 		if ( $save ) {
@@ -754,6 +865,7 @@ class GAS_Admin {
 					'installment_label' => $installment_label,
 					'gross_commission'  => $gross,
 					'subaffiliate_cut'  => $cut,
+					'cashback_amount'   => $cashback,
 					'net_to_cary'       => $net,
 					'entered_at'        => current_time( 'mysql' ),
 					'notes'             => $notes,
@@ -803,14 +915,16 @@ class GAS_Admin {
 		if ( ! $rows ) {
 			echo '<p>No payouts recorded yet. Use the <a href="' . esc_url( admin_url( 'admin.php?page=gas-calculator' ) ) . '">Payout Calculator</a> and save a result to start the ledger.</p>';
 		} else {
-			$total_gross = 0;
-			$total_cut   = 0;
-			$total_net   = 0;
-			echo '<table class="widefat striped"><thead><tr><th>Date</th><th>Code</th><th>Partner</th><th>Sale</th><th>Installment</th><th>Gross</th><th>Sub-affiliate cut</th><th>Net to you</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>';
+			$total_gross    = 0;
+			$total_cut      = 0;
+			$total_cashback = 0;
+			$total_net      = 0;
+			echo '<table class="widefat striped"><thead><tr><th>Date</th><th>Code</th><th>Partner</th><th>Sale</th><th>Installment</th><th>Gross</th><th>Sub-affiliate cut</th><th>Buyer cash back</th><th>Net to you</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>';
 			foreach ( $rows as $r ) {
-				$total_gross += (float) $r->gross_commission;
-				$total_cut   += (float) $r->subaffiliate_cut;
-				$total_net   += (float) $r->net_to_cary;
+				$total_gross    += (float) $r->gross_commission;
+				$total_cut      += (float) $r->subaffiliate_cut;
+				$total_cashback += (float) $r->cashback_amount;
+				$total_net      += (float) $r->net_to_cary;
 				echo '<tr>';
 				echo '<td>' . esc_html( $r->entered_at ) . '</td>';
 				echo '<td><code>' . esc_html( $r->code ) . '</code></td>';
@@ -819,6 +933,7 @@ class GAS_Admin {
 				echo '<td>' . esc_html( $r->installment_label ?: '&mdash;' ) . '</td>';
 				echo '<td>$' . esc_html( number_format( (float) $r->gross_commission, 2 ) ) . '</td>';
 				echo '<td>$' . esc_html( number_format( (float) $r->subaffiliate_cut, 2 ) ) . '</td>';
+				echo '<td>$' . esc_html( number_format( (float) $r->cashback_amount, 2 ) ) . '</td>';
 				echo '<td>$' . esc_html( number_format( (float) $r->net_to_cary, 2 ) ) . '</td>';
 				echo '<td>' . ( 'paid' === $r->status ? '<span style="color:#1a7a3c;">Paid</span>' : 'Unpaid' ) . '</td>';
 				echo '<td>' . esc_html( $r->notes ) . '</td>';
@@ -830,6 +945,7 @@ class GAS_Admin {
 			echo '<h2>Totals</h2>';
 			echo '<p><strong>Total gross commission:</strong> $' . esc_html( number_format( $total_gross, 2 ) ) . '<br>';
 			echo '<strong>Total owed to sub-affiliates:</strong> $' . esc_html( number_format( $total_cut, 2 ) ) . '<br>';
+			echo '<strong>Total buyer cash back:</strong> $' . esc_html( number_format( $total_cashback, 2 ) ) . '<br>';
 			echo '<strong>Total net to you:</strong> $' . esc_html( number_format( $total_net, 2 ) ) . '</p>';
 		}
 
@@ -982,7 +1098,7 @@ class GAS_Admin {
 		header( 'Content-Disposition: attachment; filename="payout-ledger-' . gmdate( 'Y-m-d' ) . '.csv"' );
 
 		$out = fopen( 'php://output', 'w' );
-		fputcsv( $out, array( 'Date', 'Code', 'Partner', 'Sale Amount', 'Installment', 'Gross Commission', 'Sub-affiliate Cut', 'Net', 'Status', 'Paid At', 'Notes' ) );
+		fputcsv( $out, array( 'Date', 'Code', 'Partner', 'Sale Amount', 'Installment', 'Gross Commission', 'Sub-affiliate Cut', 'Buyer Cash Back', 'Net', 'Status', 'Paid At', 'Notes' ) );
 		foreach ( $rows as $r ) {
 			fputcsv( $out, array(
 				$r->entered_at,
@@ -992,6 +1108,7 @@ class GAS_Admin {
 				$r->installment_label ?: '',
 				$r->gross_commission,
 				$r->subaffiliate_cut,
+				$r->cashback_amount,
 				$r->net_to_cary,
 				$r->status,
 				$r->paid_at ?: '',

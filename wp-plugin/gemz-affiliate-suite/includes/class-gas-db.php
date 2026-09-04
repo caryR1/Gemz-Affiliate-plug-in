@@ -37,6 +37,7 @@ class GAS_DB {
 		$codes    = self::table( 'codes' );
 		$clicks   = self::table( 'clicks' );
 		$payouts  = self::table( 'payouts' );
+		$leads    = self::table( 'leads' );
 
 		$sql = "CREATE TABLE {$partners} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -48,6 +49,10 @@ class GAS_DB {
 			installments_json TEXT NULL,
 			default_cut_type VARCHAR(20) NOT NULL DEFAULT 'percent',
 			default_cut_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+			cashback_type VARCHAR(20) NULL,
+			cashback_value DECIMAL(10,2) NOT NULL DEFAULT 0,
+			fulfillment_mode VARCHAR(20) NOT NULL DEFAULT 'redirect',
+			requires_appointment TINYINT(1) NOT NULL DEFAULT 1,
 			destination_url VARCHAR(500) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL,
@@ -98,11 +103,32 @@ class GAS_DB {
 			gross_commission DECIMAL(10,2) NOT NULL,
 			subaffiliate_cut DECIMAL(10,2) NOT NULL,
 			net_to_cary DECIMAL(10,2) NOT NULL,
+			cashback_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+			cashback_paid TINYINT(1) NOT NULL DEFAULT 0,
+			cashback_paid_at DATETIME NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
 			paid_at DATETIME NULL,
 			entered_at DATETIME NOT NULL,
 			notes TEXT NULL,
 			PRIMARY KEY  (id),
+			KEY code_id (code_id),
+			KEY status (status)
+		) {$charset_collate};
+
+		CREATE TABLE {$leads} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			partner_id BIGINT UNSIGNED NOT NULL,
+			code_id BIGINT UNSIGNED NULL,
+			customer_name VARCHAR(191) NOT NULL,
+			customer_email VARCHAR(191) NULL,
+			customer_phone VARCHAR(64) NULL,
+			appointment_at DATETIME NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'new',
+			notes TEXT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NULL,
+			PRIMARY KEY  (id),
+			KEY partner_id (partner_id),
 			KEY code_id (code_id),
 			KEY status (status)
 		) {$charset_collate};";

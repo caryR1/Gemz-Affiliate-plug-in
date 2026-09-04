@@ -44,7 +44,7 @@ class GAS_Redirect {
 
 		$row = $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT c.id AS code_id, c.code, c.partner_id, c.active, c.wp_user_id, p.destination_url
+				"SELECT c.id AS code_id, c.code, c.partner_id, c.active, c.wp_user_id, p.destination_url, p.fulfillment_mode
 				 FROM {$codes_table} c
 				 LEFT JOIN {$partners_table} p ON p.id = c.partner_id
 				 WHERE c.code = %s",
@@ -80,6 +80,14 @@ class GAS_Redirect {
 			);
 
 			self::maybe_log_click( $row );
+		}
+
+		// Lead-capture partners take the visitor to an on-site form instead
+		// of an external destination — the form reads the cookie we just
+		// set for attribution, so no query-string handoff is needed.
+		if ( 'lead_capture' === $row->fulfillment_mode ) {
+			wp_redirect( GAS_Leads::page_url(), 302 );
+			exit;
 		}
 
 		if ( ! empty( $row->destination_url ) ) {

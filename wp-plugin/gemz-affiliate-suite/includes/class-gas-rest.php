@@ -66,6 +66,25 @@ class GAS_REST {
 			'callback'            => array( __CLASS__, 'list_affiliates' ),
 			'permission_callback' => array( __CLASS__, 'permission_check' ),
 		) );
+
+		register_rest_route( 'gas/v1', '/leads', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'list_leads' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+	}
+
+	public static function list_leads() {
+		global $wpdb;
+		$leads_table    = GAS_DB::table( 'leads' );
+		$partners_table = GAS_DB::table( 'partners' );
+		$rows = $wpdb->get_results(
+			"SELECT l.*, p.name AS partner_name FROM {$leads_table} l
+			 LEFT JOIN {$partners_table} p ON p.id = l.partner_id
+			 ORDER BY l.created_at DESC",
+			ARRAY_A
+		);
+		return new WP_REST_Response( $rows, 200 );
 	}
 
 	public static function list_partners() {
@@ -98,21 +117,27 @@ class GAS_REST {
 
 		$payout_type      = isset( $body['payout_type'] ) && in_array( $body['payout_type'], array( 'flat', 'percent' ), true ) ? $body['payout_type'] : 'flat';
 		$default_cut_type = isset( $body['default_cut_type'] ) && in_array( $body['default_cut_type'], array( 'flat', 'percent' ), true ) ? $body['default_cut_type'] : 'percent';
+		$cashback_type    = isset( $body['cashback_type'] ) && in_array( $body['cashback_type'], array( 'flat', 'percent' ), true ) ? $body['cashback_type'] : null;
+		$fulfillment_mode = isset( $body['fulfillment_mode'] ) && 'lead_capture' === $body['fulfillment_mode'] ? 'lead_capture' : 'redirect';
 
 		$wpdb->insert(
 			$table,
 			array(
-				'slug'              => $slug,
-				'name'              => $name,
-				'payout_type'       => $payout_type,
-				'payout_amount'     => isset( $body['payout_amount'] ) ? (float) $body['payout_amount'] : null,
-				'payout_percent'    => isset( $body['payout_percent'] ) ? (float) $body['payout_percent'] : null,
-				'installments_json' => ! empty( $body['installments'] ) ? wp_json_encode( $body['installments'] ) : null,
-				'default_cut_type'  => $default_cut_type,
-				'default_cut_value' => isset( $body['default_cut_value'] ) ? (float) $body['default_cut_value'] : 0,
-				'destination_url'   => isset( $body['destination_url'] ) ? esc_url_raw( $body['destination_url'] ) : '',
-				'notes'             => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
-				'created_at'        => current_time( 'mysql' ),
+				'slug'                 => $slug,
+				'name'                 => $name,
+				'payout_type'          => $payout_type,
+				'payout_amount'        => isset( $body['payout_amount'] ) ? (float) $body['payout_amount'] : null,
+				'payout_percent'       => isset( $body['payout_percent'] ) ? (float) $body['payout_percent'] : null,
+				'installments_json'    => ! empty( $body['installments'] ) ? wp_json_encode( $body['installments'] ) : null,
+				'default_cut_type'     => $default_cut_type,
+				'default_cut_value'    => isset( $body['default_cut_value'] ) ? (float) $body['default_cut_value'] : 0,
+				'cashback_type'        => $cashback_type,
+				'cashback_value'       => isset( $body['cashback_value'] ) ? (float) $body['cashback_value'] : 0,
+				'fulfillment_mode'     => $fulfillment_mode,
+				'requires_appointment' => array_key_exists( 'requires_appointment', $body ) ? (int) (bool) $body['requires_appointment'] : 1,
+				'destination_url'      => isset( $body['destination_url'] ) ? esc_url_raw( $body['destination_url'] ) : '',
+				'notes'                => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
+				'created_at'           => current_time( 'mysql' ),
 			)
 		);
 
@@ -178,17 +203,21 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'default_cut_type', 'default_cut_value', 'destination_url', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'default_cut_type', 'default_cut_value', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'notes' );
 		$formats    = array();
 		$format_map = array(
-			'name'              => '%s',
-			'payout_type'       => '%s',
-			'payout_amount'     => '%f',
-			'payout_percent'    => '%f',
-			'default_cut_type'  => '%s',
-			'default_cut_value' => '%f',
-			'destination_url'   => '%s',
-			'notes'             => '%s',
+			'name'                 => '%s',
+			'payout_type'          => '%s',
+			'payout_amount'        => '%f',
+			'payout_percent'       => '%f',
+			'default_cut_type'     => '%s',
+			'default_cut_value'    => '%f',
+			'cashback_type'        => '%s',
+			'cashback_value'       => '%f',
+			'fulfillment_mode'     => '%s',
+			'requires_appointment' => '%d',
+			'destination_url'      => '%s',
+			'notes'                => '%s',
 		);
 
 		foreach ( $allowed as $field ) {
@@ -200,6 +229,12 @@ class GAS_REST {
 					$value = sanitize_text_field( $value );
 				} elseif ( in_array( $field, array( 'payout_type', 'default_cut_type' ), true ) ) {
 					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : 'percent';
+				} elseif ( 'cashback_type' === $field ) {
+					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : null;
+				} elseif ( 'fulfillment_mode' === $field ) {
+					$value = 'lead_capture' === $value ? 'lead_capture' : 'redirect';
+				} elseif ( 'requires_appointment' === $field ) {
+					$value = (int) (bool) $value;
 				} else {
 					$value = (float) $value;
 				}

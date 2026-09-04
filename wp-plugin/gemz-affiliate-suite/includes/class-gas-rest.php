@@ -72,6 +72,21 @@ class GAS_REST {
 			'callback'            => array( __CLASS__, 'list_leads' ),
 			'permission_callback' => array( __CLASS__, 'permission_check' ),
 		) );
+
+		// WordPress caches rewrite rules; a new URL pattern (e.g. adding
+		// /join/{code}) needs a flush before it resolves, same as it would
+		// after saving Permalinks in wp-admin. Exists so that can happen
+		// over the app-password REST auth too, without a wp-admin session.
+		register_rest_route( 'gas/v1', '/flush-rewrite-rules', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'flush_rewrite_rules' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+	}
+
+	public static function flush_rewrite_rules() {
+		flush_rewrite_rules();
+		return new WP_REST_Response( array( 'flushed' => true ), 200 );
 	}
 
 	public static function list_leads() {

@@ -87,7 +87,7 @@ class GAS_Partner_Portal {
 		ob_start();
 
 		echo '<div class="gas-dashboard">';
-		echo '<p>Welcome back, ' . esc_html( $partner->name ) . '. <a href="' . esc_url( wp_logout_url( self::page_url() ) ) . '">Log out</a></p>';
+		echo '<p>Welcome back, ' . esc_html( $partner->name ) . '. <a href="' . esc_url( wp_logout_url( self::page_url() ) ) . '">Log out</a> &middot; <a href="' . esc_url( GAS_Help::partner_page_url() ) . '">Help</a></p>';
 
 		echo '<div class="gas-stat-row">';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $total_leads ) . '</span><span class="gas-stat-label">Total leads</span></div>';

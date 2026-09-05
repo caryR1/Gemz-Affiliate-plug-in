@@ -16,28 +16,63 @@ class GAS_Help {
 
 	public static function init() {
 		add_shortcode( 'gas_help', array( __CLASS__, 'render' ) );
+		add_shortcode( 'gas_partner_help', array( __CLASS__, 'render_partner_help' ) );
+		add_shortcode( 'gas_faq', array( __CLASS__, 'render_faq' ) );
 		add_action( 'init', array( __CLASS__, 'maybe_create_page' ) );
 	}
 
 	public static function maybe_create_page() {
-		if ( get_option( 'gas_help_page_id' ) ) {
-			return;
+		if ( ! get_option( 'gas_help_page_id' ) ) {
+			$id = wp_insert_post( array(
+				'post_title'   => 'Affiliate Help',
+				'post_name'    => 'affiliate-help',
+				'post_content' => '[gas_help]',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+			) );
+			if ( $id && ! is_wp_error( $id ) ) {
+				update_option( 'gas_help_page_id', $id );
+			}
 		}
-		$id = wp_insert_post( array(
-			'post_title'   => 'Affiliate Help',
-			'post_name'    => 'affiliate-help',
-			'post_content' => '[gas_help]',
-			'post_status'  => 'publish',
-			'post_type'    => 'page',
-		) );
-		if ( $id && ! is_wp_error( $id ) ) {
-			update_option( 'gas_help_page_id', $id );
+		if ( ! get_option( 'gas_partner_help_page_id' ) ) {
+			$id = wp_insert_post( array(
+				'post_title'   => 'Partner Help',
+				'post_name'    => 'partner-help',
+				'post_content' => '[gas_partner_help]',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+			) );
+			if ( $id && ! is_wp_error( $id ) ) {
+				update_option( 'gas_partner_help_page_id', $id );
+			}
+		}
+		if ( ! get_option( 'gas_faq_page_id' ) ) {
+			$id = wp_insert_post( array(
+				'post_title'   => 'FAQ',
+				'post_name'    => 'faq',
+				'post_content' => '[gas_faq]',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+			) );
+			if ( $id && ! is_wp_error( $id ) ) {
+				update_option( 'gas_faq_page_id', $id );
+			}
 		}
 	}
 
 	public static function page_url() {
 		$id = get_option( 'gas_help_page_id' );
 		return $id ? get_permalink( $id ) : home_url( '/affiliate-help/' );
+	}
+
+	public static function partner_page_url() {
+		$id = get_option( 'gas_partner_help_page_id' );
+		return $id ? get_permalink( $id ) : home_url( '/partner-help/' );
+	}
+
+	public static function faq_page_url() {
+		$id = get_option( 'gas_faq_page_id' );
+		return $id ? get_permalink( $id ) : home_url( '/faq/' );
 	}
 
 	public static function render() {
@@ -66,6 +101,67 @@ class GAS_Help {
 
 			<h3>Changing your password</h3>
 			<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	public static function render_partner_help() {
+		$partner_label = GAS_Settings::get( 'partner_label' );
+		$site_name     = GAS_Settings::get( 'site_name' );
+
+		ob_start();
+		?>
+		<div class="gas-dashboard gas-help-doc">
+			<p><a href="<?php echo esc_url( GAS_Partner_Portal::page_url() ); ?>">&larr; Back to your dashboard</a></p>
+
+			<h3>Your deal pipeline</h3>
+			<p>Every lead sent to you shows up in your dashboard with its current status. Use the status dropdown next to each lead to move it along as the project progresses — Accepted &rarr; In Progress &rarr; Completed, or Lost if it doesn't work out. Keep this current; it's how <?php echo esc_html( $site_name ); ?> knows a sale actually happened.</p>
+
+			<h3>What "new" leads mean</h3>
+			<p>A lead shown without a status dropdown hasn't been matched to your account yet by an admin. Once it's assigned to you, the dropdown appears and you can start moving it through the pipeline.</p>
+
+			<h3>Changing your password</h3>
+			<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+
+			<h3>Questions?</h3>
+			<p>Contact <?php echo esc_html( $site_name ); ?> directly if anything here doesn't match what you're seeing, or if you think you're missing a lead you should have.</p>
+		</div>
+		<?php
+		return ob_get_clean();
+	}
+
+	/**
+	 * Customer-facing FAQ: explains the ecosystem itself (what an
+	 * affiliate/agent and a fulfillment partner are, how to become
+	 * either) without duplicating the fuller agent/partner help docs —
+	 * this is the bridge for someone who's never heard of either role.
+	 * Renders as a native <details>/<summary> accordion (collapsed by
+	 * default, click to expand) — no JS needed, works with either theme.
+	 */
+	public static function render_faq() {
+		$partner_label = GAS_Settings::get( 'partner_label' );
+		$site_name     = GAS_Settings::get( 'site_name' );
+
+		$faqs = array(
+			'What is ' . $site_name . '?' => 'We connect people to trusted ' . $partner_label . 's, and reward the people who make the introduction.',
+			'What is an affiliate?' => 'Anyone who shares their personal referral link and earns a commission when it leads to a sale. It\'s free to join, and there\'s a signup link at the bottom of this page.',
+			'What is a ' . $partner_label . '?' => 'The business that actually does the work once you\'re referred — installer, builder, or service provider, depending on the project. ' . $site_name . ' vets and works with them directly; you never need to pick one yourself.',
+			'How do I become an affiliate?' => 'Sign up using the "Become an Affiliate" link on this site — it takes under a minute, no approval wait.',
+			'How do I become a ' . $partner_label . '?' => 'Contact ' . $site_name . ' directly to discuss a partnership.',
+			'Is it free?' => 'Yes — there\'s never a cost to sign up as an affiliate or to be referred as a customer.',
+		);
+
+		ob_start();
+		?>
+		<div class="gas-faq">
+			<?php foreach ( $faqs as $question => $answer ) : ?>
+				<details class="gas-faq-item" style="margin-bottom:0.75em;">
+					<summary style="cursor:pointer;font-weight:600;"><?php echo esc_html( $question ); ?></summary>
+					<p style="margin-top:0.5em;"><?php echo esc_html( $answer ); ?></p>
+				</details>
+			<?php endforeach; ?>
+			<p><a href="<?php echo esc_url( GAS_Frontend::signup_url() ); ?>">Become an affiliate &rarr;</a></p>
 		</div>
 		<?php
 		return ob_get_clean();

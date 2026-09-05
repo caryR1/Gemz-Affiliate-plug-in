@@ -68,6 +68,7 @@ class GAS_Admin {
 		add_submenu_page( 'gas-affiliates', 'Segments', 'Segments', self::CAP_CONTACTS, 'gas-segments', array( __CLASS__, 'render_segments_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Lead Magnets', 'Lead Magnets', self::CAP_CONTACTS, 'gas-lead-magnets', array( __CLASS__, 'render_lead_magnets_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Settings', 'Settings', self::CAP_SETTINGS, 'gas-settings', array( __CLASS__, 'render_settings_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Help', 'Help', GAS_Roles::ACCESS_ADMIN_CAP, 'gas-help', array( __CLASS__, 'render_admin_help_page' ) );
 	}
 
 	/**
@@ -1680,5 +1681,40 @@ class GAS_Admin {
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-settings&saved=1' ) );
 		exit;
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * ADMIN HELP
+	 * ---------------------------------------------------------------- */
+
+	public static function render_admin_help_page() {
+		self::wrap_start( 'Help' );
+		$site_name = GAS_Settings::get( 'site_name' );
+		?>
+		<h2>Screens at a glance</h2>
+		<ul style="list-style:disc;margin-left:1.5em;">
+			<li><strong>Affiliates</strong> — every self-signed-up affiliate; suspend/reactivate their link here.</li>
+			<li><strong>Codes</strong> — every referral code, including manually-added ones; assign a code to a fulfillment partner here (affiliates never pick this themselves).</li>
+			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), and partner portal login.</li>
+			<li><strong>Leads</strong> — on-site lead-capture submissions, for partners set to that mode.</li>
+			<li><strong>Click Log</strong> — raw click history per code.</li>
+			<li><strong>Reports</strong> — commission summary, partner outcomes, and agent/referrer performance ranked by earnings.</li>
+			<li><strong>Payout Calculator / Ledger</strong> — enter a completed sale to compute and record the tier split; the Ledger tracks everything entered, paid or not, plus automated PayPal/Wise payout runs.</li>
+			<li><strong>Audit Log</strong> — who changed what, when.</li>
+			<li><strong>Segments</strong> — every contact this plugin has ever talked to (affiliate/customer/partner), filterable and exportable for outreach.</li>
+			<li><strong>Lead Magnets</strong> — PDF opt-in forms that grow your customer segment.</li>
+			<li><strong>Settings</strong> — program name, terminology, and the commission tier split percentages.</li>
+		</ul>
+
+		<h2>How commissions work</h2>
+		<p>Gross commission on a sale is a fixed pool, split across up to 3 tiers (Settings controls the percentages): the affiliate who made the sale, their sponsor (whoever recruited them), and the sponsor's own sponsor. A tier with no one in it keeps its share as net to <?php echo esc_html( $site_name ); ?> — it's never redistributed to the tiers that do have someone in them.</p>
+
+		<h2>Roles</h2>
+		<p>Administrators have full access. The "Affiliate Program Manager" role can run every screen above but can never install plugins, manage other WordPress users, or touch general site settings — safe to hand to a trusted staff member.</p>
+
+		<h2>Front-end pages this plugin manages</h2>
+		<p>Become an Affiliate, Affiliate Dashboard, Affiliate Help, Partner Portal, Partner Help, Get a Quote (lead capture), and FAQ are all auto-created on first activation — safe to move in your nav menu, but avoid changing their slugs since the plugin links to them by page ID.</p>
+		<?php
+		self::wrap_end();
 	}
 }

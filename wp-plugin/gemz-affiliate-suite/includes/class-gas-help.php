@@ -22,41 +22,40 @@ class GAS_Help {
 	}
 
 	public static function maybe_create_page() {
-		if ( ! get_option( 'gas_help_page_id' ) ) {
-			$id = wp_insert_post( array(
-				'post_title'   => 'Affiliate Help',
-				'post_name'    => 'affiliate-help',
-				'post_content' => '[gas_help]',
-				'post_status'  => 'publish',
-				'post_type'    => 'page',
-			) );
-			if ( $id && ! is_wp_error( $id ) ) {
-				update_option( 'gas_help_page_id', $id );
-			}
+		self::create_or_adopt_page( 'gas_help_page_id', 'Affiliate Help', 'affiliate-help', '[gas_help]' );
+		self::create_or_adopt_page( 'gas_partner_help_page_id', 'Partner Help', 'partner-help', '[gas_partner_help]' );
+		self::create_or_adopt_page( 'gas_faq_page_id', 'FAQ', 'faq', '[gas_faq]' );
+	}
+
+	/**
+	 * If a page already exists at this slug (e.g. a site's own pre-built
+	 * FAQ page, unrelated to this plugin), ADOPT its ID rather than
+	 * creating a second page — a blind create-if-option-missing approach
+	 * silently produced duplicate "-2"/"-3" pages the first time this ran
+	 * on a site that already had real content at that slug. Never
+	 * overwrites an adopted page's existing content; only ever writes
+	 * the shortcode content when actually creating a brand-new page.
+	 */
+	private static function create_or_adopt_page( $option_key, $title, $slug, $shortcode_content ) {
+		if ( get_option( $option_key ) ) {
+			return;
 		}
-		if ( ! get_option( 'gas_partner_help_page_id' ) ) {
-			$id = wp_insert_post( array(
-				'post_title'   => 'Partner Help',
-				'post_name'    => 'partner-help',
-				'post_content' => '[gas_partner_help]',
-				'post_status'  => 'publish',
-				'post_type'    => 'page',
-			) );
-			if ( $id && ! is_wp_error( $id ) ) {
-				update_option( 'gas_partner_help_page_id', $id );
-			}
+
+		$existing = get_page_by_path( $slug );
+		if ( $existing ) {
+			update_option( $option_key, $existing->ID );
+			return;
 		}
-		if ( ! get_option( 'gas_faq_page_id' ) ) {
-			$id = wp_insert_post( array(
-				'post_title'   => 'FAQ',
-				'post_name'    => 'faq',
-				'post_content' => '[gas_faq]',
-				'post_status'  => 'publish',
-				'post_type'    => 'page',
-			) );
-			if ( $id && ! is_wp_error( $id ) ) {
-				update_option( 'gas_faq_page_id', $id );
-			}
+
+		$id = wp_insert_post( array(
+			'post_title'   => $title,
+			'post_name'    => $slug,
+			'post_content' => $shortcode_content,
+			'post_status'  => 'publish',
+			'post_type'    => 'page',
+		) );
+		if ( $id && ! is_wp_error( $id ) ) {
+			update_option( $option_key, $id );
 		}
 	}
 

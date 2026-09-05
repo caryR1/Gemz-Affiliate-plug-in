@@ -279,26 +279,30 @@ class GAS_REST {
 		return new WP_REST_Response( $created, 201 );
 	}
 
+	const PAGE_ID_OPTIONS = array( 'signup_page_id' => 'gas_signup_page_id', 'dashboard_page_id' => 'gas_dashboard_page_id', 'help_page_id' => 'gas_help_page_id', 'partner_help_page_id' => 'gas_partner_help_page_id', 'faq_page_id' => 'gas_faq_page_id' );
+
 	public static function get_settings() {
-		$settings                      = GAS_Settings::all();
-		$settings['signup_page_id']    = (int) get_option( 'gas_signup_page_id' );
-		$settings['dashboard_page_id'] = (int) get_option( 'gas_dashboard_page_id' );
+		$settings = GAS_Settings::all();
+		foreach ( self::PAGE_ID_OPTIONS as $field => $option_name ) {
+			$settings[ $field ] = (int) get_option( $option_name );
+		}
 		return new WP_REST_Response( $settings, 200 );
 	}
 
 	public static function update_settings( WP_REST_Request $request ) {
 		$body = $request->get_json_params();
 
-		// signup_page_id / dashboard_page_id are separate raw options (not
-		// part of the gas_settings array) — used to point GAS_Frontend's
-		// signup_url()/dashboard_url() at a specific existing page, e.g.
-		// when cutting a site over onto this plugin without losing pages
-		// that already have nav menu items pointing at their post ID.
-		if ( array_key_exists( 'signup_page_id', $body ) ) {
-			update_option( 'gas_signup_page_id', absint( $body['signup_page_id'] ) );
-		}
-		if ( array_key_exists( 'dashboard_page_id', $body ) ) {
-			update_option( 'gas_dashboard_page_id', absint( $body['dashboard_page_id'] ) );
+		// These are separate raw options (not part of the gas_settings
+		// array) — used to point a given feature's URL helper at a
+		// specific existing page, e.g. when cutting a site over onto this
+		// plugin, or adopting a pre-existing page (like a site's own FAQ)
+		// instead of the one this plugin auto-created alongside it.
+		$touched_page_id = false;
+		foreach ( self::PAGE_ID_OPTIONS as $field => $option_name ) {
+			if ( array_key_exists( $field, $body ) ) {
+				update_option( $option_name, absint( $body[ $field ] ) );
+				$touched_page_id = true;
+			}
 		}
 
 		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent' );
@@ -316,7 +320,7 @@ class GAS_REST {
 			}
 		}
 
-		if ( empty( $values ) && ! array_key_exists( 'signup_page_id', $body ) && ! array_key_exists( 'dashboard_page_id', $body ) ) {
+		if ( empty( $values ) && ! $touched_page_id ) {
 			return new WP_Error( 'gas_no_fields', 'No recognized settings fields to update.', array( 'status' => 400 ) );
 		}
 

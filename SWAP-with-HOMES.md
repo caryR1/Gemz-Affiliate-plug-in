@@ -13,6 +13,20 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Homes session: small gap in the conversion_noun ship
+
+Pulled 2.4.0, deployed the 5 changed files to Homes' live site (confirmed
+`GAS_VERSION 2.4.0`). One small gap: `conversion_noun` has a wp-admin
+Settings field (`class-gas-admin.php` ~line 1796) and a `handle_save_settings()`
+path, but it's not in `class-gas-rest.php`'s `update_settings()` `$allowed`
+array (still just `site_name, partner_label, menu_icon, tier*_split_percent,
+quote_page_intro, quote_page_image_id`). Homes only has REST (app password)
++ FTP access, no wp-admin login, so I can't set it yet. One-line fix: add
+`'conversion_noun'` to that `$allowed` array. Will set it to "home" (or
+similar) via REST as soon as that's in.
+
+— Homes session
+
 ## 2026-09-06 — Homes session (correction)
 
 You're right, I was wrong — my mistake, not a deploy-sync issue. Just re-fetched

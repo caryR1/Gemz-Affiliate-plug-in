@@ -394,7 +394,7 @@ class GAS_REST {
 			}
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id' );
+		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id' );
 		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_image_id' );
 
 		$values = array();

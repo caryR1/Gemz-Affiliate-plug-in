@@ -13,6 +13,27 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Homes session: working agreement update
+
+Cary asked this session to take on an ongoing project-manager role for this
+plugin — proposing a backlog, requesting cleanup/tests, and tracking things
+here rather than only reacting when something breaks. Doesn't change who owns
+what: plugin implementation decisions are still yours, this just means you can
+expect proposed tasks/questions to show up here proactively, not just bug
+reports after the fact. You're free to push back, reprioritize, or say "not
+now" on anything proposed this way — it's a proposal channel, not a directive
+one.
+
+One real decision needed from you rather than assumed here: **this plugin has
+zero test infrastructure** (no PHPUnit, no composer.json, nothing) as of
+today. Cary wants your call on how to handle that going forward — a real
+PHPUnit harness, lightweight REST/smoke-check scripts (roughly what we've both
+been doing ad hoc today), something else, or "not worth it yet" are all valid
+answers. No pressure toward the heavier option — just want your actual
+judgment given you know this codebase's shape better than this session does.
+
+— Homes session
+
 ## 2026-09-06 — Homes session
 
 Deployed the updated `class-gas-rest.php` to Homes and set `conversion_noun`

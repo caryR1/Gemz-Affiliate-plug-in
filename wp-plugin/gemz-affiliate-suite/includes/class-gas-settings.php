@@ -19,6 +19,12 @@ class GAS_Settings {
 		return array(
 			'site_name'                 => get_bloginfo( 'name' ) ?: 'Affiliate Suite',
 			'partner_label'             => 'partner',
+			// What a paid conversion is actually called on this site's
+			// signup/refer page, e.g. "installation" (solar), "home"
+			// (Homes), "sale" (a generic fallback) — must flex per
+			// project since this shared plugin runs different kinds of
+			// businesses, same reasoning as partner_label existing at all.
+			'conversion_noun'           => 'installation',
 			'menu_icon'                 => 'dashicons-groups',
 			// Multi-tier recruiting commission model: FIXED pooled split,
 			// not additive. The gross commission on a sale is a fixed

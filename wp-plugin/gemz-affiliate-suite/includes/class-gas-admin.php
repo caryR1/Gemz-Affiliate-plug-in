@@ -1793,6 +1793,8 @@ class GAS_Admin {
 
 		echo '<tr><th><label for="partner_label">Partner label</label></th><td><input type="text" id="partner_label" name="partner_label" class="regular-text" required value="' . esc_attr( $settings['partner_label'] ) . '"> <p class="description">The word used for "partner" in admin screens, e.g. "solar partner" or "builder". New affiliates never choose or see a partner at signup on any project &mdash; they always go live unassigned, and an admin matches them to a partner afterward from the Codes screen.</p></td></tr>';
 
+		echo '<tr><th><label for="conversion_noun">Conversion noun</label></th><td><input type="text" id="conversion_noun" name="conversion_noun" class="regular-text" required value="' . esc_attr( $settings['conversion_noun'] ) . '"> <p class="description">What a paid referral is called on the public signup/refer page, e.g. "installation", "home", "sale". Used in copy like "$X per completed &lt;this&gt; you refer" &mdash; pick whatever reads naturally for this site.</p></td></tr>';
+
 		echo '<tr><th><label for="menu_icon">Admin menu icon</label></th><td><input type="text" id="menu_icon" name="menu_icon" class="regular-text" value="' . esc_attr( $settings['menu_icon'] ) . '"> <p class="description">A <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank" rel="noopener">dashicon</a> slug, e.g. dashicons-groups.</p></td></tr>';
 
 		echo '<tr><th>Commission tier split</th><td>';
@@ -1830,6 +1832,7 @@ class GAS_Admin {
 		$values = array(
 			'site_name'                 => isset( $_POST['site_name'] ) ? sanitize_text_field( wp_unslash( $_POST['site_name'] ) ) : '',
 			'partner_label'             => isset( $_POST['partner_label'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_label'] ) ) : 'partner',
+			'conversion_noun'           => isset( $_POST['conversion_noun'] ) ? sanitize_text_field( wp_unslash( $_POST['conversion_noun'] ) ) : 'installation',
 			'menu_icon'                 => isset( $_POST['menu_icon'] ) ? sanitize_text_field( wp_unslash( $_POST['menu_icon'] ) ) : 'dashicons-groups',
 			'tier1_split_percent'       => isset( $_POST['tier1_split_percent'] ) ? (float) $_POST['tier1_split_percent'] : 70,
 			'tier2_split_percent'       => isset( $_POST['tier2_split_percent'] ) ? (float) $_POST['tier2_split_percent'] : 20,

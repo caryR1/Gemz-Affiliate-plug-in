@@ -433,11 +433,12 @@ class GAS_Frontend {
 		}
 
 		$range = self::estimated_payout_range();
+		$noun  = GAS_Settings::get( 'conversion_noun' );
 		echo '<div class="gas-payout-range">';
 		if ( $range ) {
-			echo '<p>Earn between <strong>$' . esc_html( number_format( $range['min'], 0 ) ) . '</strong> and <strong>$' . esc_html( number_format( $range['max'], 0 ) ) . '</strong> per completed installation you refer.</p>';
+			echo '<p>Earn between <strong>$' . esc_html( number_format( $range['min'], 0 ) ) . '</strong> and <strong>$' . esc_html( number_format( $range['max'], 0 ) ) . '</strong> per completed ' . esc_html( $noun ) . ' you refer.</p>';
 		} else {
-			echo '<p>Get paid for every completed installation you refer &mdash; exact amounts depend on the partner, and you\'ll see your rate once you\'re matched.</p>';
+			echo '<p>Get paid for every completed ' . esc_html( $noun ) . ' you refer &mdash; exact amounts depend on the partner, and you\'ll see your rate once you\'re matched.</p>';
 		}
 		echo '</div>';
 		?>

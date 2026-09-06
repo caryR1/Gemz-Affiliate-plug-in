@@ -21,6 +21,7 @@ class GAS_Leads {
 		add_action( 'admin_post_gas_submit_lead', array( __CLASS__, 'handle_submit' ) );
 		add_action( 'admin_post_nopriv_gas_submit_lead', array( __CLASS__, 'handle_submit' ) );
 		add_action( 'admin_post_gas_update_lead_status', array( __CLASS__, 'handle_update_status' ) );
+		add_action( 'admin_post_gas_assign_lead_partner', array( __CLASS__, 'handle_assign_partner' ) );
 		add_action( 'gas_daily_stale_lead_check', array( __CLASS__, 'check_stale_leads' ) );
 	}
 
@@ -67,19 +68,7 @@ class GAS_Leads {
 	 * GAS_Frontend::maybe_create_pages() for the signup/dashboard pages.
 	 */
 	public static function maybe_create_page() {
-		if ( get_option( 'gas_lead_page_id' ) ) {
-			return;
-		}
-		$id = wp_insert_post( array(
-			'post_title'   => 'Get a Quote',
-			'post_name'    => 'get-a-quote',
-			'post_content' => '[gas_lead_form]',
-			'post_status'  => 'publish',
-			'post_type'    => 'page',
-		) );
-		if ( $id && ! is_wp_error( $id ) ) {
-			update_option( 'gas_lead_page_id', $id );
-		}
+		GAS_Help::create_or_adopt_page( 'gas_lead_page_id', 'Get a Quote', 'get-a-quote', '[gas_lead_form]' );
 	}
 
 	public static function page_url() {
@@ -119,6 +108,14 @@ class GAS_Leads {
 		if ( $error ) {
 			echo '<div class="gas-notice gas-notice-error"><p>' . esc_html( $error ) . '</p></div>';
 		}
+		$quote_image_id = GAS_Settings::get( 'quote_page_image_id' );
+		if ( ! empty( $quote_image_id ) ) {
+			echo wp_get_attachment_image( $quote_image_id, 'medium', false, array( 'style' => 'max-width:100%;height:auto;margin-bottom:1em;' ) );
+		}
+		$quote_intro = GAS_Settings::get( 'quote_page_intro' );
+		if ( ! empty( $quote_intro ) ) {
+			echo '<div class="gas-lead-intro"><p>' . nl2br( esc_html( $quote_intro ) ) . '</p></div>';
+		}
 		?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">
 			<?php wp_nonce_field( 'gas_submit_lead' ); ?>
@@ -133,12 +130,16 @@ class GAS_Leads {
 				<input type="text" id="gas_lead_name" name="name" required class="gas-input">
 			</p>
 			<p>
-				<label for="gas_lead_email">Email</label><br>
-				<input type="email" id="gas_lead_email" name="email" class="gas-input">
+				<label for="gas_lead_address">Address</label><br>
+				<input type="text" id="gas_lead_address" name="address" class="gas-input">
 			</p>
 			<p>
 				<label for="gas_lead_phone">Phone</label><br>
 				<input type="tel" id="gas_lead_phone" name="phone" class="gas-input">
+			</p>
+			<p>
+				<label for="gas_lead_email">Email</label><br>
+				<input type="email" id="gas_lead_email" name="email" class="gas-input">
 			</p>
 			<?php if ( $partner->requires_appointment ) : ?>
 				<p>
@@ -185,9 +186,10 @@ class GAS_Leads {
 			$fail( 'This link isn\'t set up to take requests directly.' );
 		}
 
-		$name  = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
-		$email = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
-		$phone = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+		$name    = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+		$email   = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+		$phone   = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+		$address = isset( $_POST['address'] ) ? sanitize_text_field( wp_unslash( $_POST['address'] ) ) : '';
 
 		if ( '' === $name ) {
 			$fail( 'Please enter your name.' );
@@ -217,6 +219,7 @@ class GAS_Leads {
 				'customer_name'  => $name,
 				'customer_email' => $email,
 				'customer_phone' => $phone,
+				'customer_address' => $address,
 				'appointment_at' => $appointment_at,
 				'status'         => 'new',
 				'created_at'     => current_time( 'mysql' ),
@@ -230,7 +233,7 @@ class GAS_Leads {
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New lead: ' . $name . ' for ' . $partner->name,
-			"A new lead came in via " . GAS_Settings::get( 'site_name' ) . ".\n\nName: {$name}\nEmail: {$email}\nPhone: {$phone}\nPartner: {$partner->name}\nReferral code: {$code->code}" . ( $appointment_at ? "\nRequested appointment: {$appointment_at}" : '' )
+			"A new lead came in via " . GAS_Settings::get( 'site_name' ) . ".\n\nName: {$name}\nAddress: {$address}\nEmail: {$email}\nPhone: {$phone}\nPartner: {$partner->name}\nReferral code: {$code->code}" . ( $appointment_at ? "\nRequested appointment: {$appointment_at}" : '' )
 		);
 
 		wp_safe_redirect( add_query_arg( 'gas_lead', 'success', self::page_url() ) );
@@ -238,10 +241,10 @@ class GAS_Leads {
 	}
 
 	/**
-	 * Admin-only manual status update for now (phase 1). A partner
-	 * self-service portal mirroring gemz-referral-crm's GRC_Partner_Dashboard
-	 * is planned as the next phase — this gives Cary a way to track leads
-	 * in the meantime.
+	 * Admin-side status update — the first-touch triage gate a lead has to
+	 * clear (out of 'new') before it's visible to the partner's own status
+	 * dropdown in the Partner Portal. Also the trigger point for relaying
+	 * the lead to the partner (see relay_lead_to_partner()).
 	 */
 	public static function handle_update_status() {
 		if ( ! current_user_can( 'gas_manage_leads' ) ) {
@@ -256,14 +259,139 @@ class GAS_Leads {
 		}
 
 		global $wpdb;
+		$leads_table = GAS_DB::table( 'leads' );
+		$lead        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$leads_table} WHERE id = %d", $id ) );
+
 		$wpdb->update(
-			GAS_DB::table( 'leads' ),
+			$leads_table,
 			array( 'status' => $status, 'updated_at' => current_time( 'mysql' ) ),
 			array( 'id' => $id )
 		);
 		GAS_Admin::audit_log( 'lead', $id, 'status_changed', array( 'status' => $status ) );
 
+		// Relay to the partner only the first time a lead clears the 'new'
+		// gate — that's the one moment this admin action is actually
+		// telling the partner something new, not just moving it further
+		// along a pipeline the partner already has full visibility into.
+		if ( $lead && 'new' === $lead->status ) {
+			self::relay_lead_to_partner( $lead );
+		}
+
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-leads&updated=1' ) );
 		exit;
+	}
+
+	/**
+	 * Admin action for the one case the normal cookie-attributed lead flow
+	 * doesn't cover: a referral submitted through the merged signup/refer
+	 * page (see GAS_Frontend::create_referral_lead()) arrives with no
+	 * partner yet, by design — an affiliate never picks their own partner,
+	 * on any project this plugin runs. This is where an admin actually
+	 * makes that match after the fact, same moment we now know for the
+	 * first time whether the assigned partner needs an appointment, so
+	 * that's also the earliest honest moment to propose one to the
+	 * customer — never invented sooner, and never left for the customer
+	 * to guess at.
+	 */
+	public static function handle_assign_partner() {
+		if ( ! current_user_can( self::manage_cap() ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		$lead_id = isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0;
+		check_admin_referer( 'gas_assign_lead_partner_' . $lead_id );
+
+		$partner_id  = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
+		$proposed_at = isset( $_POST['proposed_at'] ) ? sanitize_text_field( wp_unslash( $_POST['proposed_at'] ) ) : '';
+		$backup_at   = isset( $_POST['backup_at'] ) ? sanitize_text_field( wp_unslash( $_POST['backup_at'] ) ) : '';
+
+		if ( ! $lead_id || ! $partner_id ) {
+			wp_die( 'Missing lead or partner.' );
+		}
+
+		self::assign_partner( $lead_id, $partner_id, $proposed_at, $backup_at );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-leads&updated=1' ) );
+		exit;
+	}
+
+	private static function manage_cap() {
+		return apply_filters( 'gas_leads_manage_cap', 'gas_manage_leads' );
+	}
+
+	/**
+	 * Matches a lead to a partner and tells the customer — with a real
+	 * proposed appointment time (plus a backup) if that partner requires
+	 * one, or a simpler "you've been matched" note if not. Also relays
+	 * the lead to the partner the same way any other freshly-assigned
+	 * lead already is, so this doesn't become a second, less-visible path.
+	 */
+	public static function assign_partner( $lead_id, $partner_id, $proposed_at = '', $backup_at = '' ) {
+		global $wpdb;
+		$leads_table = GAS_DB::table( 'leads' );
+		$lead        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$leads_table} WHERE id = %d", $lead_id ) );
+		$partner     = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $partner_id ) );
+		if ( ! $lead || ! $partner ) {
+			return false;
+		}
+
+		$proposed_fmt = $proposed_at ? self::format_datetime_local( $proposed_at ) : '';
+		$backup_fmt   = $backup_at ? self::format_datetime_local( $backup_at ) : '';
+
+		$wpdb->update(
+			$leads_table,
+			array(
+				'partner_id' => $partner_id,
+				'status'     => 'accepted',
+				'updated_at' => current_time( 'mysql' ),
+				'notes'      => $proposed_fmt ? trim( ( $lead->notes ? $lead->notes . "\n" : '' ) . "Proposed appointment: {$proposed_fmt}" . ( $backup_fmt ? " (backup: {$backup_fmt})" : '' ) ) : $lead->notes,
+			),
+			array( 'id' => $lead_id )
+		);
+
+		if ( $lead->customer_email ) {
+			$site_name = GAS_Settings::get( 'site_name' );
+			if ( $partner->requires_appointment && $proposed_fmt ) {
+				$body = "Hi {$lead->customer_name},\n\nGood news — you've been matched with {$partner->name}. We'd like to propose an appointment:\n\nPreferred: {$proposed_fmt}" . ( $backup_fmt ? "\nBackup: {$backup_fmt}" : '' ) . "\n\nReply to this email to confirm one of these times, or suggest another that works better for you.";
+			} else {
+				$body = "Hi {$lead->customer_name},\n\nGood news — you've been matched with {$partner->name}. They'll be reaching out to you directly with next steps.";
+			}
+			wp_mail( $lead->customer_email, "You've been matched with a solar partner", $body );
+		}
+
+		self::relay_lead_to_partner( $lead );
+		GAS_Admin::audit_log( 'lead', $lead_id, 'partner_assigned', array( 'partner_id' => $partner_id ) );
+
+		return true;
+	}
+
+	private static function format_datetime_local( $raw ) {
+		$timestamp = strtotime( $raw );
+		return $timestamp ? date_i18n( 'l, F j, Y \a\t g:ia', $timestamp ) : $raw;
+	}
+
+	/**
+	 * Emails the assigned partner the lead's details directly, once —
+	 * previously the only way a partner ever found out about a lead was
+	 * logging into their own portal and noticing a new row. Silently does
+	 * nothing if the partner has no email on file (same as their portal
+	 * account itself — nothing to relay to).
+	 */
+	private static function relay_lead_to_partner( $lead ) {
+		global $wpdb;
+		$partner = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $lead->partner_id ) );
+		if ( ! $partner || empty( $partner->email ) ) {
+			return;
+		}
+
+		$body = "A new lead has been assigned to you via " . GAS_Settings::get( 'site_name' ) . ".\n\n"
+			. "Name: {$lead->customer_name}\n"
+			. 'Address: ' . ( $lead->customer_address ?: '(not provided)' ) . "\n"
+			. 'Phone: ' . ( $lead->customer_phone ?: '(not provided)' ) . "\n"
+			. 'Email: ' . ( $lead->customer_email ?: '(not provided)' ) . "\n"
+			. ( $lead->appointment_at ? "Requested appointment: {$lead->appointment_at}\n" : '' )
+			. "\nLog in to your Partner Portal to update this lead's status as you work it: " . GAS_Partner_Portal::page_url();
+
+		wp_mail( $partner->email, 'New lead: ' . $lead->customer_name, $body );
+		GAS_Admin::audit_log( 'lead', $lead->id, 'relayed_to_partner', array( 'partner_email' => $partner->email ) );
 	}
 }

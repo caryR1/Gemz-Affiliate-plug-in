@@ -37,6 +37,8 @@ class GAS_Admin {
 		add_action( 'admin_post_gas_export_contacts_csv', array( __CLASS__, 'handle_export_contacts_csv' ) );
 		add_action( 'admin_post_gas_save_lead_magnet', array( __CLASS__, 'handle_save_lead_magnet' ) );
 		add_action( 'admin_post_gas_toggle_lead_magnet', array( __CLASS__, 'handle_toggle_lead_magnet' ) );
+		add_action( 'admin_post_gas_start_admin_preview', array( __CLASS__, 'handle_start_admin_preview' ) );
+		add_action( 'admin_post_gas_stop_admin_preview', array( __CLASS__, 'handle_stop_admin_preview' ) );
 	}
 
 	private static function fulfillment_mode_label( $mode ) {
@@ -178,6 +180,16 @@ class GAS_Admin {
 			echo '<td>' . ( $payment ? esc_html( $payment ) : '<em>not set</em>' ) . '</td>';
 			echo '<td>';
 			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $r->id ) ) . '">Edit</a> | ';
+
+			if ( $r->wp_user_id ) {
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline;">';
+				wp_nonce_field( 'gas_start_admin_preview' );
+				echo '<input type="hidden" name="action" value="gas_start_admin_preview">';
+				echo '<input type="hidden" name="preview_type" value="agent">';
+				echo '<input type="hidden" name="record_id" value="' . esc_attr( $r->wp_user_id ) . '">';
+				echo '<button type="submit" class="button-link">View Dashboard</button> | ';
+				echo '</form>';
+			}
 
 			if ( 'suspended' === $r->status ) {
 				$url = wp_nonce_url( admin_url( 'admin-post.php?action=gas_reactivate_affiliate&id=' . $r->id ), 'gas_reactivate_affiliate_' . $r->id );
@@ -429,6 +441,15 @@ class GAS_Admin {
 
 			echo '<tr><th>Typical sale amount ($)</th><td><input type="number" step="0.01" min="0" name="typical_sale_amount" value="' . esc_attr( $editing->typical_sale_amount ?? '' ) . '"> <p class="description">Only used (for Percent-type payout) to estimate the earnings range shown to affiliates &mdash; has no effect on real payout calculations, which always use the actual sale amount entered in the Calculator. Leave blank if unsure; this partner is simply left out of the affiliate-facing range until it\'s set.</p></td></tr>';
 
+			echo '<tr><th>Agent commission pool</th><td>';
+			echo '<select name="agent_pool_type" id="agent_pool_type">';
+			echo '<option value="percent"' . selected( $editing->agent_pool_type ?? 'percent', 'percent', false ) . '>Percent of gross commission</option>';
+			echo '<option value="flat"' . selected( $editing->agent_pool_type ?? 'percent', 'flat', false ) . '>Flat amount per sale</option>';
+			echo '</select> ';
+			echo '<input type="number" step="0.01" min="0" name="agent_pool_value" value="' . esc_attr( $editing->agent_pool_value ?? '100' ) . '"> ';
+			echo '<p class="description">How much of the gross commission above is actually divided across the affiliate tiers (Settings &gt; tier split percentages apply to THIS amount, not to the full gross). The rest of gross stays with you as margin, on top of your tier-1 share. Defaults to 100% of gross &mdash; the whole commission is split, nothing held back &mdash; unless set otherwise here.</p>';
+			echo '</td></tr>';
+
 			$installments = $editing->installments_json ? json_decode( $editing->installments_json, true ) : array();
 			$inst1_label  = $installments[0]['label'] ?? '';
 			$inst1_frac   = isset( $installments[0]['fraction'] ) ? $installments[0]['fraction'] * 100 : '';
@@ -459,12 +480,19 @@ class GAS_Admin {
 			echo '<option value="lead_capture"' . selected( $editing->fulfillment_mode ?? 'redirect', 'lead_capture', false ) . '>Capture the lead on this site</option>';
 			echo '</select> ';
 			echo '<label><input type="checkbox" name="requires_appointment" value="1"' . checked( $editing->requires_appointment ?? 1, 1, false ) . '> Requires picking an appointment time</label>';
-			echo '<p class="description">"Redirect" sends clicks straight to the Destination URL below (today\'s behavior). "Capture the lead on this site" instead shows an on-site form and records a Lead here for you to work &mdash; use this for projects that don\'t have (or don\'t want to rely on) a partner-hosted booking flow. The appointment checkbox only matters in capture mode: leave it unchecked for projects that just want contact info, no scheduled appointment.</p>';
+			echo '<p class="description">"Redirect" sends clicks straight to the Destination URL below (today\'s behavior). "Capture the lead on this site" instead shows an on-site form and records a Lead here for you to work &mdash; use this for projects that don\'t have (or don\'t want to rely on) a partner-hosted booking flow. The appointment checkbox only matters in capture mode: leave it unchecked for projects that just want contact info, no scheduled appointment. The quote form\'s intro copy/image is configured once per project under Settings, not per partner, since the customer never sees which partner ends up handling their request.</p>';
 			echo '</td></tr>';
 
 			echo '<tr><th>Destination URL</th><td><input type="url" name="destination_url" class="regular-text" value="' . esc_attr( $editing->destination_url ?? '' ) . '" placeholder="https://... (your real referral tracking link with this partner)"> <p class="description">Only used in "Redirect to partner site" mode. Leave blank until the partnership/affiliate application is approved &mdash; codes for this partner will redirect visitors to the homepage in the meantime, but clicks still get logged.</p></td></tr>';
 
 			echo '<tr><th>Service area</th><td><input type="text" name="service_area_description" class="regular-text" value="' . esc_attr( $editing->service_area_description ?? '' ) . '" placeholder="e.g. Tampa Bay area, FL, or Nationwide"> <p class="description">Free-text, for your own reference.</p></td></tr>';
+
+			echo '<tr><th>State / city / zip</th><td>';
+			echo '<input type="text" name="state" maxlength="2" style="width:50px;text-transform:uppercase;" placeholder="FL" value="' . esc_attr( $editing->state ?? '' ) . '"> ';
+			echo '<input type="text" name="city" class="regular-text" style="width:200px;" placeholder="City" value="' . esc_attr( $editing->city ?? '' ) . '"> ';
+			echo '<input type="text" name="zip" style="width:100px;" placeholder="Zip" value="' . esc_attr( $editing->zip ?? '' ) . '"> ';
+			echo '<p class="description">Structured, so partners can be filtered by state below &mdash; separate from the free-text service area above.</p>';
+			echo '</td></tr>';
 
 			echo '<tr><th>Source</th><td>' . ( $editing->source_url ? '<a href="' . esc_url( $editing->source_url ) . '" target="_blank" rel="noopener">' . esc_html( $editing->source_url ) . '</a>' : '<em>added manually</em>' ) . '</td></tr>';
 
@@ -502,8 +530,31 @@ class GAS_Admin {
 			if ( ! $partners ) {
 				echo '<p>No partners yet. Add one above to get started.</p>';
 			} else {
-				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Outreach</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
-				foreach ( $partners as $p ) {
+				$states = array_unique( array_filter( wp_list_pluck( $partners, 'state' ) ) );
+				sort( $states );
+				$state_filter = isset( $_GET['state_filter'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_GET['state_filter'] ) ) ) : '';
+
+				if ( $states ) {
+					echo '<form method="get" style="margin-bottom:1em;">';
+					echo '<input type="hidden" name="page" value="gas-partners">';
+					echo '<label>Filter by state: <select name="state_filter" onchange="this.form.submit()">';
+					echo '<option value="">All states</option>';
+					foreach ( $states as $s ) {
+						echo '<option value="' . esc_attr( $s ) . '"' . selected( $state_filter, $s, false ) . '>' . esc_html( $s ) . '</option>';
+					}
+					echo '</select></label>';
+					echo '</form>';
+				}
+
+				$visible_partners = $state_filter
+					? array_values( array_filter( $partners, function( $p ) use ( $state_filter ) { return $p->state === $state_filter; } ) )
+					: $partners;
+
+				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>State</th><th>Outreach</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
+				if ( ! $visible_partners ) {
+					echo '<tr><td colspan="9">No partners match that filter.</td></tr>';
+				}
+				foreach ( $visible_partners as $p ) {
 					if ( 'flat' === $p->payout_type ) {
 						$structure = $p->payout_amount ? '$' . number_format( (float) $p->payout_amount, 2 ) . ' flat' : '<em>not set</em>';
 					} else {
@@ -522,6 +573,7 @@ class GAS_Admin {
 					$outreach_colors = array( 'new' => '#b32d2e', 'contacted' => '#8a6d00', 'approved' => '#1a7a3c', 'declined' => '#666' );
 					$outreach_color  = $outreach_colors[ $p->outreach_status ] ?? '#666';
 					echo '<td>' . esc_html( $p->name ) . '</td>';
+					echo '<td>' . ( $p->state ? esc_html( $p->state ) : '&mdash;' ) . '</td>';
 					echo '<td style="color:' . esc_attr( $outreach_color ) . ';">' . esc_html( ucfirst( $p->outreach_status ) ) . '</td>';
 					echo '<td>' . $structure . '</td>';
 					echo '<td>' . $cashback . '</td>';
@@ -534,7 +586,18 @@ class GAS_Admin {
 					} else {
 						echo '<td><em>none</em></td>';
 					}
-					echo '<td><a href="' . esc_url( admin_url( 'admin.php?page=gas-partners&edit=' . $p->id ) ) . '">Edit</a></td>';
+					echo '<td>';
+					echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-partners&edit=' . $p->id ) ) . '">Edit</a>';
+					if ( $p->user_id ) {
+						echo ' | <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline;">';
+						wp_nonce_field( 'gas_start_admin_preview' );
+						echo '<input type="hidden" name="action" value="gas_start_admin_preview">';
+						echo '<input type="hidden" name="preview_type" value="partner">';
+						echo '<input type="hidden" name="record_id" value="' . esc_attr( $p->id ) . '">';
+						echo '<button type="submit" class="button-link">View Dashboard</button>';
+						echo '</form>';
+					}
+					echo '</td>';
 					echo '</tr>';
 				}
 				echo '</tbody></table>';
@@ -573,11 +636,13 @@ class GAS_Admin {
 				'payout_type'       => 'flat',
 				'payout_amount'     => null,
 				'payout_percent'    => null,
+				'agent_pool_type'   => 'percent',
+				'agent_pool_value'  => 100,
 				'installments_json' => null,
 				'cashback_type'     => null,
 				'cashback_value'    => 0,
-				'fulfillment_mode'  => 'redirect',
-				'requires_appointment' => 1,
+				'fulfillment_mode'  => 'lead_capture',
+				'requires_appointment' => 0,
 				'destination_url'   => '',
 				'email'             => '',
 				'notes'             => '',
@@ -622,6 +687,8 @@ class GAS_Admin {
 			'payout_type'       => 'percent' === $_POST['payout_type'] ? 'percent' : 'flat',
 			'payout_amount'     => '' !== $_POST['payout_amount'] ? (float) $_POST['payout_amount'] : null,
 			'payout_percent'    => '' !== $_POST['payout_percent'] ? (float) $_POST['payout_percent'] : null,
+			'agent_pool_type'   => isset( $_POST['agent_pool_type'] ) && 'flat' === $_POST['agent_pool_type'] ? 'flat' : 'percent',
+			'agent_pool_value'  => isset( $_POST['agent_pool_value'] ) && '' !== $_POST['agent_pool_value'] ? (float) $_POST['agent_pool_value'] : 100,
 			'typical_sale_amount' => isset( $_POST['typical_sale_amount'] ) && '' !== $_POST['typical_sale_amount'] ? (float) $_POST['typical_sale_amount'] : null,
 			'installments_json' => $installments ? wp_json_encode( $installments ) : null,
 			'cashback_type'     => isset( $_POST['cashback_type'] ) && in_array( $_POST['cashback_type'], array( 'flat', 'percent' ), true ) ? $_POST['cashback_type'] : null,
@@ -630,6 +697,9 @@ class GAS_Admin {
 			'requires_appointment' => isset( $_POST['requires_appointment'] ) ? 1 : 0,
 			'destination_url'   => isset( $_POST['destination_url'] ) ? esc_url_raw( wp_unslash( $_POST['destination_url'] ) ) : '',
 			'service_area_description' => isset( $_POST['service_area_description'] ) ? sanitize_text_field( wp_unslash( $_POST['service_area_description'] ) ) : '',
+			'state'             => isset( $_POST['state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['state'] ) ) ) : '',
+			'city'              => isset( $_POST['city'] ) ? sanitize_text_field( wp_unslash( $_POST['city'] ) ) : '',
+			'zip'               => isset( $_POST['zip'] ) ? sanitize_text_field( wp_unslash( $_POST['zip'] ) ) : '',
 			'outreach_status'   => isset( $_POST['outreach_status'] ) && in_array( $_POST['outreach_status'], array( 'new', 'contacted', 'approved', 'declined' ), true ) ? $_POST['outreach_status'] : 'approved',
 			'email'             => isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '',
 			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
@@ -676,13 +746,40 @@ class GAS_Admin {
 			return;
 		}
 
-		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
+		$partners = $wpdb->get_results( "SELECT id, name, requires_appointment FROM {$partners_table} WHERE outreach_status = 'approved' ORDER BY name ASC" );
+
+		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Address</th><th>State</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
 		foreach ( $rows as $l ) {
 			echo '<tr>';
 			echo '<td>' . esc_html( $l->created_at ) . '</td>';
 			echo '<td>' . esc_html( $l->customer_name ) . '</td>';
 			echo '<td>' . esc_html( $l->customer_email ) . ( $l->customer_email && $l->customer_phone ? '<br>' : '' ) . esc_html( $l->customer_phone ) . '</td>';
-			echo '<td>' . esc_html( $l->partner_name ?: '&mdash;' ) . '</td>';
+			echo '<td>' . ( $l->customer_address ? esc_html( $l->customer_address ) : '&mdash;' ) . '</td>';
+			echo '<td>' . ( $l->customer_state ? esc_html( $l->customer_state ) : '&mdash;' ) . '</td>';
+			if ( $l->partner_id ) {
+				echo '<td>' . esc_html( $l->partner_name ?: '&mdash;' ) . '</td>';
+			} else {
+				// Unassigned — came from the merged signup/refer page's
+				// referral path (GAS_Frontend::create_referral_lead()),
+				// which never picks a partner itself. This is the one
+				// place that gets matched, same "admin decides" rule as
+				// a fresh affiliate signup's code.
+				echo '<td>';
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="gas-assign-partner-form">';
+				wp_nonce_field( 'gas_assign_lead_partner_' . $l->id );
+				echo '<input type="hidden" name="action" value="gas_assign_lead_partner">';
+				echo '<input type="hidden" name="lead_id" value="' . esc_attr( $l->id ) . '">';
+				echo '<select name="partner_id" required style="max-width:140px;"><option value="">-- match a partner --</option>';
+				foreach ( $partners as $p ) {
+					echo '<option value="' . esc_attr( $p->id ) . '">' . esc_html( $p->name ) . ( $p->requires_appointment ? ' (needs appt.)' : '' ) . '</option>';
+				}
+				echo '</select><br>';
+				echo '<input type="datetime-local" name="proposed_at" style="max-width:160px;margin-top:4px;" title="Proposed appointment time, only used if the partner requires one">';
+				echo '<br><input type="datetime-local" name="backup_at" style="max-width:160px;margin-top:4px;" title="Backup appointment time">';
+				echo '<br><button type="submit" class="button button-small" style="margin-top:4px;">Match &amp; notify</button>';
+				echo '</form>';
+				echo '</td>';
+			}
 			echo '<td>' . ( $l->appointment_at ? esc_html( $l->appointment_at ) : '&mdash;' ) . '</td>';
 			echo '<td>';
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
@@ -787,6 +884,9 @@ class GAS_Admin {
 			if ( $result ) {
 				echo '<div class="notice notice-success"><h2 style="margin-top:0">Result</h2>';
 				echo '<p><strong>Gross commission (yours from the partner):</strong> $' . esc_html( number_format( $result['gross'], 2 ) ) . '</p>';
+				if ( isset( $result['agent_pool'] ) && abs( $result['agent_pool'] - $result['gross'] ) > 0.001 ) {
+					echo '<p><strong>Agent commission pool (this sale):</strong> $' . esc_html( number_format( $result['agent_pool'], 2 ) ) . ' <span class="description">&mdash; only this portion is split across tiers below; the rest of gross stays with you.</span></p>';
+				}
 				echo '<p><strong>Tier 1 share (' . esc_html( $result['tier1_pct'] ) . '% &mdash; the affiliate):</strong> $' . esc_html( number_format( $result['cut'], 2 ) ) . '</p>';
 				if ( $result['cashback'] > 0 ) {
 					echo '<p><strong>Buyer cash back:</strong> $' . esc_html( number_format( $result['cashback'], 2 ) ) . '</p>';
@@ -875,71 +975,25 @@ class GAS_Admin {
 			wp_die( 'Partner not found.' );
 		}
 
-		$installment_label = null;
-
-		if ( 'flat' === $partner->payout_type ) {
-			$gross = (float) $partner->payout_amount;
-		} else {
-			$installments = $partner->installments_json ? json_decode( $partner->installments_json, true ) : array();
-			if ( $installments && null !== $installment_index && isset( $installments[ $installment_index ] ) ) {
-				$fraction          = (float) $installments[ $installment_index ]['fraction'];
-				$installment_label = $installments[ $installment_index ]['label'];
-				$gross             = $sale_amount * ( (float) $partner->payout_percent / 100 ) * $fraction;
-			} else {
-				$gross = $sale_amount * ( (float) $partner->payout_percent / 100 );
-			}
-		}
-
-		// Buyer cash back comes out of the gross commission independently
-		// of the tier split below — a separate deduction, not part of the
-		// pool that gets divided among tiers.
-		if ( $partner->cashback_type ) {
-			$cashback = 'flat' === $partner->cashback_type
-				? (float) $partner->cashback_value
-				: $gross * ( (float) $partner->cashback_value / 100 );
-		} else {
-			$cashback = 0.0;
-		}
-
-		// Multi-tier recruiting commissions: FIXED pooled split, not
-		// additive. Gross commission is a fixed total pool, divided across
-		// up to 3 tiers (direct affiliate, their sponsor, their sponsor's
-		// sponsor) by fixed percentages from Settings — the same split for
-		// every affiliate, never individually negotiated per code. Total
-		// payout never grows with chain depth: a tier with no one in it
-		// (e.g. this affiliate has no sponsor) simply isn't paid to
-		// anyone — that share stays with the house (net_to_cary) rather
-		// than being redistributed to the tiers that DO have someone.
-		global $wpdb;
-		$codes_table = GAS_DB::table( 'codes' );
-		$tier2_code  = $code->sponsor_code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $code->sponsor_code_id ) ) : null;
-		$tier3_code  = $tier2_code && $tier2_code->sponsor_code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $tier2_code->sponsor_code_id ) ) : null;
-
-		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
-		$tier2_pct = (float) GAS_Settings::get( 'tier2_split_percent' );
-		$tier3_pct = (float) GAS_Settings::get( 'tier3_split_percent' );
-
-		$tier1_amount = round( $gross * ( $tier1_pct / 100 ), 2 );
-		$tier2_amount = $tier2_code ? round( $gross * ( $tier2_pct / 100 ), 2 ) : 0.0;
-		$tier3_amount = $tier3_code ? round( $gross * ( $tier3_pct / 100 ), 2 ) : 0.0;
-
-		$net = $gross - $cashback - $tier1_amount - $tier2_amount - $tier3_amount;
+		$calc = GAS_Payouts::compute( $partner, $code, $sale_amount, $installment_index );
 
 		$result = array(
-			'gross'         => $gross,
-			'cut'           => $tier1_amount,
-			'tier1_pct'     => $tier1_pct,
-			'cashback'      => $cashback,
-			'tier2_amount'  => $tier2_amount,
-			'tier2_pct'     => $tier2_pct,
-			'tier2_name'    => $tier2_code ? $tier2_code->sub_affiliate_name : '',
-			'tier3_amount'  => $tier3_amount,
-			'tier3_pct'     => $tier3_pct,
-			'tier3_name'    => $tier3_code ? $tier3_code->sub_affiliate_name : '',
-			'net'           => $net,
+			'gross'         => $calc['gross'],
+			'agent_pool'    => $calc['agent_pool'],
+			'cut'           => $calc['tier1_amount'],
+			'tier1_pct'     => $calc['tier1_pct'],
+			'cashback'      => $calc['cashback'],
+			'tier2_amount'  => $calc['tier2_amount'],
+			'tier2_pct'     => $calc['tier2_pct'],
+			'tier2_name'    => $calc['tier2_code'] ? $calc['tier2_code']->sub_affiliate_name : '',
+			'tier3_amount'  => $calc['tier3_amount'],
+			'tier3_pct'     => $calc['tier3_pct'],
+			'tier3_name'    => $calc['tier3_code'] ? $calc['tier3_code']->sub_affiliate_name : '',
+			'net'           => $calc['net'],
 			'saved'         => false,
 		);
 
+		global $wpdb;
 		if ( $save ) {
 			$wpdb->insert(
 				GAS_DB::table( 'payouts' ),
@@ -948,27 +1002,60 @@ class GAS_Admin {
 					'code'              => $code->code,
 					'partner_id'        => $partner->id,
 					'sale_amount'       => $sale_amount,
-					'installment_label' => $installment_label,
-					'gross_commission'  => $gross,
-					'subaffiliate_cut'  => $tier1_amount,
-					'cashback_amount'   => $cashback,
-					'tier2_code_id'     => $tier2_code ? $tier2_code->id : null,
-					'tier2_amount'      => $tier2_amount,
-					'tier3_code_id'     => $tier3_code ? $tier3_code->id : null,
-					'tier3_amount'      => $tier3_amount,
-					'net_to_cary'       => $net,
+					'installment_label' => $calc['installment_label'],
+					'gross_commission'  => $calc['gross'],
+					'agent_pool_amount' => $calc['agent_pool'],
+					'subaffiliate_cut'  => $calc['tier1_amount'],
+					'cashback_amount'   => $calc['cashback'],
+					'tier2_code_id'     => $calc['tier2_code'] ? $calc['tier2_code']->id : null,
+					'tier2_amount'      => $calc['tier2_amount'],
+					'tier3_code_id'     => $calc['tier3_code'] ? $calc['tier3_code']->id : null,
+					'tier3_amount'      => $calc['tier3_amount'],
+					'net_to_cary'       => $calc['net'],
 					'entered_at'        => current_time( 'mysql' ),
 					'notes'             => $notes,
 				)
 			);
 			$result['saved'] = true;
-			self::audit_log( 'payout', $wpdb->insert_id, 'entered', array( 'code' => $code->code, 'gross' => $gross, 'net' => $net ) );
+			self::audit_log( 'payout', $wpdb->insert_id, 'entered', array( 'code' => $code->code, 'gross' => $calc['gross'], 'net' => $calc['net'] ) );
+			self::maybe_notify_partner_renegotiation_milestone( $partner );
 		}
 
 		set_transient( 'gas_calc_result_' . get_current_user_id(), $result, 60 );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-calculator&result=1' ) );
 		exit;
+	}
+
+	/**
+	 * Fires once, generically, the moment ANY partner's 3rd recorded
+	 * payout lands — not a one-time Go Solar Power-specific check. Three
+	 * completed deals is proven enough volume to justify asking that
+	 * partner for better terms, specifically: part of deal four's payout
+	 * upfront instead of only on completion, to keep the referral
+	 * pipeline funded. Deliberately a plain email, not a recurring
+	 * reminder — Cary either acts on it or doesn't, and it should never
+	 * fire again for the same partner once it has.
+	 */
+	private static function maybe_notify_partner_renegotiation_milestone( $partner ) {
+		global $wpdb;
+		$count = (int) $wpdb->get_var( $wpdb->prepare(
+			'SELECT COUNT(*) FROM ' . GAS_DB::table( 'payouts' ) . ' WHERE partner_id = %d',
+			$partner->id
+		) );
+
+		if ( 3 !== $count ) {
+			return;
+		}
+
+		wp_mail(
+			get_option( 'admin_email' ),
+			"Milestone: 3 completed deals with {$partner->name} — time to renegotiate?",
+			"{$partner->name} has now sent 3 completed, paid-out-worthy deals through this site. That's proven volume worth leveraging.\n\n"
+			. "Worth reaching out to ask for a portion of the 4th deal's payout upfront, rather than only on completion — the pitch: \"we've sent you 3 completed deals, there's real proven value here, so let's front-load part of deal four to keep the referral pipeline funded going forward.\"\n\n"
+			. "This is a one-time notice for {$partner->name} specifically — it'll fire again independently for any other partner once they hit their own 3rd deal."
+		);
+		self::audit_log( 'partner', $partner->id, 'renegotiation_milestone_hit', array( 'deal_count' => $count ) );
 	}
 
 	/* ---------------------------------------------------------------- *
@@ -1441,6 +1528,66 @@ class GAS_Admin {
 	}
 
 	/* ---------------------------------------------------------------- *
+	 * ADMIN "VIEW AS" — PREVIEW AN AFFILIATE'S OR PARTNER'S DASHBOARD
+	 * ---------------------------------------------------------------- */
+
+	/**
+	 * Lets an admin view a SPECIFIC real affiliate's or partner's dashboard,
+	 * read-only, without ever creating a fake codes/partners row for the
+	 * admin's own account — that would mean a fake referral code or partner
+	 * sitting in real reports and commission calculations just so someone
+	 * could preview a page. Instead this just remembers which record to
+	 * show, in a short-lived transient scoped to this specific admin,
+	 * checked by GAS_Roles::get_admin_preview() wherever the front-end
+	 * dashboards look up "whose data am I showing". Ported from
+	 * gemz-referral-crm's GRC_Admin::handle_start_admin_preview().
+	 */
+	public static function handle_start_admin_preview() {
+		check_admin_referer( 'gas_start_admin_preview' );
+
+		$type = isset( $_POST['preview_type'] ) ? sanitize_key( $_POST['preview_type'] ) : '';
+		$id   = isset( $_POST['record_id'] ) ? absint( $_POST['record_id'] ) : 0;
+
+		if ( 'agent' === $type ) {
+			if ( ! current_user_can( self::CAP_CODES ) ) {
+				wp_die( 'Not allowed.' );
+			}
+			$redirect = GAS_Frontend::dashboard_url();
+		} elseif ( 'partner' === $type ) {
+			if ( ! current_user_can( self::CAP_PARTNERS ) ) {
+				wp_die( 'Not allowed.' );
+			}
+			$redirect = GAS_Partner_Portal::page_url();
+		} else {
+			wp_die( 'Unknown preview type.' );
+		}
+
+		if ( ! $id ) {
+			wp_die( 'Missing record to preview.' );
+		}
+
+		// 'agent' id is a wp_user_id (an affiliate can hold more than one
+		// code, so the dashboard is scoped by user, not by a single code);
+		// 'partner' id is a partners.id, matching how the partner portal
+		// already looks itself up.
+		set_transient( 'gas_admin_preview_' . get_current_user_id(), array( 'type' => $type, 'id' => $id ), 15 * MINUTE_IN_SECONDS );
+
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	public static function handle_stop_admin_preview() {
+		check_admin_referer( 'gas_stop_admin_preview' );
+
+		if ( is_user_logged_in() ) {
+			delete_transient( 'gas_admin_preview_' . get_current_user_id() );
+		}
+
+		wp_safe_redirect( wp_get_referer() ?: admin_url() );
+		exit;
+	}
+
+	/* ---------------------------------------------------------------- *
 	 * AUTOMATED PAYOUTS (PayPal / Wise)
 	 * ---------------------------------------------------------------- */
 
@@ -1637,7 +1784,7 @@ class GAS_Admin {
 			echo '<div class="notice notice-success"><p>Settings saved.</p></div>';
 		}
 
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		echo '<form method="post" enctype="multipart/form-data" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'gas_save_settings' );
 		echo '<input type="hidden" name="action" value="gas_save_settings">';
 		echo '<table class="form-table"><tbody>';
@@ -1655,6 +1802,18 @@ class GAS_Admin {
 		echo 'Tier 3 (sponsor\'s sponsor): <input type="number" step="0.01" min="0" max="100" name="tier3_split_percent" value="' . esc_attr( $settings['tier3_split_percent'] ) . '" style="width:80px"> %';
 		echo '</td></tr>';
 
+		echo '<tr><th>Get-a-Quote page content</th><td>';
+		echo '<label>Intro text<br><textarea name="quote_page_intro" class="large-text" rows="4" placeholder="A sentence or two explaining the offer and what happens after they submit.">' . esc_textarea( $settings['quote_page_intro'] ) . '</textarea></label><br><br>';
+		if ( ! empty( $settings['quote_page_image_id'] ) ) {
+			$thumb = wp_get_attachment_image( $settings['quote_page_image_id'], array( 120, 120 ) );
+			if ( $thumb ) {
+				echo '<div style="margin-bottom:0.5em;">' . $thumb . '</div>';
+			}
+		}
+		echo '<label>Image (optional)<br><input type="file" name="quote_page_image" accept="image/*"></label>';
+		echo '<p class="description">Shown above the on-site quote form for this whole project/site &mdash; one shared design for every fulfillment partner and affiliate, since the customer never sees or needs to know which specific partner ends up handling their request. Leave the image blank to keep the current one (if any).</p>';
+		echo '</td></tr>';
+
 		echo '</tbody></table>';
 		submit_button( 'Save Settings' );
 		echo '</form>';
@@ -1668,14 +1827,30 @@ class GAS_Admin {
 		}
 		check_admin_referer( 'gas_save_settings' );
 
-		GAS_Settings::update( array(
+		$values = array(
 			'site_name'                 => isset( $_POST['site_name'] ) ? sanitize_text_field( wp_unslash( $_POST['site_name'] ) ) : '',
 			'partner_label'             => isset( $_POST['partner_label'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_label'] ) ) : 'partner',
 			'menu_icon'                 => isset( $_POST['menu_icon'] ) ? sanitize_text_field( wp_unslash( $_POST['menu_icon'] ) ) : 'dashicons-groups',
 			'tier1_split_percent'       => isset( $_POST['tier1_split_percent'] ) ? (float) $_POST['tier1_split_percent'] : 70,
 			'tier2_split_percent'       => isset( $_POST['tier2_split_percent'] ) ? (float) $_POST['tier2_split_percent'] : 20,
 			'tier3_split_percent'       => isset( $_POST['tier3_split_percent'] ) ? (float) $_POST['tier3_split_percent'] : 10,
-		) );
+			'quote_page_intro'          => isset( $_POST['quote_page_intro'] ) ? sanitize_textarea_field( wp_unslash( $_POST['quote_page_intro'] ) ) : '',
+		);
+
+		// Image is optional per save — only touch quote_page_image_id when
+		// a new file was actually uploaded, so leaving the field blank
+		// keeps whatever image (if any) is already set.
+		if ( ! empty( $_FILES['quote_page_image']['name'] ) ) {
+			require_once ABSPATH . 'wp-admin/includes/file.php';
+			require_once ABSPATH . 'wp-admin/includes/media.php';
+			require_once ABSPATH . 'wp-admin/includes/image.php';
+			$attachment_id = media_handle_upload( 'quote_page_image', 0 );
+			if ( ! is_wp_error( $attachment_id ) ) {
+				$values['quote_page_image_id'] = $attachment_id;
+			}
+		}
+
+		GAS_Settings::update( $values );
 
 		self::audit_log( 'settings', 0, 'updated' );
 

@@ -169,4 +169,36 @@ class GAS_Roles {
 		// as the "forgot password" flow, just triggered proactively.
 		retrieve_password( $partner->email );
 	}
+
+	/**
+	 * Is the current user an admin actively previewing a specific
+	 * affiliate's or partner's dashboard (read-only)? Set by
+	 * GAS_Admin::handle_start_admin_preview() via a short-lived per-admin
+	 * transient — never a real row anywhere, so previewing can't pollute
+	 * codes/leads/payouts with fake data. Re-checks the relevant
+	 * capability here too (not just when the transient was set), so a
+	 * stale transient can't outlive a role change. Ported from
+	 * gemz-referral-crm's GRC_Roles::get_admin_preview().
+	 *
+	 * @return array{type:string,id:int}|null 'id' is a wp_user_id for
+	 *   type 'agent' (an affiliate can hold more than one code, so the
+	 *   dashboard is scoped by user, not by a single code), or a
+	 *   partners.id for type 'partner'.
+	 */
+	public static function get_admin_preview() {
+		if ( ! is_user_logged_in() ) {
+			return null;
+		}
+		$preview = get_transient( 'gas_admin_preview_' . get_current_user_id() );
+		if ( ! is_array( $preview ) || empty( $preview['type'] ) || empty( $preview['id'] ) ) {
+			return null;
+		}
+		if ( 'agent' === $preview['type'] && ! current_user_can( 'gas_manage_codes' ) ) {
+			return null;
+		}
+		if ( 'partner' === $preview['type'] && ! current_user_can( 'gas_manage_partners' ) ) {
+			return null;
+		}
+		return $preview;
+	}
 }

@@ -8,20 +8,45 @@ class GAS_Frontend {
 	public static function init() {
 		add_shortcode( 'gas_affiliate_signup', array( __CLASS__, 'render_signup' ) );
 		add_shortcode( 'gas_affiliate_dashboard', array( __CLASS__, 'render_dashboard' ) );
+		add_shortcode( 'gas_signup_or_refer', array( __CLASS__, 'render_signup_or_refer' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'init', array( __CLASS__, 'maybe_create_pages' ) );
 		add_action( 'admin_post_gas_affiliate_signup', array( __CLASS__, 'handle_signup' ) );
 		add_action( 'admin_post_nopriv_gas_affiliate_signup', array( __CLASS__, 'handle_signup' ) );
+		add_action( 'admin_post_gas_signup_or_refer', array( __CLASS__, 'handle_signup_or_refer' ) );
+		add_action( 'admin_post_nopriv_gas_signup_or_refer', array( __CLASS__, 'handle_signup_or_refer' ) );
+		add_action( 'admin_post_gas_verify_email', array( __CLASS__, 'handle_verify_email' ) );
+		add_action( 'admin_post_nopriv_gas_verify_email', array( __CLASS__, 'handle_verify_email' ) );
 		add_action( 'admin_post_gas_affiliate_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_nopriv_gas_affiliate_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_gas_change_password', array( __CLASS__, 'handle_change_password' ) );
 		add_action( 'admin_post_gas_save_payment_info', array( __CLASS__, 'handle_save_payment_info' ) );
 	}
 
+	/**
+	 * True if the given shortcode appears on this post — checked against
+	 * post_content AND, since Elementor pages store widget content
+	 * (including a "shortcode" widget's shortcode text) in _elementor_data
+	 * meta rather than post_content, that meta value too. Without the
+	 * second check this silently misses every Elementor page that embeds
+	 * one of these shortcodes via a Shortcode widget, which is how both
+	 * the merged signup/refer page and earlier Solar pages actually do it.
+	 */
+	private static function post_has_shortcode( $post, $tag ) {
+		if ( ! $post ) {
+			return false;
+		}
+		if ( has_shortcode( $post->post_content, $tag ) ) {
+			return true;
+		}
+		$elementor_data = get_post_meta( $post->ID, '_elementor_data', true );
+		return $elementor_data && false !== strpos( $elementor_data, '[' . $tag );
+	}
+
 	public static function enqueue_assets() {
 		if ( is_singular() ) {
 			global $post;
-			if ( $post && ( has_shortcode( $post->post_content, 'gas_affiliate_signup' ) || has_shortcode( $post->post_content, 'gas_affiliate_dashboard' ) ) ) {
+			if ( self::post_has_shortcode( $post, 'gas_affiliate_signup' ) || self::post_has_shortcode( $post, 'gas_affiliate_dashboard' ) || self::post_has_shortcode( $post, 'gas_signup_or_refer' ) ) {
 				wp_enqueue_style( 'gas-frontend', plugins_url( 'assets/gas-frontend.css', GAS_PLUGIN_FILE ), array(), GAS_VERSION );
 			}
 		}
@@ -31,34 +56,21 @@ class GAS_Frontend {
 	 * Auto-create the signup and dashboard pages, once, similar to how
 	 * WooCommerce creates its Cart/Checkout pages on first run.
 	 */
+	/**
+	 * Adopts an existing page at these slugs rather than blindly creating
+	 * a new one — the same collision this plugin already hit once on the
+	 * Help/FAQ pages (both Solar and Home had real pre-existing content at
+	 * those slugs, and the naive "create if my option isn't set" check
+	 * silently produced an orphaned duplicate). Applied here defensively
+	 * even though no live collision has happened on these particular
+	 * slugs yet.
+	 */
 	public static function maybe_create_pages() {
-		if ( ! get_option( 'gas_signup_page_id' ) ) {
-			$id = wp_insert_post( array(
-				'post_title'   => 'Become an Affiliate',
-				'post_name'    => 'become-an-affiliate',
-				'post_content' => '[gas_affiliate_signup]',
-				'post_status'  => 'publish',
-				'post_type'    => 'page',
-			) );
-			if ( $id && ! is_wp_error( $id ) ) {
-				update_option( 'gas_signup_page_id', $id );
-			}
-		}
-		if ( ! get_option( 'gas_dashboard_page_id' ) ) {
-			$id = wp_insert_post( array(
-				'post_title'   => 'Affiliate Dashboard',
-				'post_name'    => 'affiliate-dashboard',
-				'post_content' => '[gas_affiliate_dashboard]',
-				'post_status'  => 'publish',
-				'post_type'    => 'page',
-			) );
-			if ( $id && ! is_wp_error( $id ) ) {
-				update_option( 'gas_dashboard_page_id', $id );
-			}
-		}
+		GAS_Help::create_or_adopt_page( 'gas_signup_page_id', 'Become an Affiliate', 'become-an-affiliate', '[gas_affiliate_signup]' );
+		GAS_Help::create_or_adopt_page( 'gas_dashboard_page_id', 'Affiliate Dashboard', 'affiliate-dashboard', '[gas_affiliate_dashboard]' );
 	}
 
-	private static function dashboard_url() {
+	public static function dashboard_url() {
 		$id = get_option( 'gas_dashboard_page_id' );
 		return $id ? get_permalink( $id ) : home_url( '/affiliate-dashboard/' );
 	}
@@ -267,6 +279,511 @@ class GAS_Frontend {
 		exit;
 	}
 
+	/* ---------------------------------------------------------------- *
+	 * SIGN UP / REFER A FRIEND (merged page)
+	 * ---------------------------------------------------------------- */
+
+	/**
+	 * A rough, honest dollar estimate for the page's "earn between $X and
+	 * $Y" copy, computed the same way a real payout actually is —
+	 * GAS_Payouts::compute()'s gross -> agent_pool -> tier1_split_percent
+	 * chain — rather than the older default_cut_type/default_cut_value
+	 * fields, which turned out to be vestigial: compute() never reads
+	 * them at all. Using them here would have made this page promise a
+	 * number the real payout math doesn't actually produce. This
+	 * estimates tier 1 only (a lone affiliate with no sponsor, the
+	 * common case) since tier 2/3 depend on a specific recruiting chain
+	 * that doesn't exist yet for a first-time visitor to this page.
+	 * Percent-based partners are converted to a dollar figure using
+	 * their typical_sale_amount; a partner missing that figure (or with
+	 * no payout configured at all) is simply excluded from the range
+	 * rather than distorting it with a guess. Returns null when there
+	 * isn't enough data yet — the caller falls back to generic copy
+	 * rather than showing a "$0-$0" range.
+	 */
+	public static function estimated_payout_range() {
+		global $wpdb;
+		$rows = $wpdb->get_results(
+			'SELECT payout_type, payout_amount, payout_percent, typical_sale_amount, agent_pool_type, agent_pool_value FROM ' . GAS_DB::table( 'partners' ) . " WHERE outreach_status = 'approved'"
+		);
+
+		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
+		$estimates = array();
+
+		foreach ( $rows as $r ) {
+			if ( 'flat' === $r->payout_type ) {
+				$gross = (float) $r->payout_amount;
+			} elseif ( $r->typical_sale_amount ) {
+				$gross = (float) $r->typical_sale_amount * ( (float) $r->payout_percent / 100 );
+			} else {
+				continue;
+			}
+			if ( $gross <= 0 ) {
+				continue;
+			}
+
+			$agent_pool = self::partner_agent_pool( $r, $gross );
+			$tier1      = $agent_pool * ( $tier1_pct / 100 );
+			if ( $tier1 > 0 ) {
+				$estimates[] = $tier1;
+			}
+		}
+
+		if ( ! $estimates ) {
+			return null;
+		}
+		return array( 'min' => min( $estimates ), 'max' => max( $estimates ) );
+	}
+
+	/**
+	 * Same math as GAS_Payouts::agent_pool_amount(), duplicated here
+	 * rather than called directly since that method takes a full
+	 * partner row object with slightly different fields than this
+	 * lighter SELECT — kept in sync by hand; if that method's formula
+	 * ever changes, update this one too.
+	 */
+	private static function partner_agent_pool( $partner, $gross ) {
+		$type  = isset( $partner->agent_pool_type ) ? $partner->agent_pool_type : 'percent';
+		$value = isset( $partner->agent_pool_value ) && '' !== $partner->agent_pool_value ? (float) $partner->agent_pool_value : 100;
+		if ( 'flat' === $type ) {
+			return min( $value, $gross );
+		}
+		return $gross * ( $value / 100 );
+	}
+
+	/**
+	 * Finds an existing affiliate account by email, if any — used so the
+	 * merged form can attach a new referral to someone's existing account
+	 * instead of erroring or creating a duplicate. Returns null if the
+	 * email isn't registered, or isn't an affiliate.
+	 */
+	private static function find_affiliate_by_email( $email ) {
+		$user = get_user_by( 'email', $email );
+		if ( ! $user ) {
+			return null;
+		}
+		$user_meta_role = in_array( GAS_Roles::ROLE, (array) $user->roles, true );
+		return $user_meta_role ? $user : null;
+	}
+
+	private static function get_or_create_code_for_user( $user_id, $name, $sponsor_code_id ) {
+		global $wpdb;
+		$codes_table = GAS_DB::table( 'codes' );
+		$existing    = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1", $user_id ) );
+		if ( $existing ) {
+			return $existing;
+		}
+		$code = self::generate_unique_code( $name );
+		$wpdb->insert(
+			$codes_table,
+			array(
+				'code'               => $code,
+				'sub_affiliate_name' => $name,
+				'partner_id'         => 0,
+				'wp_user_id'         => $user_id,
+				'sponsor_code_id'    => $sponsor_code_id,
+				'status'             => 'active',
+				'active'             => 1,
+				'notes'              => 'Self-signup, live immediately. No partner assigned yet.',
+				'created_at'         => current_time( 'mysql' ),
+			)
+		);
+		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $wpdb->insert_id ) );
+	}
+
+	private static function generate_verify_token( $user_id ) {
+		$token = wp_generate_password( 32, false );
+		update_user_meta( $user_id, 'gas_email_verify_token', $token );
+		return add_query_arg(
+			array( 'action' => 'gas_verify_email', 'uid' => $user_id, 'token' => $token ),
+			admin_url( 'admin-post.php' )
+		);
+	}
+
+	public static function handle_verify_email() {
+		$user_id = isset( $_GET['uid'] ) ? absint( $_GET['uid'] ) : 0;
+		$token   = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : '';
+		$stored  = $user_id ? get_user_meta( $user_id, 'gas_email_verify_token', true ) : '';
+
+		if ( $user_id && $token && $stored && hash_equals( (string) $stored, $token ) ) {
+			update_user_meta( $user_id, 'gas_email_verified', 1 );
+			delete_user_meta( $user_id, 'gas_email_verify_token' );
+			wp_safe_redirect( add_query_arg( 'gas_verified', '1', self::dashboard_url() ) );
+		} else {
+			wp_safe_redirect( add_query_arg( 'gas_verified', '0', self::dashboard_url() ) );
+		}
+		exit;
+	}
+
+	public static function render_signup_or_refer() {
+		ob_start();
+
+		if ( isset( $_GET['gas_signup'] ) && 'success' === $_GET['gas_signup'] ) {
+			echo '<div class="gas-notice gas-notice-success"><p>You\'re in! Your referral link is live now.</p><p><a href="' . esc_url( self::dashboard_url() ) . '">Go to your dashboard &rarr;</a></p></div>';
+			return ob_get_clean();
+		}
+		if ( isset( $_GET['gas_signup'] ) && 'attached' === $_GET['gas_signup'] ) {
+			echo '<div class="gas-notice gas-notice-success"><p>Since you already have an affiliate account, we\'ve added this referral to it &mdash; log in to your dashboard to see it.</p><p><a href="' . esc_url( self::dashboard_url() ) . '">Go to your dashboard &rarr;</a></p></div>';
+			return ob_get_clean();
+		}
+
+		$error = isset( $_GET['gas_error'] ) ? sanitize_text_field( wp_unslash( $_GET['gas_error'] ) ) : '';
+		if ( $error ) {
+			echo '<div class="gas-notice gas-notice-error"><p>' . esc_html( $error ) . '</p></div>';
+		}
+
+		$range = self::estimated_payout_range();
+		echo '<div class="gas-payout-range">';
+		if ( $range ) {
+			echo '<p>Earn between <strong>$' . esc_html( number_format( $range['min'], 0 ) ) . '</strong> and <strong>$' . esc_html( number_format( $range['max'], 0 ) ) . '</strong> per completed installation you refer.</p>';
+		} else {
+			echo '<p>Get paid for every completed installation you refer &mdash; exact amounts depend on the partner, and you\'ll see your rate once you\'re matched.</p>';
+		}
+		echo '</div>';
+		?>
+		<div class="gas-signup-toggle">
+			<button type="button" class="gas-toggle-btn gas-toggle-active" data-mode="signup">Sign Up as an Affiliate</button>
+			<button type="button" class="gas-toggle-btn" data-mode="refer">Refer a Friend</button>
+		</div>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form" id="gas-signup-or-refer-form">
+			<?php wp_nonce_field( 'gas_signup_or_refer' ); ?>
+			<input type="hidden" name="action" value="gas_signup_or_refer">
+			<input type="hidden" name="is_referral" id="gas_is_referral" value="0">
+			<p style="position:absolute;left:-9999px;" aria-hidden="true">
+				<label>Leave this field empty<input type="text" name="gas_hp" tabindex="-1" autocomplete="off"></label>
+			</p>
+
+			<p>
+				<label for="gas_name">Your name</label><br>
+				<input type="text" id="gas_name" name="name" required class="gas-input">
+			</p>
+			<p>
+				<label for="gas_email">Your email</label><br>
+				<input type="email" id="gas_email" name="email" required class="gas-input">
+			</p>
+			<p>
+				<label for="gas_phone">Your phone (optional)</label><br>
+				<input type="tel" id="gas_phone" name="phone" class="gas-input">
+			</p>
+			<p>
+				<label for="gas_password">Choose a password</label><br>
+				<input type="password" id="gas_password" name="password" required minlength="8" class="gas-input">
+			</p>
+			<p class="gas-fineprint">Already have an account? Password is only needed the first time &mdash; if this email already has one, whatever you type here is ignored and your existing account is used instead.</p>
+			<p>
+				<label for="gas_password2">Confirm password</label><br>
+				<input type="password" id="gas_password2" name="password2" class="gas-input">
+			</p>
+
+			<div class="gas-referral-fields" style="display:none;">
+				<h3>Who are you referring?</h3>
+				<p>
+					<label for="gas_friend_name">Their name</label><br>
+					<input type="text" id="gas_friend_name" name="friend_name" class="gas-input">
+				</p>
+				<p>
+					<label for="gas_friend_email">Their email</label><br>
+					<input type="email" id="gas_friend_email" name="friend_email" class="gas-input">
+				</p>
+				<p>
+					<label for="gas_friend_phone">Their phone (optional)</label><br>
+					<input type="tel" id="gas_friend_phone" name="friend_phone" class="gas-input">
+				</p>
+				<p>
+					<label for="gas_friend_address">Their address (optional)</label><br>
+					<input type="text" id="gas_friend_address" name="friend_address" class="gas-input">
+				</p>
+				<p>
+					<label for="gas_friend_state">Their state</label><br>
+					<input type="text" id="gas_friend_state" name="friend_state" maxlength="2" placeholder="e.g. FL" style="text-transform:uppercase;" class="gas-input">
+					<span class="gas-fineprint">Lets us match them to a partner that actually covers their area.</span>
+				</p>
+			</div>
+
+			<p>
+				<button type="submit" class="gas-button" id="gas-submit-btn">Sign up</button>
+			</p>
+			<p class="gas-fineprint">Already have an account? <a href="<?php echo esc_url( self::dashboard_url() ); ?>">Log in on your dashboard</a>.</p>
+		</form>
+		<script>
+			(function() {
+				var buttons  = document.querySelectorAll('.gas-toggle-btn');
+				var referral = document.querySelector('.gas-referral-fields');
+				var isRef    = document.getElementById('gas_is_referral');
+				var submit   = document.getElementById('gas-submit-btn');
+				buttons.forEach(function(btn) {
+					btn.addEventListener('click', function() {
+						buttons.forEach(function(b) { b.classList.remove('gas-toggle-active'); });
+						btn.classList.add('gas-toggle-active');
+						var refer = btn.getAttribute('data-mode') === 'refer';
+						referral.style.display = refer ? '' : 'none';
+						isRef.value = refer ? '1' : '0';
+						submit.textContent = refer ? 'Refer & Sign Up' : 'Sign up';
+					});
+				});
+			})();
+		</script>
+		<?php
+		return ob_get_clean();
+	}
+
+	public static function handle_signup_or_refer() {
+		if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), 'gas_signup_or_refer' ) ) {
+			wp_die( 'Security check failed. Please go back and try again.' );
+		}
+
+		$redirect_back = wp_get_referer() ? wp_get_referer() : self::signup_url();
+
+		if ( ! empty( $_POST['gas_hp'] ) ) {
+			wp_safe_redirect( add_query_arg( 'gas_signup', 'success', $redirect_back ) );
+			exit;
+		}
+
+		$fail = function( $msg ) use ( $redirect_back ) {
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), $redirect_back ) );
+			exit;
+		};
+
+		$name        = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+		$email       = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
+		$phone       = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
+		$password    = isset( $_POST['password'] ) ? (string) $_POST['password'] : '';
+		$password2   = isset( $_POST['password2'] ) ? (string) $_POST['password2'] : '';
+		$is_referral = ! empty( $_POST['is_referral'] );
+
+		if ( '' === $name || ! is_email( $email ) ) {
+			$fail( 'Please enter your name and a valid email.' );
+		}
+
+		$friend_name    = '';
+		$friend_email   = '';
+		$friend_phone   = '';
+		$friend_address = '';
+		$friend_state   = '';
+		if ( $is_referral ) {
+			$friend_name    = isset( $_POST['friend_name'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_name'] ) ) : '';
+			$friend_email   = isset( $_POST['friend_email'] ) ? sanitize_email( wp_unslash( $_POST['friend_email'] ) ) : '';
+			$friend_phone   = isset( $_POST['friend_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_phone'] ) ) : '';
+			$friend_address = isset( $_POST['friend_address'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_address'] ) ) : '';
+			$friend_state   = isset( $_POST['friend_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['friend_state'] ) ) ) : '';
+			if ( '' === $friend_name || ( '' === $friend_email && '' === $friend_phone ) ) {
+				$fail( 'Please enter your friend\'s name and at least an email or phone number.' );
+			}
+		}
+
+		global $wpdb;
+		$site_name       = GAS_Settings::get( 'site_name' );
+		$sponsor_code_id = self::get_sponsor_code_id();
+
+		// Reusing an existing account: deliberately never touches that
+		// account's password or logs the submitter in as that user — this
+		// form is public and unauthenticated, so treating "knows the
+		// email address" as proof of identity would be an account
+		// takeover waiting to happen. We just attach the referral and
+		// email the real account holder about it.
+		$existing_affiliate = self::find_affiliate_by_email( $email );
+
+		if ( $existing_affiliate ) {
+			$user_id = $existing_affiliate->ID;
+			$code    = self::get_or_create_code_for_user( $user_id, $existing_affiliate->display_name, $sponsor_code_id );
+
+			if ( $is_referral ) {
+				self::create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address, $friend_state );
+				wp_mail(
+					$existing_affiliate->user_email,
+					'New referral added to your account',
+					"Hi {$existing_affiliate->display_name},\n\nSomeone just referred {$friend_name} using your details on {$site_name}. It's been added to your account under your referral code {$code->code}.\n\nLog in to your dashboard to keep an eye on it: " . self::dashboard_url()
+				);
+				wp_mail(
+					get_option( 'admin_email' ),
+					'Referral added to existing affiliate: ' . $existing_affiliate->display_name,
+					"Existing affiliate: {$existing_affiliate->display_name} ({$existing_affiliate->user_email})\nCode: {$code->code}\nReferred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) . "\n\nMatch a partner to this referral in wp-admin under {$site_name} > Leads."
+				);
+			}
+
+			wp_safe_redirect( add_query_arg( 'gas_signup', 'attached', self::signup_url() ) );
+			exit;
+		}
+
+		// Brand new affiliate — password is required here since this
+		// branch actually creates the account.
+		if ( strlen( $password ) < 8 ) {
+			$fail( 'Please choose a password of at least 8 characters.' );
+		}
+		if ( $password !== $password2 ) {
+			$fail( 'Passwords do not match.' );
+		}
+
+		$username = self::generate_unique_username( $email );
+		$user_id  = wp_insert_user( array(
+			'user_login'   => $username,
+			'user_email'   => $email,
+			'user_pass'    => $password,
+			'display_name' => $name,
+			'first_name'   => $name,
+			'role'         => GAS_Roles::ROLE,
+		) );
+
+		if ( is_wp_error( $user_id ) ) {
+			$fail( 'Could not create account: ' . $user_id->get_error_message() );
+		}
+
+		update_user_meta( $user_id, 'gas_status', 'active' );
+		if ( '' !== $phone ) {
+			update_user_meta( $user_id, 'gas_phone', $phone );
+		}
+
+		$code_row = self::get_or_create_code_for_user( $user_id, $name, $sponsor_code_id );
+
+		GAS_Contacts::upsert( $email, 'affiliate', array(
+			'name'          => $name,
+			'phone'         => $phone,
+			'source'        => 'signup',
+			'related_table' => 'codes',
+			'related_id'    => $code_row->id,
+		) );
+
+		$referral_note = '';
+		if ( $is_referral ) {
+			self::create_referral_lead( $code_row, $friend_name, $friend_email, $friend_phone, $friend_address, $friend_state );
+			$referral_note = "\n\nYou also referred {$friend_name} — they'll get their own note from us, and you'll see this in your dashboard once a partner is matched.";
+		}
+
+		$verify_link = self::generate_verify_token( $user_id );
+		wp_mail(
+			$email,
+			"Welcome to {$site_name}",
+			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nNo partner is assigned to your account yet; we'll match you to one shortly and you'll see it reflected on your dashboard."
+		);
+
+		wp_mail(
+			get_option( 'admin_email' ),
+			'New affiliate joined: ' . $name,
+			"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nCode: {$code_row->code}" . ( $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) : '' ) . "\n\nMatch them to a partner in wp-admin under {$site_name} > Codes" . ( $is_referral ? ' (and match the referral under Leads)' : '' ) . '.'
+		);
+
+		if ( $sponsor_code_id ) {
+			setcookie( GAS_Redirect::SPONSOR_COOKIE_NAME, '', array( 'expires' => time() - HOUR_IN_SECONDS, 'path' => '/' ) );
+		}
+
+		wp_set_current_user( $user_id );
+		wp_set_auth_cookie( $user_id );
+
+		wp_safe_redirect( add_query_arg( 'gas_signup', 'success', self::signup_url() ) );
+		exit;
+	}
+
+	/**
+	 * Records a friend referred through the merged page as a lead with no
+	 * partner yet (partner_id 0, the same "unassigned" sentinel codes()
+	 * already uses) — an admin matches a partner afterward from the Leads
+	 * screen, same as they already do for fresh affiliate signups on the
+	 * Codes screen. Sends the referred friend their own welcome note
+	 * immediately; a real appointment-time proposal (when the eventually-
+	 * assigned partner requires one) goes out separately, at the moment
+	 * admin actually assigns that partner — see GAS_Leads::assign_partner()
+	 * — since which partner it is, and whether they need an appointment,
+	 * genuinely isn't known yet at referral time.
+	 */
+	private static function create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address = '', $friend_state = '' ) {
+		global $wpdb;
+		$wpdb->insert(
+			GAS_DB::table( 'leads' ),
+			array(
+				'partner_id'      => 0,
+				'code_id'         => $code->id,
+				'customer_name'   => $friend_name,
+				'customer_email'  => $friend_email,
+				'customer_phone'  => $friend_phone,
+				'customer_address' => $friend_address,
+				'customer_state'  => $friend_state,
+				'status'          => 'new',
+				'created_at'      => current_time( 'mysql' ),
+			)
+		);
+		$lead_id = $wpdb->insert_id;
+
+		if ( $friend_email ) {
+			GAS_Contacts::upsert( $friend_email, 'customer', array(
+				'name'          => $friend_name,
+				'phone'         => $friend_phone,
+				'source'        => 'referral',
+				'related_table' => 'leads',
+				'related_id'    => $lead_id,
+			) );
+
+			$site_name = GAS_Settings::get( 'site_name' );
+			wp_mail(
+				$friend_email,
+				"{$code->sub_affiliate_name} referred you to {$site_name}",
+				"Hi {$friend_name},\n\n{$code->sub_affiliate_name} thought you'd want to know about {$site_name}. We'll be in touch shortly with next steps.\n\nIf you have any questions in the meantime, feel free to reach out, or just ask {$code->sub_affiliate_name} directly since they already know what this is about."
+			);
+		}
+
+		if ( $friend_state ) {
+			self::notify_coverage_match( $lead_id, $friend_name, $friend_state );
+		}
+
+		return $lead_id;
+	}
+
+	/**
+	 * True if a partner's `state` field (one or more comma-separated
+	 * 2-letter codes, e.g. "FL,TX,GA,CA" for a multi-state partner) lists
+	 * the given state. Case/whitespace-tolerant since this data is
+	 * hand-entered in wp-admin.
+	 */
+	private static function partner_covers_state( $partner, $state ) {
+		if ( empty( $partner->state ) || '' === $state ) {
+			return false;
+		}
+		$codes = array_map( 'trim', explode( ',', strtoupper( $partner->state ) ) );
+		return in_array( strtoupper( $state ), $codes, true );
+	}
+
+	/**
+	 * Names of approved partners whose coverage includes this state —
+	 * purely informational (a suggestion for whoever matches the lead to
+	 * a partner from the Leads screen), never used to auto-assign. The
+	 * "admin always matches a partner, never the system" rule holds even
+	 * when the match is this obvious.
+	 */
+	private static function partners_covering_state( $state ) {
+		global $wpdb;
+		$rows = $wpdb->get_results( "SELECT name, state FROM " . GAS_DB::table( 'partners' ) . " WHERE outreach_status = 'approved'" );
+		$matches = array();
+		foreach ( $rows as $r ) {
+			if ( self::partner_covers_state( $r, $state ) ) {
+				$matches[] = $r->name;
+			}
+		}
+		return $matches;
+	}
+
+	/**
+	 * Lets Cary know right away whether an incoming referral falls inside
+	 * any approved partner's coverage — a suggestion to speed up matching
+	 * it from the Leads screen if so, or an explicit heads-up if not (the
+	 * "no compatible partner found" case Cary asked for), since that's
+	 * the moment he'd want to go find a new partner for that area rather
+	 * than discover the gap only when he happens to look at Leads.
+	 */
+	private static function notify_coverage_match( $lead_id, $friend_name, $state ) {
+		$matches   = self::partners_covering_state( $state );
+		$site_name = GAS_Settings::get( 'site_name' );
+
+		if ( $matches ) {
+			$body = "Referral from {$friend_name} (state: {$state}) matches coverage for: " . implode( ', ', $matches ) . ".\n\nMatch them to a partner from {$site_name} > Leads.";
+			$subject = "Referral matched to a partner's coverage: {$friend_name}";
+		} else {
+			$body = "Referral from {$friend_name} is in {$state}, which no currently approved partner covers.\n\nEither find/add a partner for this area, or handle this referral manually. It's sitting unassigned under {$site_name} > Leads either way.";
+			$subject = "No compatible partner found for a referral in {$state}";
+		}
+
+		wp_mail( get_option( 'admin_email' ), $subject, $body );
+		GAS_Admin::audit_log( 'lead', $lead_id, $matches ? 'coverage_matched' : 'no_coverage_match', array( 'state' => $state, 'matches' => $matches ) );
+	}
+
 	private static function generate_unique_username( $email ) {
 		$base = sanitize_user( current( explode( '@', $email ) ), true );
 		if ( '' === $base ) {
@@ -316,12 +833,23 @@ class GAS_Frontend {
 			return self::render_login_form();
 		}
 
-		if ( ! GAS_Roles::is_affiliate() ) {
+		$preview       = GAS_Roles::get_admin_preview();
+		$is_previewing = $preview && 'agent' === $preview['type'];
+
+		if ( ! $is_previewing && ! GAS_Roles::is_affiliate() ) {
 			return '<div class="gas-notice">This dashboard is for affiliates only. <a href="' . esc_url( wp_logout_url( self::signup_url() ) ) . '">Log out</a> and sign up as an affiliate, or contact us if you think this is a mistake.</div>';
 		}
 
-		$user_id = get_current_user_id();
-		$user    = wp_get_current_user();
+		if ( $is_previewing ) {
+			$user_id = (int) $preview['id'];
+			$user    = get_userdata( $user_id );
+			if ( ! $user ) {
+				return '<div class="gas-notice">That affiliate account no longer exists.</div>';
+			}
+		} else {
+			$user_id = get_current_user_id();
+			$user    = wp_get_current_user();
+		}
 		$status  = get_user_meta( $user_id, 'gas_status', true ) ?: 'active';
 
 		ob_start();
@@ -343,14 +871,21 @@ class GAS_Frontend {
 		echo '<div class="gas-dashboard">';
 		echo '<p>Welcome back, ' . esc_html( $user->display_name ) . '. <a href="' . esc_url( wp_logout_url( self::dashboard_url() ) ) . '">Log out</a> &middot; <a href="' . esc_url( GAS_Help::page_url() ) . '">Help</a></p>';
 
+		if ( $is_previewing ) {
+			echo '<div class="gas-notice" style="border-left:4px solid #d98500;padding:8px 12px;background:#fff8e5;">';
+			echo 'Previewing <strong>' . esc_html( $user->display_name ) . '\'s</strong> dashboard (read-only). ';
+			echo '<a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_stop_admin_preview' ), 'gas_stop_admin_preview' ) ) . '">Stop previewing</a>';
+			echo '</div>';
+		}
+
 		if ( 'suspended' === $status ) {
 			echo '<div class="gas-notice gas-notice-error">Your affiliate account is currently suspended and your link is inactive. Contact us if you have questions.</div>';
 		}
 
 		self::render_stats_section( $user_id );
 		self::render_downline_section( $user_id );
-		self::render_password_section();
-		self::render_payment_section( $user_id );
+		self::render_password_section( $is_previewing );
+		self::render_payment_section( $user_id, $is_previewing );
 
 		echo '</div>';
 
@@ -528,9 +1063,13 @@ class GAS_Frontend {
 		echo '</tr>';
 	}
 
-	private static function render_password_section() {
+	private static function render_password_section( $is_previewing = false ) {
+		echo '<h2>Change password</h2>';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">Disabled while previewing &mdash; this would change your own admin password, not this affiliate\'s.</p>';
+			return;
+		}
 		?>
-		<h2>Change password</h2>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">
 			<?php wp_nonce_field( 'gas_change_password' ); ?>
 			<input type="hidden" name="action" value="gas_change_password">
@@ -589,10 +1128,14 @@ class GAS_Frontend {
 	 * PAYMENT / PAYOUT DETAILS
 	 * ---------------------------------------------------------------- */
 
-	private static function render_payment_section( $user_id ) {
+	private static function render_payment_section( $user_id, $is_previewing = false ) {
+		echo '<h2>Payment information</h2>';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">Hidden while previewing &mdash; payout details are only ever visible to the affiliate themselves, never to an admin, even in preview mode.</p>';
+			return;
+		}
 		$d = GAS_Payouts::get_details( $user_id );
 		?>
-		<h2>Payment information</h2>
 		<p class="gas-fineprint">Tell us how you'd like to be paid. This is only ever visible to you and used to send your payouts &mdash; the admin only sees a masked summary.</p>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form" id="gas-payment-form">
 			<?php wp_nonce_field( 'gas_save_payment_info' ); ?>

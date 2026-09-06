@@ -25,19 +25,7 @@ class GAS_Partner_Portal {
 	 * GAS_Frontend::maybe_create_pages() and GAS_Leads::maybe_create_page().
 	 */
 	public static function maybe_create_page() {
-		if ( get_option( 'gas_partner_page_id' ) ) {
-			return;
-		}
-		$id = wp_insert_post( array(
-			'post_title'   => 'Partner Portal',
-			'post_name'    => 'partner-portal',
-			'post_content' => '[gas_partner_dashboard]',
-			'post_status'  => 'publish',
-			'post_type'    => 'page',
-		) );
-		if ( $id && ! is_wp_error( $id ) ) {
-			update_option( 'gas_partner_page_id', $id );
-		}
+		GAS_Help::create_or_adopt_page( 'gas_partner_page_id', 'Partner Portal', 'partner-portal', '[gas_partner_dashboard]' );
 	}
 
 	public static function page_url() {
@@ -51,6 +39,12 @@ class GAS_Partner_Portal {
 		}
 		global $wpdb;
 		$table = GAS_DB::table( 'partners' );
+
+		$preview = GAS_Roles::get_admin_preview();
+		if ( $preview && 'partner' === $preview['type'] ) {
+			return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $preview['id'] ) );
+		}
+
 		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE user_id = %d", get_current_user_id() ) );
 	}
 
@@ -63,6 +57,9 @@ class GAS_Partner_Portal {
 		if ( ! $partner ) {
 			return '<div class="gas-notice">This portal is for fulfillment partners only. <a href="' . esc_url( wp_logout_url( self::page_url() ) ) . '">Log out</a> or contact us if you think this is a mistake.</div>';
 		}
+
+		$preview       = GAS_Roles::get_admin_preview();
+		$is_previewing = $preview && 'partner' === $preview['type'];
 
 		global $wpdb;
 		$leads_table = GAS_DB::table( 'leads' );
@@ -89,6 +86,13 @@ class GAS_Partner_Portal {
 		echo '<div class="gas-dashboard">';
 		echo '<p>Welcome back, ' . esc_html( $partner->name ) . '. <a href="' . esc_url( wp_logout_url( self::page_url() ) ) . '">Log out</a> &middot; <a href="' . esc_url( GAS_Help::partner_page_url() ) . '">Help</a></p>';
 
+		if ( $is_previewing ) {
+			echo '<div class="gas-notice" style="border-left:4px solid #d98500;padding:8px 12px;background:#fff8e5;">';
+			echo 'Previewing <strong>' . esc_html( $partner->name ) . '\'s</strong> dashboard (read-only). ';
+			echo '<a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_stop_admin_preview' ), 'gas_stop_admin_preview' ) ) . '">Stop previewing</a>';
+			echo '</div>';
+		}
+
 		echo '<div class="gas-stat-row">';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $total_leads ) . '</span><span class="gas-stat-label">Total leads</span></div>';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $closed_leads ) . '</span><span class="gas-stat-label">Completed</span></div>';
@@ -103,14 +107,17 @@ class GAS_Partner_Portal {
 		if ( ! $leads ) {
 			echo '<p>No leads yet &mdash; they\'ll show up here as they come in.</p>';
 		} else {
-			echo '<table class="gas-portal-table" style="width:100%;border-collapse:collapse;"><thead><tr><th>Customer</th><th>Contact</th><th>Appointment</th><th>Status</th><th>Received</th></tr></thead><tbody>';
+			echo '<table class="gas-portal-table" style="width:100%;border-collapse:collapse;"><thead><tr><th>Customer</th><th>Contact</th><th>Address</th><th>Appointment</th><th>Status</th><th>Received</th></tr></thead><tbody>';
 			foreach ( $leads as $l ) {
 				echo '<tr>';
 				echo '<td>' . esc_html( $l->customer_name ) . '</td>';
 				echo '<td>' . esc_html( $l->customer_email ) . ( $l->customer_email && $l->customer_phone ? '<br>' : '' ) . esc_html( $l->customer_phone ) . '</td>';
+				echo '<td>' . ( $l->customer_address ? esc_html( $l->customer_address ) : '&mdash;' ) . '</td>';
 				echo '<td>' . ( $l->appointment_at ? esc_html( $l->appointment_at ) : '&mdash;' ) . '</td>';
 				echo '<td>';
-				if ( in_array( $l->status, GAS_Leads::SETTABLE_STATUSES, true ) ) {
+				if ( $is_previewing ) {
+					echo esc_html( ucwords( str_replace( '_', ' ', $l->status ) ) );
+				} elseif ( in_array( $l->status, GAS_Leads::SETTABLE_STATUSES, true ) ) {
 					echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 					wp_nonce_field( 'gas_partner_update_lead_status_' . $l->id );
 					echo '<input type="hidden" name="action" value="gas_partner_update_lead_status">';
@@ -135,6 +142,11 @@ class GAS_Partner_Portal {
 		}
 
 		echo '<h2>Change your password</h2>';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">Disabled while previewing &mdash; this would change your own admin password, not this partner\'s.</p>';
+			echo '</div>';
+			return ob_get_clean();
+		}
 		if ( $password_changed ) {
 			echo '<p class="gas-notice gas-notice-success">Your password was updated.</p>';
 		} elseif ( $password_error ) {

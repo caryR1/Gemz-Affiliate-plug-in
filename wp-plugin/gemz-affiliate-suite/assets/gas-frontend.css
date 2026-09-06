@@ -12,3 +12,14 @@
 .gas-stat-row{display:flex;gap:1.5em;margin-top:.6em;}
 .gas-stat-num{display:block;font-weight:700;font-size:1.4em;}
 .gas-stat-label{display:block;font-size:.8em;opacity:.75;}
+
+/* Signup/refer toggle (merged page) — --gas-accent lets each site theme
+   this to its own palette (e.g. via that page's Elementor custom CSS)
+   instead of hardcoding one site's color into this shared plugin file. */
+.gas-signup-toggle{display:flex;gap:.6em;margin-bottom:1.3em;}
+.gas-toggle-btn{flex:1;padding:.8em 1em;border:1.5px solid var(--gas-accent,#3F8353);border-radius:8px;background:#fff;color:var(--gas-accent,#3F8353);font-weight:700;cursor:pointer;font-size:1em;transition:background .15s ease,color .15s ease;}
+.gas-toggle-btn:hover{opacity:.85;}
+.gas-toggle-btn.gas-toggle-active{background:var(--gas-accent,#3F8353);color:#fff;}
+.gas-payout-range{background:var(--gas-accent-tint,#F7FBF7);border-radius:10px;padding:1em 1.3em;margin-bottom:1.3em;font-size:1.05em;}
+.gas-referral-fields{border-top:1.5px dashed #CFE3D2;margin-top:1em;padding-top:1em;}
+.gas-referral-fields h3{margin-top:0;}

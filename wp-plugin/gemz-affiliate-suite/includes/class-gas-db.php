@@ -28,6 +28,13 @@ class GAS_DB {
 		}
 	}
 
+	/**
+	 * Note on partners.state: widened from VARCHAR(2) to VARCHAR(100) to
+	 * hold one or more comma-separated 2-letter codes (e.g. "FL,TX,GA,CA")
+	 * — the first real partner needed to cover 4 states, not just one.
+	 * See GAS_Frontend::partner_covers_state() for how this is matched
+	 * against a referred customer's state.
+	 */
 	private static function create_tables() {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -49,17 +56,24 @@ class GAS_DB {
 			payout_type VARCHAR(20) NOT NULL DEFAULT 'flat',
 			payout_amount DECIMAL(10,2) NULL,
 			payout_percent DECIMAL(5,2) NULL,
+			agent_pool_type VARCHAR(20) NOT NULL DEFAULT 'percent',
+			agent_pool_value DECIMAL(10,2) NOT NULL DEFAULT 100,
 			installments_json TEXT NULL,
 			default_cut_type VARCHAR(20) NOT NULL DEFAULT 'percent',
 			default_cut_value DECIMAL(10,2) NOT NULL DEFAULT 0,
 			cashback_type VARCHAR(20) NULL,
 			cashback_value DECIMAL(10,2) NOT NULL DEFAULT 0,
-			fulfillment_mode VARCHAR(20) NOT NULL DEFAULT 'redirect',
-			requires_appointment TINYINT(1) NOT NULL DEFAULT 1,
+			fulfillment_mode VARCHAR(20) NOT NULL DEFAULT 'lead_capture',
+			requires_appointment TINYINT(1) NOT NULL DEFAULT 0,
+			lead_page_intro TEXT NULL,
+			lead_page_image_id BIGINT UNSIGNED NULL,
 			destination_url VARCHAR(500) NULL,
 			email VARCHAR(191) NULL,
 			user_id BIGINT UNSIGNED NULL,
 			service_area_description VARCHAR(500) NULL,
+			state VARCHAR(100) NULL,
+			city VARCHAR(100) NULL,
+			zip VARCHAR(10) NULL,
 			source_url VARCHAR(500) NULL,
 			discovered_via VARCHAR(20) NOT NULL DEFAULT 'manual',
 			outreach_status VARCHAR(20) NOT NULL DEFAULT 'approved',
@@ -70,7 +84,8 @@ class GAS_DB {
 			PRIMARY KEY  (id),
 			UNIQUE KEY slug (slug),
 			KEY user_id (user_id),
-			KEY outreach_status (outreach_status)
+			KEY outreach_status (outreach_status),
+			KEY state (state)
 		) {$charset_collate};
 
 		CREATE TABLE {$codes} (
@@ -116,6 +131,7 @@ class GAS_DB {
 			sale_amount DECIMAL(10,2) NOT NULL,
 			installment_label VARCHAR(191) NULL,
 			gross_commission DECIMAL(10,2) NOT NULL,
+			agent_pool_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 			subaffiliate_cut DECIMAL(10,2) NOT NULL,
 			net_to_cary DECIMAL(10,2) NOT NULL,
 			cashback_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -145,6 +161,8 @@ class GAS_DB {
 			customer_name VARCHAR(191) NOT NULL,
 			customer_email VARCHAR(191) NULL,
 			customer_phone VARCHAR(64) NULL,
+			customer_address VARCHAR(255) NULL,
+			customer_state VARCHAR(2) NULL,
 			appointment_at DATETIME NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'new',
 			notes TEXT NULL,

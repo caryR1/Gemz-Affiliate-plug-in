@@ -34,6 +34,12 @@ class GAS_Settings {
 			'tier1_split_percent'      => 70,
 			'tier2_split_percent'      => 20,
 			'tier3_split_percent'      => 10,
+			// Shown on the shared on-site "Get a Quote" page — one per
+			// project/site, not per fulfillment partner or per affiliate,
+			// since the customer never sees or cares which specific
+			// partner ends up handling their request.
+			'quote_page_intro'         => '',
+			'quote_page_image_id'     => 0,
 		);
 	}
 
@@ -42,7 +48,10 @@ class GAS_Settings {
 		if ( ! is_array( $stored ) ) {
 			$stored = array();
 		}
-		return array_merge( self::defaults(), $stored );
+		// Intersected against defaults() so a setting removed from the code
+		// (like the old require_partner_at_signup toggle) can't keep leaking
+		// out of a site's already-saved option blob forever.
+		return array_merge( self::defaults(), array_intersect_key( $stored, self::defaults() ) );
 	}
 
 	public static function get( $key ) {

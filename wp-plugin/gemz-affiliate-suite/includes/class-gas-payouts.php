@@ -147,6 +147,99 @@ class GAS_Payouts {
 	}
 
 	/**
+	 * The slice of a sale's gross commission that's actually divided among
+	 * affiliate tiers — can be less than the full gross, with the remainder
+	 * kept as house margin (net_to_cary absorbs the gap automatically,
+	 * since it's already computed as gross minus every other deduction).
+	 * Flat: a fixed dollar amount, capped at gross so a misconfigured pool
+	 * can never exceed what was actually earned on the sale. Percent: that
+	 * percentage of the gross commission. Defaults to 100% of gross when a
+	 * partner has no pool configured, so existing partners behave exactly
+	 * as before this field existed.
+	 */
+	public static function agent_pool_amount( $partner, $gross ) {
+		$type  = isset( $partner->agent_pool_type ) ? $partner->agent_pool_type : 'percent';
+		$value = isset( $partner->agent_pool_value ) && '' !== $partner->agent_pool_value ? (float) $partner->agent_pool_value : 100;
+
+		if ( 'flat' === $type ) {
+			return min( $value, $gross );
+		}
+		return $gross * ( $value / 100 );
+	}
+
+	/**
+	 * Core commission math for one sale against one code+partner — the
+	 * single source of truth, used by both the admin Payout Calculator and
+	 * the REST payout-creation endpoint, so this is never computed two
+	 * different ways in two different places.
+	 */
+	public static function compute( $partner, $code, $sale_amount, $installment_index = null ) {
+		global $wpdb;
+
+		$installment_label = null;
+		if ( 'flat' === $partner->payout_type ) {
+			$gross = (float) $partner->payout_amount;
+		} else {
+			$installments = $partner->installments_json ? json_decode( $partner->installments_json, true ) : array();
+			if ( $installments && null !== $installment_index && isset( $installments[ $installment_index ] ) ) {
+				$fraction           = (float) $installments[ $installment_index ]['fraction'];
+				$installment_label = $installments[ $installment_index ]['label'];
+				$gross              = $sale_amount * ( (float) $partner->payout_percent / 100 ) * $fraction;
+			} else {
+				$gross = $sale_amount * ( (float) $partner->payout_percent / 100 );
+			}
+		}
+
+		// Buyer cash back comes out of the gross commission independently
+		// of the tier split below — a separate deduction, not part of the
+		// pool that gets divided among tiers.
+		$cashback = 0.0;
+		if ( $partner->cashback_type ) {
+			$cashback = 'flat' === $partner->cashback_type
+				? (float) $partner->cashback_value
+				: $gross * ( (float) $partner->cashback_value / 100 );
+		}
+
+		$agent_pool = self::agent_pool_amount( $partner, $gross );
+
+		// Multi-tier recruiting commissions: FIXED pooled split, not
+		// additive, and applied against the agent pool (which may be less
+		// than full gross) rather than gross itself — the same split for
+		// every affiliate, never individually negotiated per code. Total
+		// payout never grows with chain depth: a tier with no one in it
+		// simply isn't paid to anyone — that share stays with the house.
+		$codes_table = GAS_DB::table( 'codes' );
+		$tier2_code  = $code->sponsor_code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $code->sponsor_code_id ) ) : null;
+		$tier3_code  = $tier2_code && $tier2_code->sponsor_code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $tier2_code->sponsor_code_id ) ) : null;
+
+		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
+		$tier2_pct = (float) GAS_Settings::get( 'tier2_split_percent' );
+		$tier3_pct = (float) GAS_Settings::get( 'tier3_split_percent' );
+
+		$tier1_amount = round( $agent_pool * ( $tier1_pct / 100 ), 2 );
+		$tier2_amount = $tier2_code ? round( $agent_pool * ( $tier2_pct / 100 ), 2 ) : 0.0;
+		$tier3_amount = $tier3_code ? round( $agent_pool * ( $tier3_pct / 100 ), 2 ) : 0.0;
+
+		$net = $gross - $cashback - $tier1_amount - $tier2_amount - $tier3_amount;
+
+		return array(
+			'gross'             => $gross,
+			'agent_pool'        => $agent_pool,
+			'cashback'          => $cashback,
+			'installment_label' => $installment_label,
+			'tier1_amount'      => $tier1_amount,
+			'tier1_pct'         => $tier1_pct,
+			'tier2_amount'      => $tier2_amount,
+			'tier2_pct'         => $tier2_pct,
+			'tier2_code'        => $tier2_code,
+			'tier3_amount'      => $tier3_amount,
+			'tier3_pct'         => $tier3_pct,
+			'tier3_code'        => $tier3_code,
+			'net'               => $net,
+		);
+	}
+
+	/**
 	 * Affiliate-facing dollar range for one tier, computed across every
 	 * active partner's configured payout structure — deliberately NOT
 	 * personalized to one affiliate's actual sponsor chain, and never the
@@ -174,7 +267,8 @@ class GAS_Payouts {
 				continue; // no basis to estimate this partner's gross
 			}
 			if ( $gross > 0 ) {
-				$amounts[] = round( $gross * ( $pct / 100 ), 2 );
+				$pool      = self::agent_pool_amount( $p, $gross );
+				$amounts[] = round( $pool * ( $pct / 100 ), 2 );
 			}
 		}
 

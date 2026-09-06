@@ -89,6 +89,19 @@ class GAS_REST {
 			'permission_callback' => array( __CLASS__, 'permission_check' ),
 		) );
 
+		// Lets a payout row be created with an explicit entered_at, backdated
+		// into a prior calendar month — something the wp-admin Payout
+		// Calculator form can't do (it always uses current_time('mysql')).
+		// Needed for seeding realistic test/demo ledger data that spans the
+		// pending-vs-finalized month boundary; uses the exact same tier-split
+		// math as the calculator (GAS_Payouts::compute()), so it can never
+		// drift from what a real admin-entered payout would compute.
+		register_rest_route( 'gas/v1', '/payouts', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'create_payout' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
 		// WordPress caches rewrite rules; a new URL pattern (e.g. adding
 		// /join/{code}) needs a flush before it resolves, same as it would
 		// after saving Permalinks in wp-admin. Exists so that can happen
@@ -198,7 +211,12 @@ class GAS_REST {
 					'slug'                     => $slug,
 					'name'                     => $name,
 					'payout_type'              => 'flat',
+					'fulfillment_mode'         => 'lead_capture',
+					'requires_appointment'     => 0,
 					'service_area_description' => isset( $c['service_area_description'] ) ? sanitize_text_field( $c['service_area_description'] ) : '',
+					'state'                    => isset( $c['state'] ) ? strtoupper( sanitize_text_field( $c['state'] ) ) : '',
+					'city'                     => isset( $c['city'] ) ? sanitize_text_field( $c['city'] ) : '',
+					'zip'                      => isset( $c['zip'] ) ? sanitize_text_field( $c['zip'] ) : '',
 					'source_url'               => $website,
 					'discovered_via'           => 'research',
 					'outreach_status'          => 'new',
@@ -246,7 +264,7 @@ class GAS_REST {
 
 		$payout_type      = isset( $body['payout_type'] ) && in_array( $body['payout_type'], array( 'flat', 'percent' ), true ) ? $body['payout_type'] : 'flat';
 		$cashback_type    = isset( $body['cashback_type'] ) && in_array( $body['cashback_type'], array( 'flat', 'percent' ), true ) ? $body['cashback_type'] : null;
-		$fulfillment_mode = isset( $body['fulfillment_mode'] ) && 'lead_capture' === $body['fulfillment_mode'] ? 'lead_capture' : 'redirect';
+		$fulfillment_mode = isset( $body['fulfillment_mode'] ) && 'redirect' === $body['fulfillment_mode'] ? 'redirect' : 'lead_capture';
 
 		$wpdb->insert(
 			$table,
@@ -256,14 +274,19 @@ class GAS_REST {
 				'payout_type'          => $payout_type,
 				'payout_amount'        => isset( $body['payout_amount'] ) ? (float) $body['payout_amount'] : null,
 				'payout_percent'       => isset( $body['payout_percent'] ) ? (float) $body['payout_percent'] : null,
+				'agent_pool_type'      => isset( $body['agent_pool_type'] ) && 'flat' === $body['agent_pool_type'] ? 'flat' : 'percent',
+				'agent_pool_value'     => isset( $body['agent_pool_value'] ) ? (float) $body['agent_pool_value'] : 100,
 				'installments_json'    => ! empty( $body['installments'] ) ? wp_json_encode( $body['installments'] ) : null,
 				'cashback_type'        => $cashback_type,
 				'cashback_value'       => isset( $body['cashback_value'] ) ? (float) $body['cashback_value'] : 0,
 				'fulfillment_mode'     => $fulfillment_mode,
-				'requires_appointment' => array_key_exists( 'requires_appointment', $body ) ? (int) (bool) $body['requires_appointment'] : 1,
+				'requires_appointment' => array_key_exists( 'requires_appointment', $body ) ? (int) (bool) $body['requires_appointment'] : 0,
 				'destination_url'      => isset( $body['destination_url'] ) ? esc_url_raw( $body['destination_url'] ) : '',
 				'typical_sale_amount'  => isset( $body['typical_sale_amount'] ) ? (float) $body['typical_sale_amount'] : null,
 				'service_area_description' => isset( $body['service_area_description'] ) ? sanitize_text_field( $body['service_area_description'] ) : '',
+				'state'                => isset( $body['state'] ) ? strtoupper( sanitize_text_field( $body['state'] ) ) : '',
+				'city'                 => isset( $body['city'] ) ? sanitize_text_field( $body['city'] ) : '',
+				'zip'                  => isset( $body['zip'] ) ? sanitize_text_field( $body['zip'] ) : '',
 				'email'                => isset( $body['email'] ) ? sanitize_email( $body['email'] ) : '',
 				'notes'                => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
 				'created_at'           => current_time( 'mysql' ),
@@ -276,6 +299,72 @@ class GAS_REST {
 		}
 
 		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
+		return new WP_REST_Response( $created, 201 );
+	}
+
+	public static function create_payout( WP_REST_Request $request ) {
+		global $wpdb;
+		$body = $request->get_json_params();
+
+		$code_id     = isset( $body['code_id'] ) ? absint( $body['code_id'] ) : 0;
+		$codes_table = GAS_DB::table( 'codes' );
+		$code        = $code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $code_id ) ) : null;
+		if ( ! $code ) {
+			return new WP_Error( 'gas_not_found', 'Code not found.', array( 'status' => 404 ) );
+		}
+
+		$partners_table = GAS_DB::table( 'partners' );
+		$partner        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$partners_table} WHERE id = %d", $code->partner_id ) );
+		if ( ! $partner ) {
+			return new WP_Error( 'gas_not_found', 'Partner not found for this code.', array( 'status' => 404 ) );
+		}
+
+		$sale_amount       = isset( $body['sale_amount'] ) ? (float) $body['sale_amount'] : 0;
+		$installment_index = isset( $body['installment_index'] ) ? absint( $body['installment_index'] ) : null;
+		$notes             = isset( $body['notes'] ) ? sanitize_textarea_field( $body['notes'] ) : '';
+		$entered_at        = ! empty( $body['entered_at'] ) ? sanitize_text_field( $body['entered_at'] ) : current_time( 'mysql' );
+
+		// Optional, and only meaningful for backdated/seeded rows — a real
+		// admin-entered payout is always freshly 'unpaid' via the wp-admin
+		// Calculator. Lets test/demo data reflect a realistic mix of
+		// already-settled vs still-owed money without a separate API call
+		// per tier to mark it paid after the fact.
+		$status      = isset( $body['status'] ) && 'paid' === $body['status'] ? 'paid' : 'unpaid';
+		$paid_at     = 'paid' === $status ? ( ! empty( $body['paid_at'] ) ? sanitize_text_field( $body['paid_at'] ) : $entered_at ) : null;
+		$tier2_paid  = 'paid' === $status && ! empty( $body['tier2_paid'] ) ? 1 : 0;
+		$tier3_paid  = 'paid' === $status && ! empty( $body['tier3_paid'] ) ? 1 : 0;
+
+		$calc = GAS_Payouts::compute( $partner, $code, $sale_amount, $installment_index );
+
+		$wpdb->insert(
+			GAS_DB::table( 'payouts' ),
+			array(
+				'code_id'           => $code->id,
+				'code'              => $code->code,
+				'partner_id'        => $partner->id,
+				'sale_amount'       => $sale_amount,
+				'installment_label' => $calc['installment_label'],
+				'gross_commission'  => $calc['gross'],
+				'agent_pool_amount' => $calc['agent_pool'],
+				'subaffiliate_cut'  => $calc['tier1_amount'],
+				'cashback_amount'   => $calc['cashback'],
+				'tier2_code_id'     => $calc['tier2_code'] ? $calc['tier2_code']->id : null,
+				'tier2_amount'      => $calc['tier2_amount'],
+				'tier3_code_id'     => $calc['tier3_code'] ? $calc['tier3_code']->id : null,
+				'tier3_amount'      => $calc['tier3_amount'],
+				'net_to_cary'       => $calc['net'],
+				'status'            => $status,
+				'paid_at'           => $paid_at,
+				'tier2_paid'        => $tier2_paid,
+				'tier3_paid'        => $tier3_paid,
+				'entered_at'        => $entered_at,
+				'notes'             => $notes,
+			)
+		);
+
+		GAS_Admin::audit_log( 'payout', $wpdb->insert_id, 'entered_via_rest', array( 'code' => $code->code, 'gross' => $calc['gross'], 'net' => $calc['net'] ) );
+
+		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . GAS_DB::table( 'payouts' ) . " WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
 		return new WP_REST_Response( $created, 201 );
 	}
 
@@ -305,8 +394,8 @@ class GAS_REST {
 			}
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent' );
-		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent' );
+		$allowed  = array( 'site_name', 'partner_label', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id' );
+		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_image_id' );
 
 		$values = array();
 		foreach ( $allowed as $field ) {
@@ -315,6 +404,8 @@ class GAS_REST {
 			}
 			if ( in_array( $field, $numeric, true ) ) {
 				$values[ $field ] = (float) $body[ $field ];
+			} elseif ( 'quote_page_intro' === $field ) {
+				$values[ $field ] = sanitize_textarea_field( $body[ $field ] );
 			} else {
 				$values[ $field ] = sanitize_text_field( $body[ $field ] );
 			}
@@ -344,13 +435,15 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'outreach_status', 'email', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'agent_pool_type', 'agent_pool_value', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'state', 'city', 'zip', 'outreach_status', 'email', 'notes' );
 		$formats    = array();
 		$format_map = array(
 			'name'                 => '%s',
 			'payout_type'          => '%s',
 			'payout_amount'        => '%f',
 			'payout_percent'       => '%f',
+			'agent_pool_type'      => '%s',
+			'agent_pool_value'     => '%f',
 			'typical_sale_amount'  => '%f',
 			'cashback_type'        => '%s',
 			'cashback_value'       => '%f',
@@ -358,6 +451,9 @@ class GAS_REST {
 			'requires_appointment' => '%d',
 			'destination_url'      => '%s',
 			'service_area_description' => '%s',
+			'state'                => '%s',
+			'city'                 => '%s',
+			'zip'                  => '%s',
 			'outreach_status'      => '%s',
 			'email'                => '%s',
 			'notes'                => '%s',
@@ -370,9 +466,13 @@ class GAS_REST {
 					$value = esc_url_raw( $value );
 				} elseif ( 'email' === $field ) {
 					$value = sanitize_email( $value );
-				} elseif ( 'notes' === $field || 'name' === $field || 'service_area_description' === $field ) {
+				} elseif ( 'notes' === $field || 'name' === $field || 'service_area_description' === $field || 'city' === $field || 'zip' === $field ) {
 					$value = sanitize_text_field( $value );
+				} elseif ( 'state' === $field ) {
+					$value = strtoupper( sanitize_text_field( $value ) );
 				} elseif ( 'payout_type' === $field ) {
+					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : 'percent';
+				} elseif ( 'agent_pool_type' === $field ) {
 					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : 'percent';
 				} elseif ( 'cashback_type' === $field ) {
 					$value = in_array( $value, array( 'flat', 'percent' ), true ) ? $value : null;

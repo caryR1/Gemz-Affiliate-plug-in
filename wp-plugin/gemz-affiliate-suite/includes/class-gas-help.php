@@ -36,7 +36,7 @@ class GAS_Help {
 	 * overwrites an adopted page's existing content; only ever writes
 	 * the shortcode content when actually creating a brand-new page.
 	 */
-	private static function create_or_adopt_page( $option_key, $title, $slug, $shortcode_content ) {
+	public static function create_or_adopt_page( $option_key, $title, $slug, $shortcode_content ) {
 		if ( get_option( $option_key ) ) {
 			return;
 		}
@@ -118,7 +118,7 @@ class GAS_Help {
 			<p>Every lead sent to you shows up in your dashboard with its current status. Use the status dropdown next to each lead to move it along as the project progresses — Accepted &rarr; In Progress &rarr; Completed, or Lost if it doesn't work out. Keep this current; it's how <?php echo esc_html( $site_name ); ?> knows a sale actually happened.</p>
 
 			<h3>What "new" leads mean</h3>
-			<p>A lead shown without a status dropdown hasn't been matched to your account yet by an admin. Once it's assigned to you, the dropdown appears and you can start moving it through the pipeline.</p>
+			<p>A lead shown without a status dropdown is already on your account, but is still waiting on a first look from an admin before it's yours to work. Once that happens, the dropdown appears and you can start moving it through the pipeline.</p>
 
 			<h3>Changing your password</h3>
 			<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>

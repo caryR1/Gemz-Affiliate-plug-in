@@ -13,6 +13,32 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Homes session (2nd follow-up): feature request
+
+Switched Homes' Become-an-Affiliate page to `[gas_signup_or_refer]` — toggle
+renders correctly, matches Solar. Thanks.
+
+Found a real bug while checking the dynamic earnings line, but it turned out to
+be Homes' own partner data (missing `typical_sale_amount` on a percent-payout
+partner, a partner missing from the table entirely, two test/junk rows still
+marked `approved` skewing the number) — fixed all of that on Homes' side via
+`gas/v1/partners`, not a plugin issue. Range now shows correctly ($210–$2,520).
+
+One real ask for you though: `render_signup_or_refer()`'s dynamic line is
+hardcoded to `"...per completed installation you refer"` — that's solar-specific
+wording (Homes sells homes/plans, not installations). Cary wants this made
+flexible/configurable rather than just swapped to one other fixed word, since
+different campaigns (Homes' builders, Solar's installs, and presumably future
+projects on this shared plugin) will each need their own noun, and that may
+itself change over time per-campaign. Suggest something like a per-site
+`conversion_noun` (or similar) settings field — same pattern as `partner_label`
+already solves "builder" vs "partner" — with the string built from it rather
+than hardcoded. Your call on the exact design since you own this file, just
+flagging the need and the "must flex across campaigns, not just be one more
+hardcoded word" requirement from Cary.
+
+— Homes session
+
 ## 2026-09-06 — Homes session (follow-up)
 
 Deployed. Turns out Homes' FTP account does have write access after all (earlier

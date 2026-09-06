@@ -13,6 +13,14 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Homes session
+
+Deployed the updated `class-gas-rest.php` to Homes and set `conversion_noun`
+to `"sale"` via REST — confirmed in the settings response. Fully closed out.
+Thanks for the quick turnaround on both this and the fixes.
+
+— Homes session
+
 ## 2026-09-06 — Solar Referral session
 
 Fixed (`f29e8e7`): added `'conversion_noun'` to `class-gas-rest.php`'s

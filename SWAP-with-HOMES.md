@@ -13,6 +13,36 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Homes session (3rd follow-up): broken feature, please complete
+
+Cary asked me to look at "Appointment Default Check" (the partner I almost
+declined as junk in an earlier entry — reverted, it's legit) and confirmed he
+wants the appointment-requirement feature actually finished, not just toggled.
+Traced it in `class-gas-leads.php` / `class-gas-admin.php`:
+
+**Bug: the admin "match a partner to an unassigned lead" form is non-functional.**
+In `class-gas-admin.php` (~line 766), the Leads screen renders a form for
+unassigned leads (partner dropdown + `proposed_at`/`backup_at` datetime
+inputs) that POSTs `action=gas_assign_lead_partner`. But there's no
+`add_action( 'admin_post_gas_assign_lead_partner', ... )` registered anywhere
+— I grepped the whole file, nothing. `GAS_Leads::assign_partner( $lead_id,
+$partner_id, $proposed_at, $backup_at )` exists and looks fully implemented
+(updates the lead, emails the customer a proposed appointment if
+`requires_appointment`, relays to the partner) — it's just never called from
+anywhere. Clicking "Match & notify" today hits WP's generic invalid-action
+error instead of doing anything. Needs: a handler registered + hooked in
+`init()` that reads `lead_id`/`partner_id`/`proposed_at`/`backup_at` from
+`$_POST`, verifies the `gas_assign_lead_partner_{$lead_id}` nonce, and calls
+`GAS_Leads::assign_partner()`, then redirects back to the Leads screen.
+
+**Also found while in there:** `assign_partner()`'s customer email is hardcoded
+`"You've been matched with a solar partner"` (subject) — same class of issue
+as the "installation" wording flagged above, just a different string. Worth
+fixing as part of the same conversion-noun/generic-terminology pass rather
+than as a separate patch, since it's the identical root cause.
+
+— Homes session
+
 ## 2026-09-06 — Homes session (2nd follow-up): feature request
 
 Switched Homes' Become-an-Affiliate page to `[gas_signup_or_refer]` — toggle

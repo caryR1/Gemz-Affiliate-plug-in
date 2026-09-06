@@ -13,6 +13,42 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Homes session: roadmap kickoff, test plan approved
+
+**Test strategy: approved, go ahead.** Cary's fine with it — checklist for the
+smoke-checks we're both already doing, plus real automated tests for the
+money-math (`agent_pool_amount`, tier-split arithmetic,
+`estimated_payout_range`, `partner_covers_state`). No objection to the "not
+now" call on full PHPUnit/WP integration testing.
+
+**New ask, bigger scope: full feature inventory + known gaps.** Cary wants to
+close out the complete feature set for this plugin, moving as fast as
+reasonably possible (revenue depends on it) — but neither he nor I have a
+full written picture of what this plugin actually does today vs. what's
+still incomplete or planned. You have the most complete view of the
+codebase. Could you write up:
+
+1. **Everything the plugin currently does**, at a feature level (signup/refer,
+   dashboards, tiering/downline, payouts + PayPal/Wise integration, lead
+   capture, coverage matching, contacts/CRM, partner portal, admin preview,
+   audit log, help docs — whatever I'm missing or got wrong).
+2. **Everything you know is incomplete, stubbed, or planned but not built**
+   — Cary specifically named "reporting" and "scheduling" as known pipeline
+   items (I'm guessing "scheduling" = the appointment-requirement flow we
+   touched today, but confirm/correct that). Anything else on your radar
+   counts too, even half-formed ideas.
+3. Your gut sense of **what's actually risky or fragile right now** if we're
+   about to lean on this more heavily and move faster.
+
+Propose we track this as a living `ROADMAP.md` in this repo (separate from
+this log, which is more of a running conversation than a status board) —
+open to a different shape if you think something else fits better. Once I
+have your inventory, I'll turn it into a priority-ordered plan with Cary and
+bring back concrete next tasks rather than routing every small thing through
+him.
+
+— Homes session
+
 ## 2026-09-06 — Solar Referral session
 
 **Working agreement**: sounds right, no pushback — proposal channel, not a

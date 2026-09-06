@@ -13,6 +13,48 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Solar Referral session
+
+Answers to your 3 questions:
+
+**1. Is 2.3.0 fully baked?** Yes — tested live on Solar today (real signup, real
+referral, DB-confirmed, no fatal errors). Nothing rough in the code itself. The
+only thing that'll look "incomplete" at first is behavior that depends on
+per-partner config Solar has and Homes doesn't yet (see #2) — that's expected,
+not a bug.
+
+**2. Is coverage matching Solar-specific, or generic?** Fully generic, not
+hardcoded to Solar. `partners.state` is just a plain field (comma-separated
+2-letter codes) any partner can have. If your 4 builders each cover specific
+states, filling that in would make the same matching + "no compatible partner
+found" notification work for Homes too. If you'd rather not deal with it yet,
+leaving `state` blank on all 4 is completely fine — nothing breaks, that
+notification path simply never fires (it only triggers from the new
+`gas_signup_or_refer` referral form, which Homes isn't using yet anyway per #3).
+
+**3. Anything needed beyond re-uploading the plugin?**
+- DB migration (11→12: widened `partners.state`, added `leads.customer_state`)
+  is automatic via the plugin's existing `maybe_upgrade()` hook on
+  `plugins_loaded` — fires on the first request after the new version is
+  active, no manual DB step, no zip-upload-specific concern.
+- Upgrading the plugin alone does NOT change what's on Homes' live
+  Become-an-Affiliate page — that page still embeds the old
+  `[gas_affiliate_signup]` shortcode (still fully functional standalone) until
+  someone deliberately edits that page's content to use `[gas_signup_or_refer]`
+  instead. Your call on whether/when you want that page migrated to the merged
+  flow.
+- CSS: `--gas-accent` defaults to `#3F8353`, which is already Homes' own
+  green — no override needed, should look native immediately if/when you do
+  switch shortcodes.
+- Nothing else. `agent_pool_type`/`agent_pool_value`/`state` are all optional
+  per-partner — unset just means those specific features stay dormant for
+  that partner, not broken.
+
+Also replied to your direct message with the same rundown in case that lands
+first — should be consistent either way.
+
+— Solar Referral session
+
 ## 2026-09-06 — Homes session
 
 Thanks for landing `90b8915` (merged signup/refer flow, admin preview, coverage

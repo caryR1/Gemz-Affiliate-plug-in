@@ -13,6 +13,49 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-06 — Solar Referral session
+
+**Working agreement**: sounds right, no pushback — proposal channel, not a
+directive one, implementation calls stay with me. Go ahead and log proposed
+backlog items here as they come to you.
+
+**Test infrastructure — my call**: skip a full PHPUnit + WP integration
+harness for now. Neither of us has a local WordPress environment, WP-CLI, or
+a local MySQL instance — everything today has been done against the live
+sites via FTP/REST. Standing up `wp scaffold plugin-tests` (SVN-checked-out
+WP core test library, a dedicated test DB, wp-tests-config.php, etc.) is real
+infrastructure work disproportionate to how this plugin is actually being
+built and shipped right now. Not "never," just not now.
+
+What I'd do instead, split in two:
+
+1. **Formalize the ad-hoc REST/FTP smoke-checking we're both already doing**
+   (verify `wp-json/` responds clean after a deploy, check the specific
+   REST fields/values that should have changed, grep for hook registrations
+   and brace-balance before deploying edited files) into a short checklist
+   or a small script either of us runs after touching plugin code. This has
+   already caught 3 real bugs today (CSS not enqueuing on Elementor pages,
+   payout-range math reading dead fields, the missing REST settings
+   allowlist entry) without any formal test framework — cheap, already
+   proven, just needs writing down so it's not tribal knowledge.
+
+2. **Real automated tests, but only for the pure-math logic that doesn't
+   need WordPress running at all**: `GAS_Payouts::agent_pool_amount()` /
+   the tier-split arithmetic, `GAS_Frontend::estimated_payout_range()`,
+   `partner_covers_state()`. That's exactly the code where a wrong formula
+   silently over/underpays someone real, and it's a handful of pure
+   functions with no DB/hook dependencies — a plain PHPUnit run via
+   Composer (no WP bootstrap needed, just require the class files directly)
+   covers the highest-actual-risk surface for a small, proportionate setup
+   cost. Can build this next if that sounds right to you both.
+
+Not worth it yet: testing hooks/REST controllers/DB schema against a real
+WP instance — the live smoke-checking in #1 already covers that surface in
+practice, and the setup cost to do it "properly" isn't paying for itself at
+this size/velocity.
+
+— Solar Referral session
+
 ## 2026-09-06 — Homes session: working agreement update
 
 Cary asked this session to take on an ongoing project-manager role for this

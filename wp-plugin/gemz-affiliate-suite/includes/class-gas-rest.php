@@ -288,6 +288,12 @@ class GAS_REST {
 				'city'                 => isset( $body['city'] ) ? sanitize_text_field( $body['city'] ) : '',
 				'zip'                  => isset( $body['zip'] ) ? sanitize_text_field( $body['zip'] ) : '',
 				'email'                => isset( $body['email'] ) ? sanitize_email( $body['email'] ) : '',
+				'open_to_self_signup'  => array_key_exists( 'open_to_self_signup', $body ) ? (int) (bool) $body['open_to_self_signup'] : 1,
+				'blurb'                => isset( $body['blurb'] ) ? sanitize_text_field( $body['blurb'] ) : '',
+				'spotlight_url'        => isset( $body['spotlight_url'] ) ? esc_url_raw( $body['spotlight_url'] ) : '',
+				'capability_tags'      => ! empty( $body['capability_tags'] ) && is_array( $body['capability_tags'] )
+					? implode( ',', array_intersect( array_map( 'sanitize_key', $body['capability_tags'] ), array_keys( GAS_DB::capability_tags() ) ) )
+					: '',
 				'notes'                => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
 				'created_at'           => current_time( 'mysql' ),
 			)
@@ -435,7 +441,7 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'agent_pool_type', 'agent_pool_value', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'state', 'city', 'zip', 'outreach_status', 'email', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'agent_pool_type', 'agent_pool_value', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'state', 'city', 'zip', 'outreach_status', 'email', 'open_to_self_signup', 'blurb', 'spotlight_url', 'capability_tags', 'notes' );
 		$formats    = array();
 		$format_map = array(
 			'name'                 => '%s',
@@ -456,6 +462,10 @@ class GAS_REST {
 			'zip'                  => '%s',
 			'outreach_status'      => '%s',
 			'email'                => '%s',
+			'open_to_self_signup'  => '%d',
+			'blurb'                => '%s',
+			'spotlight_url'        => '%s',
+			'capability_tags'      => '%s',
 			'notes'                => '%s',
 		);
 
@@ -482,6 +492,16 @@ class GAS_REST {
 					$value = (int) (bool) $value;
 				} elseif ( 'outreach_status' === $field ) {
 					$value = in_array( $value, array( 'new', 'contacted', 'approved', 'declined' ), true ) ? $value : 'approved';
+				} elseif ( 'open_to_self_signup' === $field ) {
+					$value = (int) (bool) $value;
+				} elseif ( 'blurb' === $field ) {
+					$value = sanitize_text_field( $value );
+				} elseif ( 'spotlight_url' === $field ) {
+					$value = esc_url_raw( $value );
+				} elseif ( 'capability_tags' === $field ) {
+					$value = is_array( $value )
+						? implode( ',', array_intersect( array_map( 'sanitize_key', $value ), array_keys( GAS_DB::capability_tags() ) ) )
+						: '';
 				} else {
 					$value = (float) $value;
 				}

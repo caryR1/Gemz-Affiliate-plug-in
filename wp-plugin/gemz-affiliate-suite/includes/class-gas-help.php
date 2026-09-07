@@ -83,8 +83,8 @@ class GAS_Help {
 		<div class="gas-dashboard gas-help-doc">
 			<p><a href="<?php echo esc_url( GAS_Frontend::signup_url() ); ?>">&larr; Back to your dashboard</a></p>
 
-			<h3>Your referral link</h3>
-			<p>Every affiliate gets a unique referral link, shown at the top of your dashboard. Anyone who clicks it and later does business with a <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically — you never need to tell anyone which <?php echo esc_html( $partner_label ); ?> to use, that part is handled separately.</p>
+			<h3>Your referral link(s)</h3>
+			<p>Every affiliate gets a unique referral link, shown on your dashboard — sometimes more than one, if we work with more than one <?php echo esc_html( $partner_label ); ?> in your area. Anyone who clicks a link and later does business with that <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically — you never need to tell anyone which <?php echo esc_html( $partner_label ); ?> to use, that part is handled separately. If you ever see a "Get a link for..." button on your dashboard, that means a new <?php echo esc_html( $partner_label ); ?> became available since you joined — click it to add that link too.</p>
 
 			<h3>Recruiting your own team</h3>
 			<p>Your dashboard also shows a second link for inviting other people to become affiliates themselves. Anyone who signs up through that link becomes part of your team, and you earn a bonus on their sales going forward — and again, a smaller bonus, on sales made by people <em>they</em> recruit. This works up to two levels deep below you.</p>

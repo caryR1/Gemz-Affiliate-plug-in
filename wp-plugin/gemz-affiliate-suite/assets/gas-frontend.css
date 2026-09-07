@@ -23,3 +23,13 @@
 .gas-payout-range{background:var(--gas-accent-tint,#F7FBF7);border-radius:10px;padding:1em 1.3em;margin-bottom:1.3em;font-size:1.05em;}
 .gas-referral-fields{border-top:1.5px dashed #CFE3D2;margin-top:1em;padding-top:1em;}
 .gas-referral-fields h3{margin-top:0;}
+
+/* Blurb/capability tap-to-reveal icons on each per-link dashboard card —
+   no persistent legend, the label only shows on hover/focus/tap. */
+.gas-capability-icons{margin:.4em 0;}
+.gas-popover-icon{position:relative;display:inline-block;cursor:pointer;color:var(--gas-accent,#3F8353);margin-right:.4em;vertical-align:middle;}
+.gas-popover-icon.dashicons{font-size:20px;width:20px;height:20px;line-height:20px;}
+.gas-popover{display:none;position:absolute;bottom:135%;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.35em .7em;border-radius:4px;font-size:.75rem;font-weight:400;white-space:nowrap;max-width:220px;white-space:normal;z-index:20;}
+.gas-popover-icon:hover .gas-popover,
+.gas-popover-icon:focus .gas-popover,
+.gas-popover-icon.gas-open .gas-popover{display:block;}

@@ -488,10 +488,35 @@ class GAS_Admin {
 			echo '<tr><th>Service area</th><td><input type="text" name="service_area_description" class="regular-text" value="' . esc_attr( $editing->service_area_description ?? '' ) . '" placeholder="e.g. Tampa Bay area, FL, or Nationwide"> <p class="description">Free-text, for your own reference.</p></td></tr>';
 
 			echo '<tr><th>State / city / zip</th><td>';
-			echo '<input type="text" name="state" maxlength="2" style="width:50px;text-transform:uppercase;" placeholder="FL" value="' . esc_attr( $editing->state ?? '' ) . '"> ';
+			echo '<input type="text" name="state" style="width:100px;text-transform:uppercase;" placeholder="FL or FL,TX,GA" value="' . esc_attr( $editing->state ?? '' ) . '"> ';
 			echo '<input type="text" name="city" class="regular-text" style="width:200px;" placeholder="City" value="' . esc_attr( $editing->city ?? '' ) . '"> ';
 			echo '<input type="text" name="zip" style="width:100px;" placeholder="Zip" value="' . esc_attr( $editing->zip ?? '' ) . '"> ';
-			echo '<p class="description">Structured, so partners can be filtered by state below &mdash; separate from the free-text service area above.</p>';
+			echo '<p class="description">Structured, so partners can be filtered by state below, and so the affiliate dashboard can show a "Serves: ..." line on this partner\'s link cards &mdash; separate from the free-text service area above. One or more comma-separated 2-letter codes.</p>';
+			echo '</td></tr>';
+
+			echo '<tr><th>Open to self-signup</th><td>';
+			echo '<label><input type="checkbox" name="open_to_self_signup" value="1"' . checked( $editing->open_to_self_signup ?? 1, 1, false ) . '> New affiliates automatically get a working link to this partner the moment they join, no admin step</label>';
+			echo '<p class="description">Uncheck to keep this partner admin-matched only (useful for an exclusive or capacity-limited partner) &mdash; affiliates can still request a link later from their own dashboard if you turn this back on.</p>';
+			echo '</td></tr>';
+
+			echo '<tr><th>Dashboard blurb</th><td>';
+			echo '<input type="text" name="blurb" class="large-text" maxlength="300" value="' . esc_attr( $editing->blurb ?? '' ) . '" placeholder="One short sentence describing this partner">';
+			echo '<p class="description">Shown to affiliates as a tap-to-reveal popover next to this partner\'s name on their dashboard link card. Leave blank to hide the icon entirely.</p>';
+			echo '</td></tr>';
+
+			echo '<tr><th>Spotlight page URL</th><td>';
+			echo '<input type="url" name="spotlight_url" class="regular-text" value="' . esc_attr( $editing->spotlight_url ?? '' ) . '" placeholder="https://...">';
+			echo '<p class="description">If this site has its own content page about this partner, link it here &mdash; affiliates get a "See full spotlight" link on their dashboard card. Per-site, since each site\'s own content differs; leave blank if there isn\'t one yet.</p>';
+			echo '</td></tr>';
+
+			echo '<tr><th>Capabilities</th><td>';
+			$selected_tags = $editing->capability_tags ?? '' ? array_map( 'trim', explode( ',', $editing->capability_tags ) ) : array();
+			echo '<fieldset>';
+			foreach ( GAS_DB::capability_tags() as $slug => $tag ) {
+				echo '<label style="display:block;margin-bottom:.3em;"><input type="checkbox" name="capability_tags[]" value="' . esc_attr( $slug ) . '"' . checked( in_array( $slug, $selected_tags, true ), true, false ) . '> ' . esc_html( $tag['label'] ) . '</label>';
+			}
+			echo '</fieldset>';
+			echo '<p class="description">Shown as small icons on the affiliate dashboard; tapping/clicking one reveals its label. "Appointment required" and coverage/location aren\'t here &mdash; those already come from the Fulfillment and State fields above.</p>';
 			echo '</td></tr>';
 
 			echo '<tr><th>Source</th><td>' . ( $editing->source_url ? '<a href="' . esc_url( $editing->source_url ) . '" target="_blank" rel="noopener">' . esc_html( $editing->source_url ) . '</a>' : '<em>added manually</em>' ) . '</td></tr>';
@@ -550,9 +575,9 @@ class GAS_Admin {
 					? array_values( array_filter( $partners, function( $p ) use ( $state_filter ) { return $p->state === $state_filter; } ) )
 					: $partners;
 
-				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>State</th><th>Outreach</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
+				echo '<table class="widefat striped"><thead><tr><th>Name</th><th>State</th><th>Self-signup</th><th>Outreach</th><th>Payout structure</th><th>Buyer cash back</th><th>Fulfillment</th><th>Destination URL</th><th>Portal</th><th>Actions</th></tr></thead><tbody>';
 				if ( ! $visible_partners ) {
-					echo '<tr><td colspan="9">No partners match that filter.</td></tr>';
+					echo '<tr><td colspan="10">No partners match that filter.</td></tr>';
 				}
 				foreach ( $visible_partners as $p ) {
 					if ( 'flat' === $p->payout_type ) {
@@ -574,6 +599,7 @@ class GAS_Admin {
 					$outreach_color  = $outreach_colors[ $p->outreach_status ] ?? '#666';
 					echo '<td>' . esc_html( $p->name ) . '</td>';
 					echo '<td>' . ( $p->state ? esc_html( $p->state ) : '&mdash;' ) . '</td>';
+					echo '<td>' . ( ( $p->open_to_self_signup ?? 1 ) ? '<span style="color:#1a7a3c;">Yes</span>' : '<span style="color:#666;">No</span>' ) . '</td>';
 					echo '<td style="color:' . esc_attr( $outreach_color ) . ';">' . esc_html( ucfirst( $p->outreach_status ) ) . '</td>';
 					echo '<td>' . $structure . '</td>';
 					echo '<td>' . $cashback . '</td>';
@@ -645,6 +671,10 @@ class GAS_Admin {
 				'requires_appointment' => 0,
 				'destination_url'   => '',
 				'email'             => '',
+				'open_to_self_signup' => 1,
+				'blurb'             => '',
+				'spotlight_url'     => '',
+				'capability_tags'   => '',
 				'notes'             => '',
 				'created_at'        => current_time( 'mysql' ),
 			)
@@ -702,6 +732,12 @@ class GAS_Admin {
 			'zip'               => isset( $_POST['zip'] ) ? sanitize_text_field( wp_unslash( $_POST['zip'] ) ) : '',
 			'outreach_status'   => isset( $_POST['outreach_status'] ) && in_array( $_POST['outreach_status'], array( 'new', 'contacted', 'approved', 'declined' ), true ) ? $_POST['outreach_status'] : 'approved',
 			'email'             => isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '',
+			'open_to_self_signup' => isset( $_POST['open_to_self_signup'] ) ? 1 : 0,
+			'blurb'             => isset( $_POST['blurb'] ) ? sanitize_text_field( wp_unslash( $_POST['blurb'] ) ) : '',
+			'spotlight_url'     => isset( $_POST['spotlight_url'] ) ? esc_url_raw( wp_unslash( $_POST['spotlight_url'] ) ) : '',
+			'capability_tags'   => isset( $_POST['capability_tags'] ) && is_array( $_POST['capability_tags'] )
+				? implode( ',', array_intersect( array_map( 'sanitize_key', wp_unslash( $_POST['capability_tags'] ) ), array_keys( GAS_DB::capability_tags() ) ) )
+				: '',
 			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
 		);
 
@@ -1872,8 +1908,8 @@ class GAS_Admin {
 		<h2>Screens at a glance</h2>
 		<ul style="list-style:disc;margin-left:1.5em;">
 			<li><strong>Affiliates</strong> — every self-signed-up affiliate; suspend/reactivate their link here.</li>
-			<li><strong>Codes</strong> — every referral code, including manually-added ones; assign a code to a fulfillment partner here (affiliates never pick this themselves).</li>
-			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), and partner portal login.</li>
+			<li><strong>Codes</strong> — every referral code, including manually-added ones. New self-signup affiliates are automatically matched to every partner marked "Open to self-signup" on the Partners screen — no manual step needed for those. Uncheck a partner's "Open to self-signup" box if you'd rather hand-match affiliates to it yourself from this screen instead.</li>
+			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), whether they're open to self-signup, the dashboard blurb/spotlight link/capability icons affiliates see on that partner's link card, and partner portal login.</li>
 			<li><strong>Leads</strong> — on-site lead-capture submissions, for partners set to that mode.</li>
 			<li><strong>Click Log</strong> — raw click history per code.</li>
 			<li><strong>Reports</strong> — commission summary, partner outcomes, and agent/referrer performance ranked by earnings.</li>

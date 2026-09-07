@@ -10,6 +10,34 @@ class GAS_DB {
 		return $wpdb->prefix . 'gas_' . $name;
 	}
 
+	/**
+	 * The fixed, curated list of partner capability tags an admin can tick
+	 * on the Partners screen — rendered as small icons (WordPress core
+	 * Dashicons, so no new asset dependency) on each of an affiliate's
+	 * link cards. Deliberately spans both current verticals (solar +
+	 * home-building) rather than forcing generic-sounding wording, since
+	 * most partners will only ever have a handful ticked. Approved list,
+	 * Cary 2026-09-07 — see SWAP-with-HOMES.md. "Appointment required" and
+	 * coverage/location are intentionally NOT here: they're already their
+	 * own structured fields (`requires_appointment`, `state`) and are
+	 * rendered from those directly instead of being duplicated as a tag.
+	 */
+	public static function capability_tags() {
+		return array(
+			'ships_nationwide'          => array( 'label' => 'Ships nationwide', 'icon' => 'dashicons-admin-site-alt3' ),
+			'full_service'              => array( 'label' => 'Full-service / turnkey (vs. plans/kit only)', 'icon' => 'dashicons-hammer' ),
+			'custom_bespoke'            => array( 'label' => 'Custom / bespoke builds', 'icon' => 'dashicons-art' ),
+			'adu_permanent_foundation'  => array( 'label' => 'ADU / permanent-foundation specialist', 'icon' => 'dashicons-admin-home' ),
+			'solar_ready_off_grid'      => array( 'label' => 'Solar-ready / off-grid capable', 'icon' => 'dashicons-lightbulb' ),
+			'financing_available'       => array( 'label' => 'Financing available', 'icon' => 'dashicons-money-alt' ),
+			'battery_storage_available' => array( 'label' => 'Battery storage available', 'icon' => 'dashicons-database' ),
+			'ev_charger_installation'   => array( 'label' => 'EV charger installation', 'icon' => 'dashicons-car' ),
+			'roof_replacement_bundled'  => array( 'label' => 'Roof replacement bundled', 'icon' => 'dashicons-admin-multisite' ),
+			'free_energy_audit'         => array( 'label' => 'Free energy audit / site assessment', 'icon' => 'dashicons-search' ),
+			'warranty_guarantee'        => array( 'label' => 'Warranty / guarantee available', 'icon' => 'dashicons-shield' ),
+		);
+	}
+
 	public static function activate() {
 		self::create_tables();
 		GAS_Roles::add_role();
@@ -79,6 +107,10 @@ class GAS_DB {
 			outreach_status VARCHAR(20) NOT NULL DEFAULT 'approved',
 			research_batch_id VARCHAR(40) NULL,
 			typical_sale_amount DECIMAL(10,2) NULL,
+			open_to_self_signup TINYINT(1) NOT NULL DEFAULT 1,
+			blurb VARCHAR(500) NULL,
+			spotlight_url VARCHAR(500) NULL,
+			capability_tags VARCHAR(500) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),

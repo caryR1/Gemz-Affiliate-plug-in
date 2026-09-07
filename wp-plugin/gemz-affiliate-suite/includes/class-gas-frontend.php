@@ -21,6 +21,7 @@ class GAS_Frontend {
 		add_action( 'admin_post_nopriv_gas_affiliate_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_gas_change_password', array( __CLASS__, 'handle_change_password' ) );
 		add_action( 'admin_post_gas_save_payment_info', array( __CLASS__, 'handle_save_payment_info' ) );
+		add_action( 'admin_post_gas_get_partner_link', array( __CLASS__, 'handle_get_partner_link' ) );
 	}
 
 	/**
@@ -48,6 +49,12 @@ class GAS_Frontend {
 			global $post;
 			if ( self::post_has_shortcode( $post, 'gas_affiliate_signup' ) || self::post_has_shortcode( $post, 'gas_affiliate_dashboard' ) || self::post_has_shortcode( $post, 'gas_signup_or_refer' ) ) {
 				wp_enqueue_style( 'gas-frontend', plugins_url( 'assets/gas-frontend.css', GAS_PLUGIN_FILE ), array(), GAS_VERSION );
+			}
+			// Dashicons is normally admin-only — the dashboard's per-link
+			// capability icons (see render_capability_icons()) reuse it on
+			// the front end instead of adding a new icon-font dependency.
+			if ( self::post_has_shortcode( $post, 'gas_affiliate_dashboard' ) ) {
+				wp_enqueue_style( 'dashicons' );
 			}
 		}
 	}
@@ -225,8 +232,6 @@ class GAS_Frontend {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}
 
-		$code = self::generate_unique_code( $name );
-
 		global $wpdb;
 		$site_name       = GAS_Settings::get( 'site_name' );
 		$sponsor_code_id = self::get_sponsor_code_id();
@@ -234,34 +239,23 @@ class GAS_Frontend {
 		// An affiliate never chooses (or sees) which fulfillment partner
 		// handles their referrals, on any project this plugin runs — an
 		// admin always matches them to a partner afterward, from the
-		// Codes screen. No exceptions.
-		$wpdb->insert(
-			GAS_DB::table( 'codes' ),
-			array(
-				'code'               => $code,
-				'sub_affiliate_name' => $name,
-				'partner_id'         => 0,
-				'wp_user_id'         => $user_id,
-				'sponsor_code_id'    => $sponsor_code_id,
-				'status'             => 'active',
-				'active'             => 1,
-				'notes'              => "Self-signup, live immediately. No partner assigned yet — match them to a partner from {$site_name} > Codes.",
-				'created_at'         => current_time( 'mysql' ),
-			)
-		);
+		// Codes screen, UNLESS that partner is marked "Open to self-signup"
+		// (see create_codes_for_new_affiliate()), in which case they're
+		// pre-matched automatically at signup instead.
+		$created = self::create_codes_for_new_affiliate( $user_id, $name, $sponsor_code_id );
 
 		GAS_Contacts::upsert( $email, 'affiliate', array(
 			'name'          => $name,
 			'phone'         => $phone,
 			'source'        => 'signup',
 			'related_table' => 'codes',
-			'related_id'    => $wpdb->insert_id,
+			'related_id'    => $created[0]['code']->id,
 		) );
 
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New affiliate joined: ' . $name,
-			"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nCode: {$code}\n\nMatch them to a partner in wp-admin under {$site_name} > Codes."
+			self::new_affiliate_admin_email_body( $name, $email, $phone, $created, $site_name )
 		);
 
 		// One-time attribution: clear the sponsor cookie now that it's been
@@ -373,22 +367,88 @@ class GAS_Frontend {
 		if ( $existing ) {
 			return $existing;
 		}
-		$code = self::generate_unique_code( $name );
+		return self::insert_code_row( $user_id, $name, 0, $sponsor_code_id, 'Self-signup, live immediately. No partner assigned yet.' );
+	}
+
+	private static function insert_code_row( $user_id, $name, $partner_id, $sponsor_code_id, $notes ) {
+		global $wpdb;
+		$codes_table = GAS_DB::table( 'codes' );
+		$code        = self::generate_unique_code( $name );
 		$wpdb->insert(
 			$codes_table,
 			array(
 				'code'               => $code,
 				'sub_affiliate_name' => $name,
-				'partner_id'         => 0,
+				'partner_id'         => $partner_id,
 				'wp_user_id'         => $user_id,
 				'sponsor_code_id'    => $sponsor_code_id,
 				'status'             => 'active',
 				'active'             => 1,
-				'notes'              => 'Self-signup, live immediately. No partner assigned yet.',
+				'notes'              => $notes,
 				'created_at'         => current_time( 'mysql' ),
 			)
 		);
 		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $wpdb->insert_id ) );
+	}
+
+	/**
+	 * A brand-new self-signup affiliate used to get exactly one code with
+	 * partner_id=0, unmatched until an admin manually paired it from the
+	 * Codes screen — unnecessary friction for the common case (Cary,
+	 * 2026-09-07). Now: one pre-matched code per partner that's both
+	 * `outreach_status = 'approved'` AND has opted in via the new
+	 * `open_to_self_signup` checkbox on the Partners screen, so a new
+	 * affiliate has a working link immediately for every such partner.
+	 * Falls back to the old single-unmatched-code behavior when no partner
+	 * is currently open, so an affiliate is never left with zero links.
+	 * Manually-added Codes-screen entries (real-world/offline referrals)
+	 * are untouched by this — it only changes what self-signup creates.
+	 *
+	 * @return array List of ['code' => stdClass row, 'partner_name' => string|null].
+	 */
+	private static function create_codes_for_new_affiliate( $user_id, $name, $sponsor_code_id ) {
+		global $wpdb;
+		$partners_table = GAS_DB::table( 'partners' );
+		$open_partners  = $wpdb->get_results( "SELECT id, name FROM {$partners_table} WHERE outreach_status = 'approved' AND open_to_self_signup = 1" );
+
+		if ( ! $open_partners ) {
+			return array( array(
+				'code'         => self::insert_code_row( $user_id, $name, 0, $sponsor_code_id, 'Self-signup, live immediately. No partner assigned yet.' ),
+				'partner_name' => null,
+			) );
+		}
+
+		$result = array();
+		foreach ( $open_partners as $p ) {
+			$result[] = array(
+				'code'         => self::insert_code_row( $user_id, $name, (int) $p->id, $sponsor_code_id, 'Self-signup, auto-matched: this partner is marked "Open to self-signup".' ),
+				'partner_name' => $p->name,
+			);
+		}
+		return $result;
+	}
+
+	/**
+	 * The "New affiliate joined" admin email used to always say "no partner
+	 * assigned yet, match them manually" — now conditional on whether any
+	 * partner was actually open to self-signup at signup time, so the email
+	 * doesn't ask Cary to do a manual step that's already done.
+	 */
+	private static function new_affiliate_admin_email_body( $name, $email, $phone, array $created, $site_name, $extra = '' ) {
+		$matched_names = array_values( array_filter( wp_list_pluck( $created, 'partner_name' ) ) );
+		$codes_summary = implode( ', ', array_map( function( $c ) { return $c['code']->code; }, $created ) );
+
+		$body  = "A new affiliate signed up and is live immediately.\n\n";
+		$body .= "Name: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\n";
+		$body .= 1 === count( $created ) ? "Code: {$codes_summary}\n" : "Codes: {$codes_summary}\n";
+
+		if ( $matched_names ) {
+			$body .= 'Automatically matched to: ' . implode( ', ', $matched_names ) . ' (marked "Open to self-signup" — no manual step needed for ' . ( 1 === count( $matched_names ) ? 'this partner' : 'these partners' ) . ").\n";
+		} else {
+			$body .= "No partner is currently marked \"Open to self-signup\", so this affiliate has one unmatched link — match them to a partner in wp-admin under {$site_name} > Codes.\n";
+		}
+
+		return $body . $extra;
 	}
 
 	private static function generate_verify_token( $user_id ) {
@@ -634,7 +694,9 @@ class GAS_Frontend {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}
 
-		$code_row = self::get_or_create_code_for_user( $user_id, $name, $sponsor_code_id );
+		$created  = self::create_codes_for_new_affiliate( $user_id, $name, $sponsor_code_id );
+		$code_row = $created[0]['code'];
+		$any_matched = (bool) array_filter( wp_list_pluck( $created, 'partner_name' ) );
 
 		GAS_Contacts::upsert( $email, 'affiliate', array(
 			'name'          => $name,
@@ -650,17 +712,22 @@ class GAS_Frontend {
 			$referral_note = "\n\nYou also referred {$friend_name} — they'll get their own note from us, and you'll see this in your dashboard once a partner is matched.";
 		}
 
+		$partner_line = $any_matched
+			? "\n\nYour account is already matched to a partner, so your link is live and ready to share right now — see your dashboard for the details."
+			: "\n\nNo partner is assigned to your account yet; we'll match you to one shortly and you'll see it reflected on your dashboard.";
+
 		$verify_link = self::generate_verify_token( $user_id );
 		wp_mail(
 			$email,
 			"Welcome to {$site_name}",
-			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nNo partner is assigned to your account yet; we'll match you to one shortly and you'll see it reflected on your dashboard."
+			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}{$partner_line}"
 		);
 
+		$admin_extra = $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) . " (match the referral under Leads)\n" : '';
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New affiliate joined: ' . $name,
-			"A new affiliate signed up and is live immediately, but has no partner assigned yet.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nCode: {$code_row->code}" . ( $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) : '' ) . "\n\nMatch them to a partner in wp-admin under {$site_name} > Codes" . ( $is_referral ? ' (and match the referral under Leads)' : '' ) . '.'
+			self::new_affiliate_admin_email_body( $name, $email, $phone, $created, $site_name, $admin_extra )
 		);
 
 		if ( $sponsor_code_id ) {
@@ -857,8 +924,9 @@ class GAS_Frontend {
 
 		if ( isset( $_GET['gas_notice'] ) ) {
 			$notices = array(
-				'password_updated' => 'Password updated.',
-				'payment_updated'  => 'Payment information saved.',
+				'password_updated'    => 'Password updated.',
+				'payment_updated'     => 'Payment information saved.',
+				'partner_link_added'  => 'Your new link is ready below.',
 			);
 			$key = sanitize_text_field( wp_unslash( $_GET['gas_notice'] ) );
 			if ( isset( $notices[ $key ] ) ) {
@@ -889,7 +957,26 @@ class GAS_Frontend {
 		self::render_payment_section( $user_id, $is_previewing );
 
 		echo '</div>';
-
+		?>
+		<script>
+			// Tap-to-reveal for the blurb/capability popovers: CSS already
+			// shows .gas-popover on :hover/:focus (mouse + keyboard), this
+			// just adds a plain tap on touch devices via a toggled class.
+			(function() {
+				document.querySelectorAll('.gas-popover-icon').forEach(function(el) {
+					el.addEventListener('click', function(e) {
+						e.stopPropagation();
+						var wasOpen = el.classList.contains('gas-open');
+						document.querySelectorAll('.gas-popover-icon.gas-open').forEach(function(o) { o.classList.remove('gas-open'); });
+						if (!wasOpen) { el.classList.add('gas-open'); }
+					});
+				});
+				document.addEventListener('click', function() {
+					document.querySelectorAll('.gas-popover-icon.gas-open').forEach(function(o) { o.classList.remove('gas-open'); });
+				});
+			})();
+		</script>
+		<?php
 		return ob_get_clean();
 	}
 
@@ -929,7 +1016,10 @@ class GAS_Frontend {
 
 		$codes = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT c.*, p.name AS partner_name FROM {$codes_table} c
+				"SELECT c.*, p.name AS partner_name, p.state AS partner_state, p.blurb AS partner_blurb,
+					p.spotlight_url AS partner_spotlight_url, p.capability_tags AS partner_capability_tags,
+					p.requires_appointment AS partner_requires_appointment
+				 FROM {$codes_table} c
 				 LEFT JOIN {$partners_table} p ON p.id = c.partner_id
 				 WHERE c.wp_user_id = %d ORDER BY c.created_at ASC",
 				$user_id
@@ -939,36 +1029,135 @@ class GAS_Frontend {
 		echo '<h2>Your links</h2>';
 		if ( ! $codes ) {
 			echo '<p>No referral links yet.</p>';
+		} else {
+			$totals = GAS_Payouts::totals_for_affiliate( $user_id );
+
+			foreach ( $codes as $c ) {
+				$link         = home_url( '/go/' . rawurlencode( $c->code ) . '/' );
+				$recruit_link = home_url( '/join/' . rawurlencode( $c->code ) . '/' );
+				$click_count  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE code_id = %d", $c->id ) );
+
+				echo '<div class="gas-code-card">';
+				echo '<p><strong>' . esc_html( $c->partner_name ?: '(unassigned)' ) . '</strong>';
+				if ( $c->partner_name && $c->partner_blurb ) {
+					echo ' ' . self::render_popover_icon( 'dashicons-info-outline', 'About ' . $c->partner_name, $c->partner_blurb, 'gas-info-toggle' );
+				}
+				echo ' &mdash; status: ' . esc_html( $c->status ) . '</p>';
+
+				if ( $c->partner_name && $c->partner_state ) {
+					$states = implode( ', ', array_map( 'trim', explode( ',', $c->partner_state ) ) );
+					echo '<p class="gas-fineprint">Serves: ' . esc_html( $states ) . '</p>';
+				}
+
+				if ( $c->partner_name ) {
+					$icons = self::render_capability_icons( $c->partner_capability_tags, $c->partner_requires_appointment );
+					if ( $icons ) {
+						echo '<p class="gas-capability-icons">' . $icons . '</p>';
+					}
+				}
+
+				if ( $c->partner_spotlight_url ) {
+					echo '<p><a href="' . esc_url( $c->partner_spotlight_url ) . '">See full spotlight &rarr;</a></p>';
+				}
+
+				echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
+				echo '<p>Invite others to become an affiliate too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
+				echo '<div class="gas-stat-row">';
+				echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $click_count ) . '</span><span class="gas-stat-label">Clicks</span></div>';
+				echo '</div>';
+				echo '</div>';
+			}
+
+			echo '<div class="gas-stat-row">';
+			echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['unpaid'], 2 ) ) . '</span><span class="gas-stat-label">Unpaid balance</span></div>';
+			echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['paid'], 2 ) ) . '</span><span class="gas-stat-label">Paid to date</span></div>';
+			echo '</div>';
+
+			if ( $totals['override_unpaid'] > 0 || $totals['override_paid'] > 0 ) {
+				echo '<p class="gas-fineprint">Of which $' . esc_html( number_format( $totals['override_unpaid'] + $totals['override_paid'], 2 ) ) . ' is from people you\'ve recruited.</p>';
+			}
+		}
+
+		self::render_missing_partner_links( $user_id, $codes ? wp_list_pluck( $codes, 'partner_id' ) : array() );
+
+		if ( $codes ) {
+			self::render_pending_and_finalized_section( $user_id );
+		}
+	}
+
+	/**
+	 * Self-serve backfill for the common case Part 1's auto-assignment
+	 * doesn't cover: an affiliate who signed up before a partner existed,
+	 * or before that partner turned "Open to self-signup" on. Rather than
+	 * waiting on an admin to notice and manually match them (the old-and-
+	 * still-available path via the Codes screen), they can grab the
+	 * missing link themselves the moment they notice it's gone. Generates
+	 * exactly one new code, same as signup-time generation would have.
+	 */
+	private static function render_missing_partner_links( $user_id, $existing_partner_ids ) {
+		global $wpdb;
+		$partners_table = GAS_DB::table( 'partners' );
+		$open_partners  = $wpdb->get_results( "SELECT id, name FROM {$partners_table} WHERE outreach_status = 'approved' AND open_to_self_signup = 1" );
+
+		$existing_partner_ids = array_map( 'intval', $existing_partner_ids );
+		$missing = array_filter( $open_partners, function( $p ) use ( $existing_partner_ids ) {
+			return ! in_array( (int) $p->id, $existing_partner_ids, true );
+		} );
+
+		if ( ! $missing ) {
 			return;
 		}
 
-		$totals = GAS_Payouts::totals_for_affiliate( $user_id );
-
-		foreach ( $codes as $c ) {
-			$link         = home_url( '/go/' . rawurlencode( $c->code ) . '/' );
-			$recruit_link = home_url( '/join/' . rawurlencode( $c->code ) . '/' );
-			$click_count  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE code_id = %d", $c->id ) );
-
-			echo '<div class="gas-code-card">';
-			echo '<p><strong>' . esc_html( $c->partner_name ?: '(unassigned)' ) . '</strong> &mdash; status: ' . esc_html( $c->status ) . '</p>';
-			echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
-			echo '<p>Invite others to become an affiliate too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
-			echo '<div class="gas-stat-row">';
-			echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $click_count ) . '</span><span class="gas-stat-label">Clicks</span></div>';
-			echo '</div>';
-			echo '</div>';
+		echo '<div class="gas-notice">';
+		echo '<p>' . ( count( $missing ) === 1 ? 'There\'s a partner' : 'There are partners' ) . ' you don\'t have a link for yet:</p>';
+		foreach ( $missing as $p ) {
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin:0 0.5em 0.5em 0;">';
+			wp_nonce_field( 'gas_get_partner_link_' . $p->id );
+			echo '<input type="hidden" name="action" value="gas_get_partner_link">';
+			echo '<input type="hidden" name="partner_id" value="' . esc_attr( $p->id ) . '">';
+			echo '<button type="submit" class="gas-button">Get a link for ' . esc_html( $p->name ) . '</button>';
+			echo '</form>';
 		}
-
-		echo '<div class="gas-stat-row">';
-		echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['unpaid'], 2 ) ) . '</span><span class="gas-stat-label">Unpaid balance</span></div>';
-		echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['paid'], 2 ) ) . '</span><span class="gas-stat-label">Paid to date</span></div>';
 		echo '</div>';
+	}
 
-		if ( $totals['override_unpaid'] > 0 || $totals['override_paid'] > 0 ) {
-			echo '<p class="gas-fineprint">Of which $' . esc_html( number_format( $totals['override_unpaid'] + $totals['override_paid'], 2 ) ) . ' is from people you\'ve recruited.</p>';
+	public static function handle_get_partner_link() {
+		if ( ! is_user_logged_in() || ! GAS_Roles::is_affiliate() ) {
+			wp_die( 'Please log in as an affiliate first.' );
 		}
 
-		self::render_pending_and_finalized_section( $user_id );
+		$partner_id = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
+		check_admin_referer( 'gas_get_partner_link_' . $partner_id );
+
+		global $wpdb;
+		$partners_table = GAS_DB::table( 'partners' );
+		$partner = $wpdb->get_row( $wpdb->prepare(
+			"SELECT * FROM {$partners_table} WHERE id = %d AND outreach_status = 'approved' AND open_to_self_signup = 1",
+			$partner_id
+		) );
+		if ( ! $partner ) {
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( 'That partner is no longer available for self-signup.' ), self::dashboard_url() ) );
+			exit;
+		}
+
+		$user_id     = get_current_user_id();
+		$user        = wp_get_current_user();
+		$codes_table = GAS_DB::table( 'codes' );
+
+		// Don't create a second code for the same partner if one already
+		// exists (e.g. a double-submit) — same "check first" pattern as
+		// get_or_create_code_for_user().
+		$already = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$codes_table} WHERE wp_user_id = %d AND partner_id = %d", $user_id, $partner_id ) );
+		if ( ! $already ) {
+			// Reuse whichever sponsor_code_id this affiliate's other codes
+			// already carry, if any, so a link generated after the fact
+			// stays attributed to the same sponsor chain as their others.
+			$sponsor_code_id = $wpdb->get_var( $wpdb->prepare( "SELECT sponsor_code_id FROM {$codes_table} WHERE wp_user_id = %d AND sponsor_code_id IS NOT NULL LIMIT 1", $user_id ) );
+			self::insert_code_row( $user_id, $user->display_name, (int) $partner->id, $sponsor_code_id ?: null, 'Self-serve: affiliate requested this partner\'s link from their dashboard.' );
+		}
+
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'partner_link_added', self::dashboard_url() ) );
+		exit;
 	}
 
 	/**
@@ -1052,6 +1241,43 @@ class GAS_Frontend {
 			}
 			echo '</tbody></table>';
 		}
+	}
+
+	/**
+	 * One tap/click-to-reveal icon with a hidden text popover — shared by
+	 * the partner blurb icon and each capability tag icon so both use the
+	 * same interaction (no separate persistent legend needed, per spec).
+	 * Works via CSS :hover/:focus for mouse and keyboard, plus the small
+	 * script in render_dashboard() for a plain tap on touch devices.
+	 */
+	private static function render_popover_icon( $dashicon, $aria_label, $popover_text, $extra_class = '' ) {
+		return '<span class="gas-popover-icon dashicons ' . esc_attr( $dashicon ) . ( $extra_class ? ' ' . esc_attr( $extra_class ) : '' ) . '" tabindex="0" role="button" aria-label="' . esc_attr( $aria_label ) . '"><span class="gas-popover">' . esc_html( $popover_text ) . '</span></span>';
+	}
+
+	/**
+	 * Renders one small icon per ticked capability tag on this partner
+	 * (fixed, curated list — see GAS_DB::capability_tags()), plus an
+	 * "Appointment required" icon derived from the existing
+	 * `requires_appointment` field rather than duplicating it as a
+	 * manually-ticked tag. Unknown/stale tag slugs (e.g. left over after
+	 * the approved list changes) are silently skipped rather than shown
+	 * as a broken icon.
+	 */
+	private static function render_capability_icons( $capability_tags_csv, $requires_appointment ) {
+		$all_tags = GAS_DB::capability_tags();
+		$selected = $capability_tags_csv ? array_map( 'trim', explode( ',', $capability_tags_csv ) ) : array();
+
+		$html = '';
+		foreach ( $selected as $slug ) {
+			if ( ! isset( $all_tags[ $slug ] ) ) {
+				continue;
+			}
+			$html .= self::render_popover_icon( $all_tags[ $slug ]['icon'], $all_tags[ $slug ]['label'], $all_tags[ $slug ]['label'], 'gas-capability-icon' );
+		}
+		if ( $requires_appointment ) {
+			$html .= self::render_popover_icon( 'dashicons-calendar-alt', 'Appointment required', 'Appointment required', 'gas-capability-icon' );
+		}
+		return $html;
 	}
 
 	private static function render_downline_row( $code, $level ) {

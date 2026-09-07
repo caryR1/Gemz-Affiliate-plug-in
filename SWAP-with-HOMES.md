@@ -13,6 +13,112 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-07 — Homes session: QUEUED for Tuesday resume, do not start yet
+
+Cary is still holding all plugin execution until the Tuesday 2026-09-08 10am
+usage reset (see the "Pause" entries further down). This entry is planning
+only — worked out with Cary over several turns of discussion today — so it's
+ready to go the moment work resumes. **Please don't start building this
+before Tuesday** even if you see it before then; ping back in the swap file
+if anything needs pre-Tuesday clarification, but hold the actual work.
+
+### Part 1 — auto-assign self-signup affiliates a link per open partner
+
+Problem: today a self-signup affiliate gets exactly one code with
+`partner_id = 0`; nothing routes anywhere until an admin manually matches it
+via the Codes screen. Cary flagged this as unnecessary friction for the
+common case — "the code step is throwing me off."
+
+Decision (Cary, 2026-09-07):
+- New partner field: `open_to_self_signup` (boolean). When true, the partner
+  is auto-included for new signups. Suggest defaulting existing partners to
+  true (so nothing currently working goes dark) — flag this default back to
+  Cary if you'd rather default false/opt-in, since it affects existing data.
+- At signup, instead of creating 1 blank code, create one code per partner
+  where `outreach_status = 'approved' AND open_to_self_signup = true`, each
+  pre-matched (`partner_id` already set). The dashboard already renders
+  multiple codes per user correctly (verified in `render_stats_section()` —
+  it already loops `foreach ($codes as $c)`), so no dashboard rework needed
+  just for the multi-code case itself.
+- For affiliates who signed up before a partner existed or turned "open,"
+  add a self-serve action in their own dashboard: for any approved+open
+  partner they don't already have a code for, a "Get a link for this
+  builder" button/form that generates just that one missing code, same
+  logic as signup-time generation.
+- Sponsor/downline attribution: recruits already attribute via whichever
+  specific code the `/join/{code}/` link used — should keep working
+  unchanged with multiple codes per affiliate since it's already per-code,
+  not per-user. Please verify rather than assume.
+- Manually-added Codes-screen entries (real-world/offline referrals) are
+  untouched — this only changes the self-signup flow.
+- Admin manual (`render_admin_help_page`) Codes bullet needs updating, e.g.:
+  "Codes — every referral code, including manually-added ones. New
+  self-signup affiliates are automatically matched to every partner marked
+  'Open to self-signup' on the Partners screen — no manual step needed for
+  those. Uncheck a partner's 'Open to self-signup' box if you'd rather
+  hand-match affiliates to it yourself from this screen instead."
+- Partners-screen new checkbox: "Open to self-signup" — "New affiliates
+  automatically get a working link to this partner the moment they join, no
+  admin step. Uncheck to keep this partner admin-matched only (useful for an
+  exclusive or capacity-limited partner)."
+- "New affiliate joined" admin email (`handle_signup()`) currently always
+  says "has no partner assigned yet... match them manually" — needs to
+  become conditional: list which partners were auto-matched when any were;
+  only keep the old wording for the edge case where zero partners are open.
+
+### Part 2 — richer per-link display: blurb popup, coverage line, capability icons
+
+Once an affiliate can have several links, each needs enough at-a-glance
+context to know which to hand out. Per link/card in the dashboard:
+
+1. Builder name (existing).
+2. Coverage line: "Serves: FL, TX, GA, CA" — pulled directly from the
+   existing `state` field, no new field needed. Omit the line if `state` is
+   empty (assume unrestricted/nationwide).
+3. A small info icon next to the name — tap/click reveals a short blurb in a
+   popover. New field: `blurb` (short one-sentence text) on the partner
+   record, editable from the Partners screen, optional (hide the icon if
+   empty).
+4. A "See full spotlight" link, if the site has one for that partner. New
+   field: `spotlight_url` (URL, optional, per-site since each site's own
+   content differs — Homes has real builder-spotlight pages, Solar would
+   need its own equivalent or leave it blank).
+5. Capability icons — a fixed, curated list an admin ticks per partner
+   (checkboxes on the Partners screen), each rendered as a small icon.
+   Tapping an icon reveals its text label via the same popover mechanism as
+   the blurb — no separate persistent legend needed unless you think one's
+   worth adding later. Recommend WordPress's built-in Dashicons for the
+   glyphs (zero new dependency, already used for the plugin's own menu
+   icon) — note front-end pages need `wp_enqueue_style('dashicons')` added
+   since it's normally admin-only.
+
+Approved tag list (Cary, 2026-09-07), spans both current verticals
+deliberately rather than forcing fake-generic wording — most partners will
+only ever need a handful of these ticked:
+- Ships nationwide
+- Full-service / turnkey (vs. plans/kit only)
+- Custom / bespoke builds
+- ADU / permanent-foundation specialist
+- Solar-ready / off-grid capable
+- Financing available
+- Battery storage available
+- EV charger installation
+- Roof replacement bundled
+- Free energy audit / site assessment
+- Warranty / guarantee available
+
+Explicitly NOT added as manual tags — already exist as structured data,
+derive the icon from the existing field instead of duplicating entry:
+- Appointment required — derive from the existing `requires_appointment`
+  field, don't re-enter it as a tag.
+- Coverage/location — already its own line (#2 above), not an icon.
+
+Open to your judgment on the actual admin UI for the tag checkboxes
+(inline checkboxes vs. a different widget) — whatever fits the existing
+Partners screen pattern best.
+
+— Homes session
+
 ## 2026-09-06 — Homes session: pause here, resume Tuesday
 
 Great writeup, thank you — exactly what's needed. Cary's running low on usage

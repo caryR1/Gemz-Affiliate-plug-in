@@ -13,6 +13,61 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-07 — Solar Referral session: Part 1 + Part 2 shipped
+
+Both built, deployed to Solar, smoke-tested live, committed and pushed
+(`066eff0`). `GAS_VERSION` 2.5.0, `GAS_DB_VERSION` 13 (new partner columns:
+`open_to_self_signup` default 1, `blurb`, `spotlight_url`,
+`capability_tags` — auto-migrates via the existing `maybe_upgrade()` hook,
+no manual DB step needed on your side either).
+
+**Part 1**: `create_codes_for_new_affiliate()` now creates one pre-matched
+code per `outreach_status = 'approved' AND open_to_self_signup = 1`
+partner at signup (both `handle_signup()` and the merged
+`handle_signup_or_refer()`'s new-account branch), falling back to the old
+single-unmatched-code behavior when nothing's open. Sponsor/downline
+attribution verified unchanged — `render_downline_section()` already
+checks `sponsor_code_id IN (all of my code ids)`, so multiple codes per
+affiliate doesn't break it. Existing affiliates missing a link to a
+partner that opened up later get a "Get a link for..." button on their
+own dashboard (`handle_get_partner_link()`) — no admin step needed there
+either. "New affiliate joined" admin email and the customer-facing welcome
+email are both now conditional on whether anything actually auto-matched.
+
+**Part 2**: link cards on the affiliate dashboard now show a "Serves: ..."
+line (from the existing `state` field), a tap-to-reveal blurb popover, a
+"See full spotlight" link, and capability icons from the approved 11-tag
+list — all via new checkboxes/fields on the Partners screen edit form.
+Icons use core Dashicons (enqueued only on the dashboard page) with a
+tap-to-reveal label, no persistent legend, per spec.
+
+**Bonus fixes while in there**:
+- The Partners screen's State field was capped at `maxlength="2"` even
+  though the DB and coverage-matching logic have supported comma-separated
+  multi-state codes since the Go Solar Power seeding — widened the input,
+  no back-end change needed.
+- Extended `class-gas-rest.php`'s `create_partner`/`update_partner` with
+  all 4 new fields, learning from the `conversion_noun` miss earlier this
+  project — you can set/read `open_to_self_signup`, `blurb`,
+  `spotlight_url`, `capability_tags` via `gas/v1/partners` right away, no
+  wp-admin needed.
+
+**One thing to flag, not a plugin issue**: while deploying I misread my
+own FTP credentials note and uploaded once to a doubled
+`public_html/public_html/...` phantom path before catching it (verified
+via a REST round-trip that came back with the old schema) and redeploying
+to the real path. Caught it before you'd have seen anything wrong; the
+real site was never actually broken, just briefly not-yet-updated. Left a
+handful of orphaned files in that phantom `public_html/` folder at Solar's
+FTP root — harmless (WordPress never serves from there) but not yet
+cleaned up; low priority, flagging so it doesn't look mysterious if either
+of us notices it later.
+
+Nothing needed from you to use this — same deploy-then-verify pattern as
+always if/when you pull it onto Home.
+
+— Solar Referral session
+
 ## 2026-09-07 — Homes session: HOLD LIFTED, go ahead now
 
 Cary just said to go ahead now rather than wait for Tuesday — the "don't

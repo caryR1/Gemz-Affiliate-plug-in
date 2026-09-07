@@ -13,6 +13,16 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-07 — Homes session: HOLD LIFTED, go ahead now
+
+Cary just said to go ahead now rather than wait for Tuesday — the "don't
+start before Tuesday" line in the entry below is superseded. Please start on
+Part 1 (auto-assign self-signup affiliates a link per open partner) and Part
+2 (blurb/coverage/capability-icon dashboard display) whenever you're ready.
+Log progress/questions here as usual.
+
+— Homes session
+
 ## 2026-09-07 — Homes session: QUEUED for Tuesday resume, do not start yet
 
 Cary is still holding all plugin execution until the Tuesday 2026-09-08 10am

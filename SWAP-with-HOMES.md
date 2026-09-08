@@ -13,6 +13,106 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Homes session: tax compliance, min payout, fraud filtering, marketing assets
+
+Great news on Part 1 (campaigns) — clean cutover, the two real bugs caught
+by actually testing rather than reading the diff (REST partner-save missing
+`ensure_default_for_partner()`, payout entry silently defaulting to
+`partner_id` 0) are exactly the kind of thing worth the extra verification
+step, appreciated. On to the next batch — five items, roughly in priority
+order:
+
+### 1. Tax compliance (highest priority — real IRS exposure, not a nice-to-have)
+
+PayPal/Wise payout automation already exists with no tax-info collection at
+all. Scope, deliberately proportionate rather than building full e-filing:
+- **W-9 (US) / W-8BEN (non-US) collection** as a form on the affiliate
+  dashboard, required before any payout crosses a threshold (standard is
+  $600/year, but simplest/safest is requiring it before *any* payout goes
+  out, not waiting until the threshold — avoids a partial-year tracking
+  edge case). Store submitted tax ID data restricted the same way banking
+  info already is (affiliate's own dashboard writes it, nothing admin-facing
+  can read the raw value — same pattern as `class-gas-payouts.php` already
+  uses for payment info).
+- **Track cumulative paid-per-calendar-year per affiliate.** Block/flag a
+  payout attempt (both the manual Calculator and the PayPal/Wise batch
+  runs) for anyone missing tax info once they'd cross $600 for the year.
+- **Admin CSV export of all payouts by affiliate/year** — accountant-ready,
+  not an IRS e-filer itself. Actual 1099-NEC filing should go through
+  Cary's accountant or a real e-filing service (Track1099/Tax1099 etc.) —
+  building direct IRS e-file integration is real scope beyond what's
+  reasonable to spec here; flag if you disagree.
+
+### 2. Minimum payout threshold: $50
+
+Cary: "Almost nothing we will do will trigger less than that." PayPal/Wise
+batch payout runs should skip anyone with an unpaid balance under $50 —
+their balance just carries forward untouched rather than triggering a
+payout (and, per item 1, avoids a payout so small the transfer fee eats a
+meaningful chunk of it).
+
+### 3. Fraud filtering — better than an email alert
+
+Cary asked directly whether we can do better than "email admin when
+something looks off," confirmed yes if so. Concrete, buildable-without-a-
+paid-API options:
+- **Honeypot fields exist on some forms already** (`gas_hp` on signup/lead
+  forms) — audit for consistency across every public form, not just some.
+- **Rate-limit by IP**: cap signups per IP per day, cap clicks logged per
+  IP per code beyond the existing per-day-per-visitor dedup (a burst from
+  one IP hammering one code is a real signal, not caught today).
+- **Basic bot User-Agent filtering** on click logging — reject known
+  crawler/bot UA strings rather than counting them as real clicks.
+- **Disposable-email-domain check** on affiliate signup (a small maintained
+  blocklist, no paid API needed) — flag or reject rather than silently
+  accept.
+None of these need a third-party fraud-detection service; all four are
+real, proportionate improvements over what exists today. IP-intelligence
+(datacenter/VPN detection) would need a paid API — flagging as a possible
+future item, not in this pass.
+
+### 4. Marketing collateral + alternate landing pages
+
+Cary has a couple of images ready to use and wants affiliates able to
+access real marketing material from their dashboard, plus the option of
+alternate landing pages per campaign. The second half of this **already has
+a home** — `gas_campaign_variants` from yesterday's Part 1 is exactly the
+right place for "alternate landing page" to live (a variant pointing at a
+different URL), so this may be smaller scope than it first sounds, mostly
+a UI surface rather than new data model. For the images themselves: a
+simple media-attachment-per-partner-or-campaign facility (reuse WP's native
+media library rather than building a custom uploader) that the affiliate
+dashboard surfaces as downloadable assets. Cary will supply the actual
+images once the facility exists.
+
+### 5. Compliance notice on customer-facing email — confirmed missing, please add
+
+Checked GRC's actual `default_templates()` directly (Cary suspected this
+existed in GRC already — it doesn't): none of the customer-facing templates
+(`appointment_booked`, `appointment_changed`, `customer_cashback_ready`,
+`customer_payout_sent`) have any compliance footer at all — no business
+address, no "why you're receiving this," nothing. When porting notifications
+(swap file entry above, part 3 of the original GRC-port spec), add a
+standard footer to every customer-facing template: business
+name/address, a one-line reason-for-contact note, and a link to program
+terms (ties to item below). Affiliate-facing templates should get the same
+treatment — same gap likely applies there too, worth checking rather than
+assuming it's fine.
+
+### Also: draft affiliate agreement ready for review
+
+Wrote a generic starting-point affiliate agreement — `DRAFT-affiliate-agreement.md`
+at this repo's root. Explicitly not legal advice, has placeholder fields
+Cary needs to fill in, and needs real legal review before being treated as
+binding — flagged clearly in the doc itself. Once Cary's had a pass at it,
+this needs an acceptance checkbox + timestamp recorded at affiliate signup
+(ties into item 1's "collect real info before paying anyone" theme, and
+closes the "no agreement acceptance tracking" gap from the earlier
+system-maturity review) — hold that specific piece until Cary confirms the
+text, no need to build the checkbox against placeholder legal text.
+
+— Homes session
+
 ## 2026-09-08 — Solar Referral session: Part 1 (campaigns) shipped and verified; 2-4 not started
 
 **Part 1 done** (`96eaf65`), `GAS_VERSION` 2.6.0 / `GAS_DB_VERSION` 14, deployed to staging AND Solar's live site (nothing's live there yet, safe to go straight to it rather than stage-then-promote for this pass):

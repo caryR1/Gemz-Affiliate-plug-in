@@ -21,6 +21,7 @@ class GAS_Admin {
 
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
+		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_media_library' ) );
 		add_action( 'admin_post_gas_save_partner', array( __CLASS__, 'handle_save_partner' ) );
 		add_action( 'admin_post_gas_add_partner', array( __CLASS__, 'handle_add_partner' ) );
 		add_action( 'admin_post_gas_save_code', array( __CLASS__, 'handle_save_code' ) );
@@ -31,6 +32,7 @@ class GAS_Admin {
 		add_action( 'admin_post_gas_reactivate_affiliate', array( __CLASS__, 'handle_reactivate_affiliate' ) );
 		add_action( 'admin_post_gas_save_settings', array( __CLASS__, 'handle_save_settings' ) );
 		add_action( 'admin_post_gas_export_ledger_csv', array( __CLASS__, 'handle_export_ledger_csv' ) );
+		add_action( 'admin_post_gas_export_tax_summary_csv', array( __CLASS__, 'handle_export_tax_summary_csv' ) );
 		add_action( 'admin_post_gas_save_payout_api_settings', array( __CLASS__, 'handle_save_payout_api_settings' ) );
 		add_action( 'admin_post_gas_paypal_payout_now', array( __CLASS__, 'handle_paypal_payout_now' ) );
 		add_action( 'admin_post_gas_wise_payout_now', array( __CLASS__, 'handle_wise_payout_now' ) );
@@ -63,6 +65,7 @@ class GAS_Admin {
 		add_submenu_page( 'gas-affiliates', 'Sub-Affiliate Codes', 'Codes', self::CAP_CODES, 'gas-codes', array( __CLASS__, 'render_codes_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP_PARTNERS, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Campaigns', 'Campaigns', self::CAP_CAMPAIGNS, 'gas-campaigns', array( __CLASS__, 'render_campaigns_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Marketing Assets', 'Marketing Assets', self::CAP_CAMPAIGNS, 'gas-marketing-assets', array( __CLASS__, 'render_marketing_assets_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Leads', 'Leads', self::CAP_LEADS, 'gas-leads', array( __CLASS__, 'render_leads_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Click Log', 'Click Log', self::CAP_REPORTS, 'gas-clicks', array( __CLASS__, 'render_clicks_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Reports', 'Reports', self::CAP_REPORTS, 'gas-reports', array( __CLASS__, 'render_reports_page' ) );
@@ -167,11 +170,12 @@ class GAS_Admin {
 			return;
 		}
 
-		echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Email</th><th>Partner</th><th>Code</th><th>Status</th><th>Payment info</th><th>Actions</th></tr></thead><tbody>';
+		echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Email</th><th>Partner</th><th>Code</th><th>Status</th><th>Payment info</th><th>Tax info</th><th>Actions</th></tr></thead><tbody>';
 		foreach ( $rows as $r ) {
 			$user    = get_userdata( $r->wp_user_id );
 			$email   = $user ? $user->user_email : '(deleted user)';
 			$payment = $r->wp_user_id ? GAS_Payouts::masked_summary( $r->wp_user_id ) : '';
+			$tax     = $r->wp_user_id ? GAS_Payouts::masked_tax_summary( $r->wp_user_id ) : '';
 
 			echo '<tr>';
 			echo '<td>' . esc_html( $r->sub_affiliate_name ) . '</td>';
@@ -180,6 +184,7 @@ class GAS_Admin {
 			echo '<td><code>' . esc_html( $r->code ) . '</code></td>';
 			echo '<td>' . esc_html( $r->status ) . '</td>';
 			echo '<td>' . ( $payment ? esc_html( $payment ) : '<em>not set</em>' ) . '</td>';
+			echo '<td>' . ( $tax ? '<span style="color:#1a7a3c;">' . esc_html( $tax ) . '</span>' : '<span style="color:#b32d2e;">not on file</span>' ) . '</td>';
 			echo '<td>';
 			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $r->id ) ) . '">Edit</a> | ';
 
@@ -769,6 +774,107 @@ class GAS_Admin {
 		self::wrap_end();
 	}
 
+	/**
+	 * Loads WordPress's own media library JS on the Marketing Assets
+	 * screen only — reused rather than building a custom uploader, per
+	 * spec. `wp.media()` opens the same modal used for featured images
+	 * etc.; picking a file there populates the hidden `attachment_id`
+	 * field this screen's form posts.
+	 */
+	public static function enqueue_media_library( $hook ) {
+		if ( 'gas-affiliates_page_gas-marketing-assets' !== $hook ) {
+			return;
+		}
+		wp_enqueue_media();
+	}
+
+	public static function render_marketing_assets_page() {
+		if ( ! current_user_can( self::CAP_CAMPAIGNS ) ) {
+			return;
+		}
+		self::wrap_start( 'Marketing Assets' );
+
+		if ( isset( $_GET['saved'] ) ) {
+			echo '<div class="notice notice-success"><p>Uploaded.</p></div>';
+		}
+		if ( isset( $_GET['deleted'] ) ) {
+			echo '<div class="notice notice-success"><p>Deleted.</p></div>';
+		}
+
+		echo '<h2>Add an asset</h2>';
+		echo '<p class="description">Banners, images, or other downloadable creative for affiliates to use when promoting a link. Scope it to one partner or campaign, or leave both blank to show it to every affiliate regardless of what they\'re promoting.</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'gas_save_marketing_asset' );
+		echo '<input type="hidden" name="action" value="gas_save_marketing_asset">';
+		echo '<input type="hidden" name="attachment_id" id="gas_asset_attachment_id" value="">';
+		echo '<table class="form-table"><tbody>';
+		echo '<tr><th>Image</th><td>';
+		echo '<div id="gas_asset_preview" style="margin-bottom:0.5em;"></div>';
+		echo '<button type="button" class="button" id="gas_asset_pick_button">Choose from Media Library</button>';
+		echo '</td></tr>';
+		echo '<tr><th><label for="gas_asset_title">Title</label></th><td><input type="text" id="gas_asset_title" name="title" class="regular-text" required></td></tr>';
+		echo '<tr><th>Scope (optional)</th><td>';
+		echo '<select name="partner_id"><option value="">-- any partner --</option>';
+		foreach ( self::get_partners() as $p ) {
+			echo '<option value="' . esc_attr( $p->id ) . '">' . esc_html( $p->name ) . '</option>';
+		}
+		echo '</select> ';
+		global $wpdb;
+		$campaigns = $wpdb->get_results( 'SELECT * FROM ' . GAS_DB::table( 'campaigns' ) . ' ORDER BY name ASC' );
+		echo '<select name="campaign_id"><option value="">-- any campaign --</option>';
+		foreach ( $campaigns as $c ) {
+			echo '<option value="' . esc_attr( $c->id ) . '">' . esc_html( $c->name ) . '</option>';
+		}
+		echo '</select>';
+		echo ' <p class="description">Leave both as "any" for a global asset shown to every affiliate.</p>';
+		echo '</td></tr>';
+		echo '</tbody></table>';
+		submit_button( 'Add Asset' );
+		echo '</form>';
+
+		echo '<script>
+			(function() {
+				var pickBtn = document.getElementById("gas_asset_pick_button");
+				var input   = document.getElementById("gas_asset_attachment_id");
+				var preview = document.getElementById("gas_asset_preview");
+				var frame;
+				pickBtn.addEventListener("click", function(e) {
+					e.preventDefault();
+					if (frame) { frame.open(); return; }
+					frame = wp.media({ title: "Choose an image", multiple: false, library: { type: "image" } });
+					frame.on("select", function() {
+						var attachment = frame.state().get("selection").first().toJSON();
+						input.value = attachment.id;
+						preview.innerHTML = "<img src=\"" + (attachment.sizes && attachment.sizes.thumbnail ? attachment.sizes.thumbnail.url : attachment.url) + "\" style=\"max-width:150px;height:auto;\">";
+					});
+					frame.open();
+				});
+			})();
+		</script>';
+
+		echo '<h2 style="margin-top:2em;">Existing assets</h2>';
+		$assets = GAS_Marketing_Assets::get_all();
+		if ( ! $assets ) {
+			echo '<p>No marketing assets yet.</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>Preview</th><th>Title</th><th>Scope</th><th>Actions</th></tr></thead><tbody>';
+			foreach ( $assets as $a ) {
+				$thumb = wp_get_attachment_image( $a->attachment_id, array( 80, 80 ) );
+				$scope = $a->partner_name ? 'Partner: ' . $a->partner_name : ( $a->campaign_name ? 'Campaign: ' . $a->campaign_name : 'Global (all affiliates)' );
+				echo '<tr>';
+				echo '<td>' . ( $thumb ?: '<em>(missing)</em>' ) . '</td>';
+				echo '<td>' . esc_html( $a->title ) . '</td>';
+				echo '<td>' . esc_html( $scope ) . '</td>';
+				$del_url = wp_nonce_url( admin_url( 'admin-post.php?action=gas_delete_marketing_asset&id=' . $a->id ), 'gas_delete_marketing_asset_' . $a->id );
+				echo '<td><a href="' . esc_url( $del_url ) . '" onclick="return confirm(\'Delete this asset?\');">Delete</a></td>';
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+		}
+
+		self::wrap_end();
+	}
+
 	public static function handle_add_partner() {
 		if ( ! current_user_can( self::CAP_PARTNERS ) ) {
 			wp_die( 'Not allowed.' );
@@ -1296,6 +1402,19 @@ class GAS_Admin {
 		);
 
 		echo '<p><a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_export_ledger_csv' ), 'gas_export_ledger_csv' ) ) . '" class="button">Export CSV</a></p>';
+
+		echo '<h2>Tax summary (for your accountant)</h2>';
+		echo '<p class="description">Everything actually paid to each affiliate in one calendar year, plus their tax info on file &mdash; hand this to your accountant or a 1099 e-filing service (e.g. Track1099). This plugin doesn\'t file with the IRS itself. <strong>Contains full, unmasked SSNs/EINs</strong> &mdash; handle the downloaded file as sensitive.</p>';
+		$current_year = (int) current_time( 'Y' );
+		echo '<form method="get" style="display:inline;">';
+		echo '<input type="hidden" name="page" value="gas-ledger">';
+		echo '<select name="tax_year" onchange="document.getElementById(\'gas-tax-export-link\').href = document.getElementById(\'gas-tax-export-link\').href.replace(/year=\\d+/, \'year=\' + this.value);">';
+		for ( $y = $current_year; $y >= $current_year - 4; $y-- ) {
+			echo '<option value="' . esc_attr( $y ) . '">' . esc_html( $y ) . '</option>';
+		}
+		echo '</select> ';
+		echo '<a id="gas-tax-export-link" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_export_tax_summary_csv&year=' . $current_year ), 'gas_export_tax_summary_csv' ) ) . '" class="button">Export Tax Summary CSV</a>';
+		echo '</form>';
 
 		if ( ! $rows ) {
 			echo '<p>No payouts recorded yet. Use the <a href="' . esc_url( admin_url( 'admin.php?page=gas-calculator' ) ) . '">Payout Calculator</a> and save a result to start the ledger.</p>';
@@ -1856,6 +1975,28 @@ class GAS_Admin {
 		exit;
 	}
 
+	/**
+	 * Turns a payout run's `held` list (below the minimum threshold, or
+	 * missing tax info — see GAS_Payouts::affiliates_with_unpaid_balance())
+	 * into a short admin-facing summary, so a payout run's result notice
+	 * says WHY someone wasn't paid rather than just going quiet about them.
+	 */
+	private static function held_summary_text( array $held ) {
+		if ( ! $held ) {
+			return '';
+		}
+		$no_tax   = count( array_filter( $held, function( $r ) { return 'no_tax_info' === $r['reason']; } ) );
+		$below    = count( array_filter( $held, function( $r ) { return 'below_threshold' === $r['reason']; } ) );
+		$parts    = array();
+		if ( $no_tax ) {
+			$parts[] = $no_tax . ' held for missing tax info';
+		}
+		if ( $below ) {
+			$parts[] = $below . ' held below the minimum payout threshold';
+		}
+		return ' ' . implode( ', ', $parts ) . '.';
+	}
+
 	public static function handle_paypal_payout_now() {
 		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
 			wp_die( 'Not allowed.' );
@@ -1875,9 +2016,9 @@ class GAS_Admin {
 					count( $result['paid_user_ids'] ),
 					esc_html( number_format( $result['total'], 2 ) ),
 					esc_html( $result['currency'] )
-				),
+				) . self::held_summary_text( $result['held'] ),
 			);
-			self::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'paid_user_ids' => $result['paid_user_ids'], 'total' => $result['total'] ) );
+			self::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'paid_user_ids' => $result['paid_user_ids'], 'total' => $result['total'], 'held' => $result['held'] ) );
 		}
 
 		set_transient( 'gas_payout_result_' . get_current_user_id(), $notice, 60 );
@@ -1904,9 +2045,10 @@ class GAS_Admin {
 			}
 			$message .= ' ' . $failed_count . ' failed &mdash; ' . implode( '; ', $reasons );
 		}
+		$message .= self::held_summary_text( $result['held'] );
 
 		if ( $paid_count ) {
-			self::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'paid' => $result['paid'], 'failed_count' => $failed_count ) );
+			self::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'paid' => $result['paid'], 'failed_count' => $failed_count, 'held' => $result['held'] ) );
 		}
 
 		set_transient( 'gas_payout_result_' . get_current_user_id(), array( 'error' => (bool) $failed_count && ! $paid_count, 'message' => $message ), 60 );
@@ -1954,6 +2096,60 @@ class GAS_Admin {
 				$r->status,
 				$r->paid_at ?: '',
 				$r->notes,
+			) );
+		}
+		fclose( $out );
+		exit;
+	}
+
+	/**
+	 * Accountant-ready CSV of everything actually PAID to each affiliate in
+	 * one calendar year, plus whatever tax info they've submitted —
+	 * exactly what's needed to hand to an accountant or a real 1099-NEC
+	 * e-filing service (Track1099/Tax1099/etc.); this plugin doesn't file
+	 * anything with the IRS itself. Contains full, unmasked SSN/EIN/TIN
+	 * values (unlike the admin-facing masked_tax_summary() shown on
+	 * screen) since that's what a real 1099 filing actually requires —
+	 * treat the downloaded file as sensitive, same as you would a payroll
+	 * export. Only affiliates paid something > $0 in the selected year are
+	 * included; a $0 year isn't 1099-relevant.
+	 */
+	public static function handle_export_tax_summary_csv() {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		check_admin_referer( 'gas_export_tax_summary_csv' );
+
+		$year = isset( $_GET['year'] ) ? absint( $_GET['year'] ) : (int) current_time( 'Y' );
+
+		global $wpdb;
+		$codes_table = GAS_DB::table( 'codes' );
+		$user_ids    = $wpdb->get_col( "SELECT DISTINCT wp_user_id FROM {$codes_table} WHERE wp_user_id IS NOT NULL" );
+
+		nocache_headers();
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="tax-summary-' . $year . '.csv"' );
+
+		$out = fopen( 'php://output', 'w' );
+		fputcsv( $out, array( 'Affiliate Name', 'Email', 'Total Paid ' . $year, 'Tax Form Type', 'Legal Name', 'Tax ID', 'Country', 'Tax Info Submitted' ) );
+
+		foreach ( $user_ids as $user_id ) {
+			$user_id = (int) $user_id;
+			$total   = GAS_Payouts::paid_this_calendar_year( $user_id, $year );
+			if ( $total <= 0 ) {
+				continue;
+			}
+			$user = get_userdata( $user_id );
+			$tax  = GAS_Payouts::get_tax_info( $user_id );
+			fputcsv( $out, array(
+				$user ? $user->display_name : 'user #' . $user_id,
+				$user ? $user->user_email : '',
+				number_format( $total, 2, '.', '' ),
+				$tax['form_type'] ? strtoupper( $tax['form_type'] ) : 'NOT ON FILE',
+				$tax['legal_name'],
+				$tax['tax_id'],
+				$tax['country'],
+				$tax['submitted_at'] ?: '',
 			) );
 		}
 		fclose( $out );
@@ -2023,6 +2219,15 @@ class GAS_Admin {
 		echo '<p class="description">Shown above the on-site quote form for this whole project/site &mdash; one shared design for every fulfillment partner and affiliate, since the customer never sees or needs to know which specific partner ends up handling their request. Leave the image blank to keep the current one (if any).</p>';
 		echo '</td></tr>';
 
+		echo '<tr><th><label for="min_payout_threshold">Minimum payout threshold ($)</label></th><td><input type="number" step="0.01" min="0" id="min_payout_threshold" name="min_payout_threshold" style="width:120px" value="' . esc_attr( $settings['min_payout_threshold'] ) . '"> <p class="description">The PayPal/Wise automated payout runs skip anyone with an unpaid balance under this amount &mdash; their balance carries forward untouched rather than triggering a payout (and a transfer fee eating a chunk of a tiny amount). Doesn\'t affect the Payout Calculator/Ledger, only the automated runs.</p></td></tr>';
+
+		echo '<tr><th>Compliance footer (email)</th><td>';
+		echo '<p class="description">Appended to every customer- and affiliate-facing email &mdash; business name/address and a "why you\'re receiving this" line, standard commercial-email practice.</p>';
+		echo '<label>Business/legal name<br><input type="text" name="business_name" class="regular-text" placeholder="' . esc_attr( $settings['site_name'] ) . ' (defaults to Program name above if left blank)" value="' . esc_attr( $settings['business_name'] ) . '"></label><br><br>';
+		echo '<label>Business address<br><input type="text" name="business_address" class="large-text" placeholder="Street, City, State ZIP" value="' . esc_attr( $settings['business_address'] ) . '"></label><br><br>';
+		echo '<label>Program terms URL (optional)<br><input type="url" name="program_terms_url" class="regular-text" placeholder="https://..." value="' . esc_attr( $settings['program_terms_url'] ) . '"> <span class="description">Once the affiliate agreement is live as a page, link it here &mdash; the footer line is omitted until then.</span></label>';
+		echo '</td></tr>';
+
 		echo '</tbody></table>';
 		submit_button( 'Save Settings' );
 		echo '</form>';
@@ -2045,6 +2250,10 @@ class GAS_Admin {
 			'tier2_split_percent'       => isset( $_POST['tier2_split_percent'] ) ? (float) $_POST['tier2_split_percent'] : 20,
 			'tier3_split_percent'       => isset( $_POST['tier3_split_percent'] ) ? (float) $_POST['tier3_split_percent'] : 10,
 			'quote_page_intro'          => isset( $_POST['quote_page_intro'] ) ? sanitize_textarea_field( wp_unslash( $_POST['quote_page_intro'] ) ) : '',
+			'min_payout_threshold'      => isset( $_POST['min_payout_threshold'] ) ? (float) $_POST['min_payout_threshold'] : 50,
+			'business_name'             => isset( $_POST['business_name'] ) ? sanitize_text_field( wp_unslash( $_POST['business_name'] ) ) : '',
+			'business_address'          => isset( $_POST['business_address'] ) ? sanitize_text_field( wp_unslash( $_POST['business_address'] ) ) : '',
+			'program_terms_url'         => isset( $_POST['program_terms_url'] ) ? esc_url_raw( wp_unslash( $_POST['program_terms_url'] ) ) : '',
 		);
 
 		// Image is optional per save — only touch quote_page_image_id when

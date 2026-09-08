@@ -532,8 +532,8 @@ class GAS_REST {
 			}
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id' );
-		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_image_id' );
+		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id', 'min_payout_threshold', 'business_name', 'business_address', 'program_terms_url' );
+		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_image_id', 'min_payout_threshold' );
 
 		$values = array();
 		foreach ( $allowed as $field ) {
@@ -544,6 +544,8 @@ class GAS_REST {
 				$values[ $field ] = (float) $body[ $field ];
 			} elseif ( 'quote_page_intro' === $field ) {
 				$values[ $field ] = sanitize_textarea_field( $body[ $field ] );
+			} elseif ( 'program_terms_url' === $field ) {
+				$values[ $field ] = esc_url_raw( $body[ $field ] );
 			} else {
 				$values[ $field ] = sanitize_text_field( $body[ $field ] );
 			}
@@ -685,9 +687,10 @@ class GAS_REST {
 		foreach ( $rows as &$r ) {
 			$user                = get_userdata( $r['wp_user_id'] );
 			$r['email']          = $user ? $user->user_email : null;
-			// Masked summary only — never expose a full account number/IBAN/email
-			// over the REST API, same as the admin screens.
+			// Masked summaries only — never expose a full account number/
+			// IBAN/tax ID over the REST API, same as the admin screens.
 			$r['payout_summary'] = $r['wp_user_id'] ? GAS_Payouts::masked_summary( $r['wp_user_id'] ) : '';
+			$r['tax_summary']    = $r['wp_user_id'] ? GAS_Payouts::masked_tax_summary( $r['wp_user_id'] ) : '';
 		}
 		return new WP_REST_Response( $rows, 200 );
 	}

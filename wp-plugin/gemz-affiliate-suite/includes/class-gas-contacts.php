@@ -161,7 +161,7 @@ class GAS_Contacts {
 		wp_mail(
 			$email,
 			'Your download: ' . $magnet->title,
-			"Here's your download link:\n\n{$download_url}\n\nThanks for your interest!"
+			"Here's your download link:\n\n{$download_url}\n\nThanks for your interest!" . GAS_Settings::compliance_footer()
 		);
 
 		wp_safe_redirect( add_query_arg( 'gas_magnet_sent', $magnet_id, $redirect_back ) );

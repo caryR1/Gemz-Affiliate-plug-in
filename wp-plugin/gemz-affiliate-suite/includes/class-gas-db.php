@@ -96,6 +96,7 @@ class GAS_DB {
 		$lead_magnets      = self::table( 'lead_magnets' );
 		$campaigns         = self::table( 'campaigns' );
 		$campaign_variants = self::table( 'campaign_variants' );
+		$marketing_assets  = self::table( 'marketing_assets' );
 
 		$sql = "CREATE TABLE {$partners} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -194,9 +195,11 @@ class GAS_DB {
 			tier2_code_id BIGINT UNSIGNED NULL,
 			tier2_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 			tier2_paid TINYINT(1) NOT NULL DEFAULT 0,
+			tier2_paid_at DATETIME NULL,
 			tier3_code_id BIGINT UNSIGNED NULL,
 			tier3_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 			tier3_paid TINYINT(1) NOT NULL DEFAULT 0,
+			tier3_paid_at DATETIME NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'unpaid',
 			paid_at DATETIME NULL,
 			entered_at DATETIME NOT NULL,
@@ -293,6 +296,18 @@ class GAS_DB {
 			variant_name VARCHAR(100) NOT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
+			KEY campaign_id (campaign_id)
+		) {$charset_collate};
+
+		CREATE TABLE {$marketing_assets} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			attachment_id BIGINT UNSIGNED NOT NULL,
+			title VARCHAR(191) NOT NULL,
+			partner_id BIGINT UNSIGNED NULL,
+			campaign_id BIGINT UNSIGNED NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY partner_id (partner_id),
 			KEY campaign_id (campaign_id)
 		) {$charset_collate};";
 

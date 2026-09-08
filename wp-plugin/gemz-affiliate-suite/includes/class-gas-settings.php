@@ -46,7 +46,49 @@ class GAS_Settings {
 			// partner ends up handling their request.
 			'quote_page_intro'         => '',
 			'quote_page_image_id'     => 0,
+			// Below the threshold, an affiliate's unpaid balance just
+			// carries forward untouched rather than triggering a PayPal/Wise
+			// payout — Cary, 2026-09-08: "almost nothing we will do will
+			// trigger less than that," and it avoids a transfer fee eating
+			// a meaningful chunk of a tiny payout. Doesn't affect the
+			// Payout Calculator/Ledger (recording that a sale happened),
+			// only the automated payout runs that actually move money.
+			'min_payout_threshold'     => 50,
+			// Compliance-footer fields (2026-09-08) — appended to every
+			// customer- and affiliate-facing email, see
+			// GAS_Settings::compliance_footer(). business_name/address
+			// falls back to site_name if unset since a fresh install has
+			// neither filled in yet; program_terms_url stays blank (the
+			// footer just omits that line) until a real terms page exists.
+			'business_name'            => '',
+			'business_address'         => '',
+			'program_terms_url'        => '',
 		);
+	}
+
+	/**
+	 * A standard plain-text footer for every customer- and affiliate-facing
+	 * email — added 2026-09-08 after confirming gemz-referral-crm's own
+	 * default templates have no compliance notice at all (business
+	 * name/address, why-you're-receiving-this, terms link). Admin-facing
+	 * notifications (new-affiliate-joined, stale-lead, coverage-match, etc.)
+	 * deliberately don't get this — it's for people outside the
+	 * organization, not Cary's own inbox.
+	 */
+	public static function compliance_footer() {
+		$business = self::get( 'business_name' ) ?: self::get( 'site_name' );
+		$address  = self::get( 'business_address' );
+		$terms    = self::get( 'program_terms_url' );
+
+		$lines   = array();
+		$lines[] = '---';
+		$lines[] = $business . ( $address ? ', ' . $address : '' );
+		$lines[] = 'You\'re receiving this because of your participation in the ' . $business . ' referral program.';
+		if ( $terms ) {
+			$lines[] = 'Program terms: ' . $terms;
+		}
+
+		return "\n\n" . implode( "\n", $lines );
 	}
 
 	public static function all() {

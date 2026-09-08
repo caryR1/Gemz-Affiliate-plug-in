@@ -7,17 +7,30 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-08, by the Solar Referral session. Current
-`GAS_VERSION`: 2.5.0 / `GAS_DB_VERSION`: 13.
+`GAS_VERSION`: 2.7.0 / `GAS_DB_VERSION`: 15.
 
 **Since this was first written (2026-09-06)**: shipped self-signup
-affiliates auto-matched to every partner marked "Open to self-signup"
-(multiple pre-matched codes per affiliate instead of always landing
-unmatched), a self-serve "get a link" button on the affiliate dashboard for
-partners that opened up after signup, and richer per-link dashboard cards
-(coverage line, blurb popover, spotlight link, capability icons) — see
-`SWAP-with-HOMES.md` 2026-09-07 for full detail. Also built the pure-logic
-PHPUnit suite this doc has been calling the #1 fragility item — see its own
-section below.
+affiliates auto-matched to every partner marked "Open to self-signup" with
+richer per-link dashboard cards (coverage line, blurb popover, spotlight
+link, capability icons) on 2026-09-07 — then, at Cary's request after
+comparing GAS against the more mature `gemz-referral-crm` (GRC), **replaced
+that whole link model** with GRC's architecture: campaigns are now a real,
+first-class, admin-managed entity (see "Campaigns" below), an affiliate has
+exactly ONE stable code instead of one per partner, and a link is that code
++ a campaign's tracking slug combined at share time. The richer dashboard
+cards carried over unchanged, now sourced per-campaign instead of per-code.
+Also built the pure-logic PHPUnit suite this doc has been calling the #1
+fragility item — see its own section below.
+
+Same day, following a "step back and gap-check this against systems of its
+type" review, shipped a second batch closing the gaps that review surfaced:
+**tax compliance** (W-9/W-8BEN collection gating every payout, calendar-year
+paid tracking, accountant-ready CSV export), a **$50 minimum payout
+threshold**, **fraud filtering** (disposable-email/bot-UA/IP-rate-limit
+checks, no paid API), a **marketing-assets facility** for affiliates
+(reusing WP's media library), and a **compliance footer** on every
+customer- and affiliate-facing email. Full detail in `SWAP-with-HOMES.md`
+2026-09-07/08.
 
 ## What it does today (verified against the actual code, not memory)
 
@@ -92,25 +105,94 @@ section below.
   which now auto-matches to open partners — see below. Onboarding a new
   *partner* is still always an admin action first.)
 
-**Multi-partner self-signup & richer link cards** (shipped 2026-09-07,
-`GAS_VERSION` 2.5.0 / `GAS_DB_VERSION` 13)
-- New partner field `open_to_self_signup` (checkbox, defaults on for
-  existing partners). A self-signup affiliate now gets one pre-matched
-  code per `outreach_status='approved' AND open_to_self_signup=1` partner
-  at signup, instead of always landing with a single unmatched code —
-  falls back to the old unmatched-code behavior when nothing's open.
-- Affiliates who joined before a partner existed/opted in get a self-serve
-  "Get a link for [partner]" button on their own dashboard
-  (`GAS_Frontend::handle_get_partner_link()`) rather than waiting on an
-  admin to notice and manually match them.
-- Each dashboard link card now shows a "Serves: FL, TX, ..." coverage line
-  (from the existing `state` field), a tap-to-reveal blurb popover (new
-  `blurb` field), a "See full spotlight" link (new per-site `spotlight_url`
-  field), and capability icons from a curated 11-tag list (new
-  `capability_tags` field, checkboxes on the Partners screen, core
-  Dashicons, tap/click reveals the label — no persistent legend).
-  "Appointment required" is derived from the existing
-  `requires_appointment` field rather than duplicated as a 12th tag.
+**Campaigns** (shipped 2026-09-08, `GAS_VERSION` 2.6.0 / `GAS_DB_VERSION` 14
+— replaces the 2026-09-07 "one code per partner" model described in earlier
+versions of this doc)
+- `gas_campaigns` (admin-managed: name, partner, `tracking_slug`,
+  `outreach_status`, `open_to_self_signup`, coverage/blurb/spotlight/
+  capability-tag fields carried over from the old per-partner link cards)
+  and `gas_campaign_variants` (alternate landing pages per campaign — see
+  "Marketing collateral" below) are now first-class tables, not derived
+  from partner rows.
+- An affiliate has exactly ONE stable, campaign-agnostic `code` for life
+  (`partner_id` on `codes` is unused/0 for self-signup codes). A shareable
+  link is that code + a campaign's `tracking_slug` combined at share time
+  (`GAS_Campaigns::build_link()`), resolved at `/go/{slug}?ref={code}
+  &variant={id}` (`GAS_Redirect::handle_redirect()`).
+- Two independent cookies: `gas_campaign_id` is set on any valid campaign
+  link even with no `ref`; `gas_affiliate_code` is only set when `ref`
+  resolves to a real code — so a campaign gets attribution credit even from
+  a link an affiliate didn't personalize.
+- `GAS_Campaigns::ensure_default_for_partner()` auto-provisions a partner's
+  first default campaign the moment it's approved + open to self-signup —
+  called from both the wp-admin partner-save handler and the REST
+  partner-save route, so Home (REST/FTP-only) gets the same behavior as
+  wp-admin.
+- Dashboard link cards (coverage line, blurb popover, spotlight link,
+  capability icons — same UI as the 2026-09-07 version) now source from
+  campaigns instead of per-partner codes.
+- REST: `gas/v1/campaigns` (GET list, POST create) and
+  `gas/v1/campaigns/{id}` (POST update).
+
+**Tax compliance** (shipped 2026-09-08, `GAS_VERSION` 2.7.0 /
+`GAS_DB_VERSION` 15)
+- W-9 (US) / W-8BEN (non-US) collection via the affiliate's own dashboard
+  (`GAS_Frontend::render_tax_section()` / `handle_save_tax_info()`) —
+  mirrors the existing banking-info pattern: affiliate-writes-only, admin
+  only ever sees a masked summary (`GAS_Payouts::masked_tax_summary()`).
+  **Not encrypted at rest** (matches the existing unencrypted banking-field
+  precedent) — flagged as a fragility item below, worth revisiting at
+  higher volume.
+- Gated at every payout, not just at the $600/year IRS threshold (simplest
+  safe reading — avoids a partial-year tracking edge case): PayPal and Wise
+  batch runs now split affiliates into `eligible` vs. `held`, with a
+  `reason` of `no_tax_info` (checked first) or `below_threshold`.
+- `GAS_Payouts::paid_this_calendar_year()` sums direct + tier-2/3 amounts
+  by calendar year, using new `tier2_paid_at` / `tier3_paid_at` columns
+  (added because the original `paid_at` only reflected the direct
+  affiliate's payment time, not a sponsor's own).
+- Admin CSV export (Ledger page, "Tax summary for your accountant," any
+  year back to -4) — one row per affiliate with a nonzero year total: name,
+  email, total paid, form type, legal name, tax ID, country, submitted-at.
+  **Contains unmasked SSN/EIN — handle as sensitive data.** Accountant-ready
+  only, not an IRS e-filer — actual 1099-NEC filing is out of scope, goes
+  through Cary's accountant or a service like Track1099/Tax1099.
+
+**Minimum payout threshold** — `min_payout_threshold` Setting (default $50).
+PayPal/Wise batch runs skip anyone under it (held with reason
+`below_threshold`, unless also missing tax info); their balance just
+carries forward to the next run.
+
+**Fraud filtering** (`class-gas-fraud.php`, transient-based, no paid API)
+- Disposable-email domain check (~24-entry hardcoded list) on both signup
+  paths.
+- Bot User-Agent filtering (~20-substring hardcoded list) on click logging
+  — a bot-UA click is silently skipped, not counted, but the redirect still
+  happens.
+- IP rate-limiting: max 5 signups/IP/day, max 20 clicks/IP/campaign/day —
+  both on top of (not replacing) the existing per-visitor-per-day click
+  dedup.
+- Explicitly out of scope for this pass: IP-intelligence/datacenter-VPN
+  detection (needs a paid API) — a possible future item.
+
+**Marketing collateral for affiliates**
+- `class-gas-marketing-assets.php`: a simple media-attachment facility
+  reusing WP's native media library (`wp_enqueue_media()` +
+  `wp.media()` picker, no custom uploader) — admin uploads an image scoped
+  globally, to one partner, or to one campaign; affiliates see whatever
+  applies to their approved partners/campaigns on their own dashboard.
+- Alternate landing pages: already had a home in `gas_campaign_variants`
+  (Campaigns, above) — this batch's contribution was mostly the affiliate-
+  facing UI surface on top of what already existed, not new data-model
+  work.
+
+**Compliance footer** — `GAS_Settings::compliance_footer()` (business
+name/address, one-line reason-for-contact, program-terms link) appended to
+every customer-facing AND affiliate-facing `wp_mail()` call plugin-wide.
+Added as an immediate retrofit onto existing hardcoded email bodies (GAS
+has no notification-template system yet) rather than waiting for that to
+be built — confirmed directly against GRC's own `default_templates()` that
+it has zero compliance notice today, so this wasn't a redundant add.
 
 **Payout automation**
 - PayPal Payouts: one batch per "pay now" click covering every affiliate on
@@ -145,9 +227,12 @@ details are only ever written by the affiliate's own dashboard form —
 nothing admin-facing can write them, only read a masked summary.
 
 **REST API** (`gas/v1`): partners (+ research-batch bulk import), settings,
-codes, affiliates, leads, payouts, flush-rewrite-rules. This is Home's only
-write path (no wp-admin login there), so anything not in a REST route or
-missing from an allowlist is invisible to that side — see gaps below.
+codes, affiliates (includes masked `tax_summary` per affiliate), leads,
+payouts, campaigns, flush-rewrite-rules. This is Home's only write path (no
+wp-admin login there), so anything not in a REST route or missing from an
+allowlist is invisible to that side — see gaps below. No REST CRUD for
+marketing assets (deliberate — image upload is awkward over pure JSON REST,
+and Cary himself has wp-admin access to supply images there).
 
 ## Known incomplete, stubbed, or planned
 
@@ -204,7 +289,26 @@ missing from an allowlist is invisible to that side — see gaps below.
   and dashboard features work correctly end-to-end on live
   infrastructure — genuine functional verification of the shipped
   feature, complementary to but distinct from the PHPUnit run above.
-- No A/B testing or campaign-level tracking beyond a flat referral code.
+- ~~No A/B testing or campaign-level tracking beyond a flat referral
+  code~~ — **resolved 2026-09-08** by the Campaigns architecture (see
+  above): `gas_campaign_variants` gives per-campaign alternate landing
+  pages, and clicks/conversions now attribute to a campaign independent of
+  which affiliate's code was used.
+- **No affiliate-agreement acceptance tracking yet.** `DRAFT-affiliate-
+  agreement.md` (repo root) is a generic starting draft — explicitly not
+  legal advice, has bracketed placeholders, needs Cary's/an attorney's
+  review before it's binding. The planned follow-up (an acceptance
+  checkbox + timestamp captured at signup) is deliberately NOT built yet —
+  holding until Cary confirms the actual text, so nothing gets built
+  against placeholder legal language.
+- **No 1099-NEC e-filing.** The new tax-summary CSV export (see "Tax
+  compliance" above) is accountant-ready, not a filer — actual filing goes
+  through Cary's accountant or a service like Track1099/Tax1099.
+- **No IP-intelligence/datacenter-VPN detection.** The 2026-09-08 fraud
+  pass covers disposable-email, bot-UA, and IP-rate-limiting, all with no
+  paid API; real IP-intelligence needs one and was explicitly scoped out
+  of that pass — a possible future item if fraud volume justifies the
+  cost.
 
 ## What's actually fragile right now
 
@@ -249,7 +353,11 @@ Ranked by what would hurt most if development speed goes up:
    (LiteSpeed Cache's Redis object-cache.php masking page edits on Solar,
    fixed by deactivating the plugin) **and the same drop-in is confirmed
    present, unfixed, on Home.** Same failure mode is latent there.
-7. **No CI, but staging (2026-09-08) meaningfully changes this one.**
+7. **Tax info (SSN/EIN) is stored in plaintext user-meta, unencrypted** —
+   deliberately consistent with the existing (also unencrypted) banking-info
+   fields rather than a new inconsistency, but disclosed here as a real gap
+   worth revisiting once affiliate volume makes it a bigger target.
+8. **No CI, but staging (2026-09-08) meaningfully changes this one.**
    Previously a change was tested live on whichever site's session
    deployed it first — now there's a real staging tier to deploy and
    click-test on before touching Solar or Home. Doesn't eliminate the gap

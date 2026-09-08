@@ -21,6 +21,7 @@ class GAS_Frontend {
 		add_action( 'admin_post_nopriv_gas_affiliate_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_gas_change_password', array( __CLASS__, 'handle_change_password' ) );
 		add_action( 'admin_post_gas_save_payment_info', array( __CLASS__, 'handle_save_payment_info' ) );
+		add_action( 'admin_post_gas_save_tax_info', array( __CLASS__, 'handle_save_tax_info' ) );
 	}
 
 	/**
@@ -210,6 +211,13 @@ class GAS_Frontend {
 		if ( email_exists( $email ) ) {
 			$fail( 'That email is already registered. Try logging in instead.' );
 		}
+		if ( GAS_Fraud::is_disposable_email( $email ) ) {
+			$fail( 'Please use a permanent email address — temporary/disposable email services aren\'t accepted for affiliate signup.' );
+		}
+		$signup_ip = GAS_Fraud::get_client_ip();
+		if ( GAS_Fraud::signup_rate_limited( $signup_ip ) ) {
+			$fail( 'Too many signups from this connection today — please try again tomorrow, or contact us if you think this is a mistake.' );
+		}
 
 		$username = self::generate_unique_username( $email );
 
@@ -225,6 +233,7 @@ class GAS_Frontend {
 		if ( is_wp_error( $user_id ) ) {
 			$fail( 'Could not create account: ' . $user_id->get_error_message() );
 		}
+		GAS_Fraud::record_signup_attempt( $signup_ip );
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
 		if ( '' !== $phone ) {
@@ -593,7 +602,7 @@ class GAS_Frontend {
 				wp_mail(
 					$existing_affiliate->user_email,
 					'New referral added to your account',
-					"Hi {$existing_affiliate->display_name},\n\nSomeone just referred {$friend_name} using your details on {$site_name}. It's been added to your account under your referral code {$code->code}.\n\nLog in to your dashboard to keep an eye on it: " . self::dashboard_url()
+					"Hi {$existing_affiliate->display_name},\n\nSomeone just referred {$friend_name} using your details on {$site_name}. It's been added to your account under your referral code {$code->code}.\n\nLog in to your dashboard to keep an eye on it: " . self::dashboard_url() . GAS_Settings::compliance_footer()
 				);
 				wp_mail(
 					get_option( 'admin_email' ),
@@ -614,6 +623,13 @@ class GAS_Frontend {
 		if ( $password !== $password2 ) {
 			$fail( 'Passwords do not match.' );
 		}
+		if ( GAS_Fraud::is_disposable_email( $email ) ) {
+			$fail( 'Please use a permanent email address — temporary/disposable email services aren\'t accepted for affiliate signup.' );
+		}
+		$signup_ip = GAS_Fraud::get_client_ip();
+		if ( GAS_Fraud::signup_rate_limited( $signup_ip ) ) {
+			$fail( 'Too many signups from this connection today — please try again tomorrow, or contact us if you think this is a mistake.' );
+		}
 
 		$username = self::generate_unique_username( $email );
 		$user_id  = wp_insert_user( array(
@@ -628,6 +644,7 @@ class GAS_Frontend {
 		if ( is_wp_error( $user_id ) ) {
 			$fail( 'Could not create account: ' . $user_id->get_error_message() );
 		}
+		GAS_Fraud::record_signup_attempt( $signup_ip );
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
 		if ( '' !== $phone ) {
@@ -656,7 +673,7 @@ class GAS_Frontend {
 		wp_mail(
 			$email,
 			"Welcome to {$site_name}",
-			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nYour dashboard already shows a working link for every active campaign — nothing else to wait on."
+			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nYour dashboard already shows a working link for every active campaign — nothing else to wait on." . GAS_Settings::compliance_footer()
 		);
 
 		$admin_extra = $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) . " (match the referral under Leads)" : '';
@@ -720,7 +737,7 @@ class GAS_Frontend {
 			wp_mail(
 				$friend_email,
 				"{$code->sub_affiliate_name} referred you to {$site_name}",
-				"Hi {$friend_name},\n\n{$code->sub_affiliate_name} thought you'd want to know about {$site_name}. We'll be in touch shortly with next steps.\n\nIf you have any questions in the meantime, feel free to reach out, or just ask {$code->sub_affiliate_name} directly since they already know what this is about."
+				"Hi {$friend_name},\n\n{$code->sub_affiliate_name} thought you'd want to know about {$site_name}. We'll be in touch shortly with next steps.\n\nIf you have any questions in the meantime, feel free to reach out, or just ask {$code->sub_affiliate_name} directly since they already know what this is about." . GAS_Settings::compliance_footer()
 			);
 		}
 
@@ -860,8 +877,9 @@ class GAS_Frontend {
 
 		if ( isset( $_GET['gas_notice'] ) ) {
 			$notices = array(
-				'password_updated' => 'Password updated.',
-				'payment_updated'  => 'Payment information saved.',
+				'password_updated'  => 'Password updated.',
+				'payment_updated'   => 'Payment information saved.',
+				'tax_info_updated'  => 'Tax information submitted — thank you.',
 			);
 			$key = sanitize_text_field( wp_unslash( $_GET['gas_notice'] ) );
 			if ( isset( $notices[ $key ] ) ) {
@@ -887,9 +905,11 @@ class GAS_Frontend {
 		}
 
 		self::render_stats_section( $user_id );
+		self::render_marketing_assets_section( $user_id );
 		self::render_downline_section( $user_id );
 		self::render_password_section( $is_previewing );
 		self::render_payment_section( $user_id, $is_previewing );
+		self::render_tax_section( $user_id, $is_previewing );
 
 		echo '</div>';
 		?>
@@ -1025,6 +1045,39 @@ class GAS_Frontend {
 		if ( $my_code ) {
 			self::render_pending_and_finalized_section( $user_id );
 		}
+	}
+
+	/**
+	 * Downloadable marketing collateral (2026-09-08) — global assets plus
+	 * anything scoped to a partner/campaign this affiliate currently has
+	 * an active link for. Renders nothing at all if there's nothing to
+	 * show, rather than an empty "Marketing Materials" heading.
+	 */
+	private static function render_marketing_assets_section( $user_id ) {
+		$campaigns = GAS_Campaigns::get_active_for_approved_partners();
+		if ( ! $campaigns ) {
+			return;
+		}
+		$partner_ids  = array_values( array_unique( wp_list_pluck( $campaigns, 'partner_id' ) ) );
+		$campaign_ids = wp_list_pluck( $campaigns, 'id' );
+
+		$assets = GAS_Marketing_Assets::get_for_affiliate( $partner_ids, $campaign_ids );
+		if ( ! $assets ) {
+			return;
+		}
+
+		echo '<h2>Marketing materials</h2>';
+		echo '<p class="gas-fineprint">Ready-to-use images for promoting your link.</p>';
+		echo '<div class="gas-stat-row" style="flex-wrap:wrap;">';
+		foreach ( $assets as $a ) {
+			$url   = wp_get_attachment_url( $a->attachment_id );
+			$thumb = wp_get_attachment_image( $a->attachment_id, 'medium' );
+			if ( ! $url || ! $thumb ) {
+				continue; // attachment was deleted from the media library
+			}
+			echo '<div style="text-align:center;">' . $thumb . '<br><a href="' . esc_url( $url ) . '" download class="gas-fineprint">' . esc_html( $a->title ) . ' &darr;</a></div>';
+		}
+		echo '</div>';
 	}
 
 	/**
@@ -1314,6 +1367,85 @@ class GAS_Frontend {
 		GAS_Payouts::save_details( $user_id, wp_unslash( $_POST ) );
 
 		wp_safe_redirect( add_query_arg( 'gas_notice', 'payment_updated', self::dashboard_url() ) );
+		exit;
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * TAX INFO (2026-09-08) — required on file before any payout goes
+	 * out; see GAS_Payouts::affiliates_with_unpaid_balance() for the
+	 * enforcement side. Same "affiliate's own dashboard writes it, admin
+	 * never can" pattern as payment info above.
+	 * ---------------------------------------------------------------- */
+
+	private static function render_tax_section( $user_id, $is_previewing = false ) {
+		echo '<h2>Tax information</h2>';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">Hidden while previewing &mdash; same as payment info, this is only ever visible to the affiliate themselves.</p>';
+			return;
+		}
+		$t = GAS_Payouts::get_tax_info( $user_id );
+		?>
+		<p class="gas-fineprint">Required on file before we can send you any payout — a one-time form, standard for anyone earning referral income in the US. This is only ever visible to you and used for tax reporting; the admin only sees whether it's on file, never your tax ID.</p>
+		<?php if ( $t['submitted_at'] ) : ?>
+			<p class="gas-notice gas-notice-success">On file: <?php echo esc_html( 'w9' === $t['form_type'] ? 'Form W-9 (US person)' : 'Form W-8BEN (non-US person)' ); ?>, submitted <?php echo esc_html( $t['submitted_at'] ); ?>. Submitting the form again below replaces this.</p>
+		<?php endif; ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form" id="gas-tax-form">
+			<?php wp_nonce_field( 'gas_save_tax_info' ); ?>
+			<input type="hidden" name="action" value="gas_save_tax_info">
+			<p>
+				<label for="gas_tax_form_type">Are you a US person or business?</label><br>
+				<select id="gas_tax_form_type" name="tax_form_type" class="gas-input">
+					<option value="w9" <?php selected( $t['form_type'], 'w9' ); ?>>Yes — Form W-9</option>
+					<option value="w8ben" <?php selected( $t['form_type'], 'w8ben' ); ?>>No — Form W-8BEN</option>
+				</select>
+			</p>
+			<p>
+				<label for="gas_tax_legal_name">Full legal name (as it appears on your tax return)</label><br>
+				<input type="text" id="gas_tax_legal_name" name="tax_legal_name" required class="gas-input" value="<?php echo esc_attr( $t['legal_name'] ); ?>">
+			</p>
+			<p>
+				<label for="gas_tax_id" id="gas_tax_id_label">SSN or EIN</label><br>
+				<input type="text" id="gas_tax_id" name="tax_id" class="gas-input" value="<?php echo esc_attr( $t['tax_id'] ); ?>">
+				<span class="gas-fineprint" id="gas_tax_id_hint">Required for a W-9.</span>
+			</p>
+			<p>
+				<label for="gas_tax_country">Country of tax residence</label><br>
+				<input type="text" id="gas_tax_country" name="tax_country" required class="gas-input" value="<?php echo esc_attr( $t['country'] ); ?>" placeholder="e.g. United States">
+			</p>
+			<p><button type="submit" class="gas-button">Submit tax information</button></p>
+		</form>
+		<script>
+			(function() {
+				var typeSel = document.getElementById('gas_tax_form_type');
+				var idLabel = document.getElementById('gas_tax_id_label');
+				var idHint  = document.getElementById('gas_tax_id_hint');
+				function sync() {
+					var isW9 = typeSel.value === 'w9';
+					idLabel.textContent = isW9 ? 'SSN or EIN' : 'Foreign tax ID (if any)';
+					idHint.textContent  = isW9 ? 'Required for a W-9.' : 'Optional for a W-8BEN.';
+				}
+				typeSel.addEventListener('change', sync);
+				sync();
+			})();
+		</script>
+		<?php
+	}
+
+	public static function handle_save_tax_info() {
+		if ( ! is_user_logged_in() ) {
+			wp_die( 'Please log in first.' );
+		}
+		check_admin_referer( 'gas_save_tax_info' );
+
+		$user_id = get_current_user_id();
+		$saved   = GAS_Payouts::save_tax_info( $user_id, wp_unslash( $_POST ) );
+
+		if ( ! $saved ) {
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( 'Please fill in your name, tax ID type, and country of residence — a US person also needs an SSN or EIN.' ), self::dashboard_url() ) );
+			exit;
+		}
+
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'tax_info_updated', self::dashboard_url() ) );
 		exit;
 	}
 }

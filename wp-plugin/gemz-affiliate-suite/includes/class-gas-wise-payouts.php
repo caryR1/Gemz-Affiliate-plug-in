@@ -165,10 +165,11 @@ class GAS_Wise_Payouts {
 	 * Pays every affiliate whose payout method is 'wise' and who has an
 	 * unpaid balance, one transfer at a time.
 	 *
-	 * @return array ['paid' => [user_id => amount], 'failed' => [user_id => error message]]
+	 * @return array ['paid' => [user_id => amount], 'failed' => [user_id => error message], 'held' => [...]]
 	 */
 	public static function pay_all_eligible_affiliates() {
-		$eligible = GAS_Payouts::affiliates_with_unpaid_balance( 'wise' );
+		$balance  = GAS_Payouts::affiliates_with_unpaid_balance( 'wise' );
+		$eligible = $balance['eligible'];
 
 		$paid   = array();
 		$failed = array();
@@ -185,6 +186,6 @@ class GAS_Wise_Payouts {
 			$paid[ $row['user_id'] ] = $row['unpaid'];
 		}
 
-		return array( 'paid' => $paid, 'failed' => $failed );
+		return array( 'paid' => $paid, 'failed' => $failed, 'held' => $balance['held'] );
 	}
 }

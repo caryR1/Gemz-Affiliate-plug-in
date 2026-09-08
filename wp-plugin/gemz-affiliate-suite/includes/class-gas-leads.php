@@ -389,7 +389,7 @@ class GAS_Leads {
 			} else {
 				$body = "Hi {$lead->customer_name},\n\nGood news — you've been matched with {$partner->name}. They'll be reaching out to you directly with next steps.";
 			}
-			wp_mail( $lead->customer_email, 'You\'ve been matched with a ' . GAS_Settings::get( 'partner_label' ), $body );
+			wp_mail( $lead->customer_email, 'You\'ve been matched with a ' . GAS_Settings::get( 'partner_label' ), $body . GAS_Settings::compliance_footer() );
 		}
 
 		self::relay_lead_to_partner( $lead );

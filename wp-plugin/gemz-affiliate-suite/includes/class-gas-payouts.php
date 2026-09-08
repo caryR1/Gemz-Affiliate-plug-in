@@ -22,6 +22,23 @@ class GAS_Payouts {
 	const META_WISE_ROUTING   = 'gas_wise_routing_number'; // ABA only
 	const META_NOTES          = 'gas_payment_notes'; // free text, used when method = 'other'
 
+	// Tax compliance fields (2026-09-08) — same storage pattern as banking
+	// info above: only ever written by the affiliate themselves from their
+	// own dashboard, never admin-editable. Cary's call: require this on
+	// file before ANY payout goes out, not gated at the $600/year IRS
+	// reporting threshold — simpler than tracking a running per-affiliate
+	// total against a threshold, and avoids a partial-year edge case
+	// (e.g. an affiliate who crosses $600 mid-batch-run). Stored as plain
+	// user meta, same as the bank account numbers already stored this way
+	// above — worth flagging as a fragility item if this program ever
+	// handles enough volume to justify encrypting these fields at rest;
+	// not done in this pass to stay consistent with the existing pattern.
+	const META_TAX_FORM_TYPE     = 'gas_tax_form_type'; // 'w9' | 'w8ben'
+	const META_TAX_LEGAL_NAME    = 'gas_tax_legal_name';
+	const META_TAX_ID            = 'gas_tax_id'; // SSN/EIN (W-9) or foreign TIN (W-8BEN, optional there)
+	const META_TAX_COUNTRY       = 'gas_tax_country';
+	const META_TAX_SUBMITTED_AT  = 'gas_tax_submitted_at';
+
 	public static function get_details( $user_id ) {
 		return array(
 			'method'          => get_user_meta( $user_id, self::META_METHOD, true ) ?: '',
@@ -73,6 +90,100 @@ class GAS_Payouts {
 			return $d['notes'];
 		}
 		return '';
+	}
+
+	public static function get_tax_info( $user_id ) {
+		return array(
+			'form_type'    => get_user_meta( $user_id, self::META_TAX_FORM_TYPE, true ) ?: '',
+			'legal_name'   => get_user_meta( $user_id, self::META_TAX_LEGAL_NAME, true ),
+			'tax_id'       => get_user_meta( $user_id, self::META_TAX_ID, true ),
+			'country'      => get_user_meta( $user_id, self::META_TAX_COUNTRY, true ),
+			'submitted_at' => get_user_meta( $user_id, self::META_TAX_SUBMITTED_AT, true ),
+		);
+	}
+
+	/**
+	 * Called only from the affiliate's own dashboard form handler — never
+	 * from an admin screen, same rule as save_details() above. A W-9 needs
+	 * a real US tax ID (SSN/EIN); a W-8BEN is for a non-US person and its
+	 * foreign tax ID is commonly not applicable, so it's the one optional
+	 * field — everything else is required for either form type.
+	 */
+	public static function save_tax_info( $user_id, array $post ) {
+		$form_type = isset( $post['tax_form_type'] ) && in_array( $post['tax_form_type'], array( 'w9', 'w8ben' ), true )
+			? $post['tax_form_type']
+			: '';
+		$legal_name = isset( $post['tax_legal_name'] ) ? sanitize_text_field( wp_unslash( $post['tax_legal_name'] ) ) : '';
+		$tax_id     = isset( $post['tax_id'] ) ? sanitize_text_field( wp_unslash( $post['tax_id'] ) ) : '';
+		$country    = isset( $post['tax_country'] ) ? sanitize_text_field( wp_unslash( $post['tax_country'] ) ) : '';
+
+		if ( '' === $form_type || '' === $legal_name || '' === $country ) {
+			return false;
+		}
+		if ( 'w9' === $form_type && '' === $tax_id ) {
+			return false; // required for a W-9; optional for a W-8BEN
+		}
+
+		update_user_meta( $user_id, self::META_TAX_FORM_TYPE, $form_type );
+		update_user_meta( $user_id, self::META_TAX_LEGAL_NAME, $legal_name );
+		update_user_meta( $user_id, self::META_TAX_ID, $tax_id );
+		update_user_meta( $user_id, self::META_TAX_COUNTRY, $country );
+		update_user_meta( $user_id, self::META_TAX_SUBMITTED_AT, current_time( 'mysql' ) );
+		return true;
+	}
+
+	public static function has_tax_info_on_file( $user_id ) {
+		return (bool) get_user_meta( $user_id, self::META_TAX_SUBMITTED_AT, true );
+	}
+
+	/**
+	 * Admin-facing, read-only summary — never the raw tax ID, same masking
+	 * spirit as masked_summary() above for banking info.
+	 */
+	public static function masked_tax_summary( $user_id ) {
+		$t = self::get_tax_info( $user_id );
+		if ( ! $t['submitted_at'] ) {
+			return '';
+		}
+		$label = 'w9' === $t['form_type'] ? 'W-9' : 'W-8BEN';
+		return $label . ' on file (' . $t['submitted_at'] . ')';
+	}
+
+	/**
+	 * Sum of everything actually PAID to this affiliate (their own direct
+	 * cut plus any tier-2/3 overrides they're owed) within the current
+	 * calendar year — the figure that matters for 1099 purposes, which is
+	 * based on amounts paid during the tax year, not amounts earned/entered.
+	 * Uses paid_at (when the money actually moved), not entered_at.
+	 */
+	public static function paid_this_calendar_year( $user_id, $year = null ) {
+		global $wpdb;
+		$payouts_table = GAS_DB::table( 'payouts' );
+		$codes_table   = GAS_DB::table( 'codes' );
+		$year          = $year ?: (int) current_time( 'Y' );
+		$year_start    = "{$year}-01-01 00:00:00";
+		$year_end      = ( $year + 1 ) . '-01-01 00:00:00';
+
+		$direct = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.subaffiliate_cut),0) FROM {$payouts_table} pay
+			 INNER JOIN {$codes_table} c ON c.id = pay.code_id
+			 WHERE c.wp_user_id = %d AND pay.status = 'paid' AND pay.paid_at >= %s AND pay.paid_at < %s",
+			$user_id, $year_start, $year_end
+		) );
+		$tier2 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.tier2_amount),0) FROM {$payouts_table} pay
+			 INNER JOIN {$codes_table} c ON c.id = pay.tier2_code_id
+			 WHERE c.wp_user_id = %d AND pay.tier2_paid = 1 AND pay.tier2_paid_at >= %s AND pay.tier2_paid_at < %s",
+			$user_id, $year_start, $year_end
+		) );
+		$tier3 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.tier3_amount),0) FROM {$payouts_table} pay
+			 INNER JOIN {$codes_table} c ON c.id = pay.tier3_code_id
+			 WHERE c.wp_user_id = %d AND pay.tier3_paid = 1 AND pay.tier3_paid_at >= %s AND pay.tier3_paid_at < %s",
+			$user_id, $year_start, $year_end
+		) );
+
+		return $direct + $tier2 + $tier3;
 	}
 
 	private static function mask_email( $email ) {
@@ -344,15 +455,24 @@ class GAS_Payouts {
 	 * Every affiliate (distinct wp_user_id on gas_codes) whose payout method
 	 * is $method and who currently has an unpaid balance greater than zero.
 	 * Returns rows shaped for the payout processors: user_id, unpaid amount,
-	 * and their banking details.
+	 * and their banking details. Split into two buckets, both returned,
+	 * caller's choice what to do with each:
+	 * - 'eligible': balance >= the minimum payout threshold AND tax info is
+	 *   on file — safe to actually pay.
+	 * - 'held': everyone else with a real unpaid balance who was excluded,
+	 *   with a 'reason' ('below_threshold' or 'no_tax_info') so a payout
+	 *   run can tell an admin exactly why someone wasn't paid, rather than
+	 *   silently skipping them.
 	 */
 	public static function affiliates_with_unpaid_balance( $method ) {
 		global $wpdb;
 		$codes_table = GAS_DB::table( 'codes' );
+		$min_payout  = (float) GAS_Settings::get( 'min_payout_threshold' );
 
 		$user_ids = $wpdb->get_col( "SELECT DISTINCT wp_user_id FROM {$codes_table} WHERE wp_user_id IS NOT NULL" );
 
 		$eligible = array();
+		$held     = array();
 		foreach ( $user_ids as $user_id ) {
 			$user_id = (int) $user_id;
 			$details = self::get_details( $user_id );
@@ -363,13 +483,25 @@ class GAS_Payouts {
 			if ( $totals['unpaid'] <= 0 ) {
 				continue;
 			}
-			$eligible[] = array(
-				'user_id' => $user_id,
-				'unpaid'  => $totals['unpaid'],
-				'details' => $details,
-			);
+
+			$row = array( 'user_id' => $user_id, 'unpaid' => $totals['unpaid'], 'details' => $details );
+
+			// Tax-info gate takes priority in the reason shown — an
+			// affiliate missing both is more clearly "not ready to pay"
+			// than "below threshold," and fixing the tax-info gap is the
+			// more urgent of the two for the admin to notice.
+			if ( ! self::has_tax_info_on_file( $user_id ) ) {
+				$held[] = $row + array( 'reason' => 'no_tax_info' );
+				continue;
+			}
+			if ( $totals['unpaid'] < $min_payout ) {
+				$held[] = $row + array( 'reason' => 'below_threshold' );
+				continue;
+			}
+
+			$eligible[] = $row;
 		}
-		return $eligible;
+		return array( 'eligible' => $eligible, 'held' => $held );
 	}
 
 	/**
@@ -398,12 +530,21 @@ class GAS_Payouts {
 			)
 		);
 
+		// tier2_paid_at/tier3_paid_at added 2026-09-08 — previously only the
+		// direct payout's shared `paid_at` was ever set, which reflects
+		// when the DIRECT (tier-1) affiliate was paid, not necessarily
+		// when a sponsor's own tier-2/3 override was actually paid to
+		// THEM (a different person, on their own schedule). Left the
+		// original bug in place, the calendar-year tax total for a
+		// sponsor would silently undercount whenever they were paid
+		// before the direct affiliate on the same row was.
 		$wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$payouts_table}
-				 SET tier2_paid = 1
+				 SET tier2_paid = 1, tier2_paid_at = %s
 				 WHERE tier2_paid = 0
 				 AND tier2_code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
+				$now,
 				$user_id
 			)
 		);
@@ -411,9 +552,10 @@ class GAS_Payouts {
 		$wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$payouts_table}
-				 SET tier3_paid = 1
+				 SET tier3_paid = 1, tier3_paid_at = %s
 				 WHERE tier3_paid = 0
 				 AND tier3_code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
+				$now,
 				$user_id
 			)
 		);

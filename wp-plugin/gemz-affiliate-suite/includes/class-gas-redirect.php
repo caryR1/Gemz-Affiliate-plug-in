@@ -237,8 +237,26 @@ class GAS_Redirect {
 	 * ref, or an invalid one) — code_id/code are stored as the 0/''
 	 * sentinel in that case, same convention GAS already uses elsewhere
 	 * for "unassigned."
+	 *
+	 * Two fraud-filtering checks added 2026-09-08, both skip LOGGING only
+	 * — the visitor is still redirected either way, this just keeps a
+	 * bot or an IP-burst from inflating an affiliate's credited click
+	 * count: a known bot/crawler User-Agent never gets logged at all, and
+	 * an IP already at today's per-campaign click cap (a real signal of
+	 * automated traffic, distinct from the per-visitor dedup above) is
+	 * silently dropped rather than logged.
 	 */
 	private static function maybe_log_click( $campaign, $code, $partner ) {
+		$user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+		if ( GAS_Fraud::is_bot_user_agent( $user_agent ) ) {
+			return;
+		}
+
+		$ip = GAS_Fraud::get_client_ip();
+		if ( GAS_Fraud::click_rate_limited( $ip, $campaign->id ) ) {
+			return;
+		}
+
 		global $wpdb;
 		$clicks_table = GAS_DB::table( 'clicks' );
 		$hash         = self::visitor_hash();
@@ -258,6 +276,8 @@ class GAS_Redirect {
 			return;
 		}
 
+		GAS_Fraud::record_click( $ip, $campaign->id );
+
 		// Log the click regardless of whether a destination URL is set yet,
 		// so early testing/traffic is still captured.
 		$wpdb->insert(
@@ -268,8 +288,8 @@ class GAS_Redirect {
 				'partner_id'   => $partner ? $partner->id : null,
 				'campaign_id'  => $campaign->id,
 				'clicked_at'   => current_time( 'mysql' ),
-				'ip_address'   => self::get_client_ip(),
-				'user_agent'   => isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 255 ) : '',
+				'ip_address'   => $ip,
+				'user_agent'   => substr( $user_agent, 0, 255 ),
 				'visitor_hash' => $hash,
 			)
 		);
@@ -281,21 +301,9 @@ class GAS_Redirect {
 	 * beyond this dedup check.
 	 */
 	private static function visitor_hash() {
-		$ip = self::get_client_ip();
+		$ip = GAS_Fraud::get_client_ip();
 		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 		return hash( 'sha256', $ip . '|' . $ua . '|' . wp_salt() );
 	}
 
-	private static function get_client_ip() {
-		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' ) as $key ) {
-			if ( ! empty( $_SERVER[ $key ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
-				$ip = trim( explode( ',', $ip )[0] );
-				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-					return $ip;
-				}
-			}
-		}
-		return '';
-	}
 }

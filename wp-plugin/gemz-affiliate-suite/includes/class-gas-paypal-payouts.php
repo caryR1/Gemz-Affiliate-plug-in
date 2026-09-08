@@ -53,10 +53,12 @@ class GAS_PayPal_Payouts {
 	 * each successfully-included affiliate's unpaid ledger rows as paid.
 	 * Nothing is marked paid unless PayPal accepted the batch.
 	 *
-	 * @return array|WP_Error ['paid_user_ids' => [...], 'total' => float, 'currency' => string]
+	 * @return array|WP_Error ['paid_user_ids' => [...], 'total' => float, 'currency' => string, 'held' => [...]]
 	 */
 	public static function pay_all_eligible_affiliates( $currency = 'USD' ) {
-		$eligible = GAS_Payouts::affiliates_with_unpaid_balance( 'paypal' );
+		$balance = GAS_Payouts::affiliates_with_unpaid_balance( 'paypal' );
+		$eligible = $balance['eligible'];
+		$held     = $balance['held']; // below the min threshold, or missing tax info — carried forward, not paid
 
 		$items          = array();
 		$user_amounts   = array();
@@ -82,7 +84,11 @@ class GAS_PayPal_Payouts {
 		}
 
 		if ( empty( $items ) ) {
-			return new WP_Error( 'nothing_to_pay', 'No PayPal-method affiliates currently have an unpaid balance.' );
+			$msg = 'No PayPal-method affiliates are currently eligible for a payout.';
+			if ( $held ) {
+				$msg .= ' ' . count( $held ) . ' held back (below the minimum threshold or missing tax info).';
+			}
+			return new WP_Error( 'nothing_to_pay', $msg );
 		}
 
 		$token = self::get_access_token();
@@ -134,6 +140,7 @@ class GAS_PayPal_Payouts {
 			'paid_user_ids' => $paid_user_ids,
 			'total'         => $total,
 			'currency'      => $currency,
+			'held'          => $held,
 		);
 	}
 }

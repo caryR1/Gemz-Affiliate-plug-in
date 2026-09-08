@@ -6,9 +6,18 @@ solar.gemzonline.com and homes.gemzonline.com). Unlike `SWAP-with-HOMES.md`
 current — update it in place as features land or plans change, rather than
 appending entries.
 
-Last written: 2026-09-06, by the Solar Referral session, at Cary's request
-(relayed via Homes' session) for a full picture before pushing feature
-velocity higher. Current `GAS_VERSION`: 2.4.0 / `GAS_DB_VERSION`: 12.
+Last written: 2026-09-08, by the Solar Referral session. Current
+`GAS_VERSION`: 2.5.0 / `GAS_DB_VERSION`: 13.
+
+**Since this was first written (2026-09-06)**: shipped self-signup
+affiliates auto-matched to every partner marked "Open to self-signup"
+(multiple pre-matched codes per affiliate instead of always landing
+unmatched), a self-serve "get a link" button on the affiliate dashboard for
+partners that opened up after signup, and richer per-link dashboard cards
+(coverage line, blurb popover, spotlight link, capability icons) — see
+`SWAP-with-HOMES.md` 2026-09-07 for full detail. Also built the pure-logic
+PHPUnit suite this doc has been calling the #1 fragility item — see its own
+section below.
 
 ## What it does today (verified against the actual code, not memory)
 
@@ -79,7 +88,29 @@ velocity higher. Current `GAS_VERSION`: 2.4.0 / `GAS_DB_VERSION`: 12.
   to an existing WP user by email if one exists, otherwise creates one and
   sends WP's standard set-password email. **There is no partner
   self-signup** — this always starts from an admin creating/editing a
-  partner record first.
+  partner record first. (Don't confuse this with affiliate self-signup,
+  which now auto-matches to open partners — see below. Onboarding a new
+  *partner* is still always an admin action first.)
+
+**Multi-partner self-signup & richer link cards** (shipped 2026-09-07,
+`GAS_VERSION` 2.5.0 / `GAS_DB_VERSION` 13)
+- New partner field `open_to_self_signup` (checkbox, defaults on for
+  existing partners). A self-signup affiliate now gets one pre-matched
+  code per `outreach_status='approved' AND open_to_self_signup=1` partner
+  at signup, instead of always landing with a single unmatched code —
+  falls back to the old unmatched-code behavior when nothing's open.
+- Affiliates who joined before a partner existed/opted in get a self-serve
+  "Get a link for [partner]" button on their own dashboard
+  (`GAS_Frontend::handle_get_partner_link()`) rather than waiting on an
+  admin to notice and manually match them.
+- Each dashboard link card now shows a "Serves: FL, TX, ..." coverage line
+  (from the existing `state` field), a tap-to-reveal blurb popover (new
+  `blurb` field), a "See full spotlight" link (new per-site `spotlight_url`
+  field), and capability icons from a curated 11-tag list (new
+  `capability_tags` field, checkboxes on the Partners screen, core
+  Dashicons, tap/click reveals the label — no persistent legend).
+  "Appointment required" is derived from the existing
+  `requires_appointment` field rather than duplicated as a 12th tag.
 
 **Payout automation**
 - PayPal Payouts: one batch per "pay now" click covering every affiliate on
@@ -137,30 +168,42 @@ missing from an allowlist is invisible to that side — see gaps below.
   always a manual button click; there's no "pay everyone on the 1st"
   automation.
 - **No partner self-signup** — onboarding a new partner is always an admin
-  action first; at higher partner volume this is a manual bottleneck.
+  action first; at higher partner volume this is a manual bottleneck. (Not
+  to be confused with the affiliate-side auto-matching shipped 2026-09-07 —
+  that's a different gap, still open.)
 - **No SMS/text notifications** — every notification path is `wp_mail()`
   only.
-- **Zero automated test coverage** — decided approach (see
-  `SWAP-with-HOMES.md`, 2026-09-06): skip a full PHPUnit/WP integration
-  harness for now (neither session has a local WP/MySQL environment), but
-  build plain PHPUnit tests for the pure payout/coverage-matching math
-  (`GAS_Payouts::agent_pool_amount()` + tier-split arithmetic,
-  `GAS_Frontend::estimated_payout_range()`, `partner_covers_state()`).
-  Approved by Cary, **not yet built** — next concrete step.
-- **No composer.json / dependency management** at all yet (needed for the
-  above test suite).
+- **Automated test coverage: written, not yet run.** The pure-logic
+  PHPUnit suite (see `tests/` — `PayoutMathTest`, `CoverageMatchingTest`,
+  `EstimatedPayoutRangeTest`) is built and covers
+  `GAS_Payouts::agent_pool_amount()` + the tier-split arithmetic in
+  `compute()`, `GAS_Frontend::estimated_payout_range()`, and
+  `partner_covers_state()` — including a case pinned to Go Solar Power's
+  real, already-verified numbers ($2,000 flat / $700 pool / $490-$140-$70
+  split) as a sanity anchor. **Caveat that matters: this environment has no
+  PHP CLI at all (confirmed — neither Bash nor PowerShell has `php`, and no
+  Docker), so these tests have never actually been executed.** They're
+  written from a careful line-by-line trace against the real source, not
+  guessed at, but "written correctly" and "passing" are different claims
+  until someone with a PHP environment runs `composer install && composer
+  test` (or `vendor/bin/phpunit`) inside
+  `wp-plugin/gemz-affiliate-suite/`. Do that before leaning on these tests
+  as a safety net for the money math.
 - No A/B testing or campaign-level tracking beyond a flat referral code.
 
 ## What's actually fragile right now
 
 Ranked by what would hurt most if development speed goes up:
 
-1. **No tests on the money math, at all.** Two real payout-affecting bugs
-   already happened this session before any test existed (payout-range
-   estimate reading dead fields; a CSS bug that was cosmetic, not money,
-   but same "shipped wrong, no test caught it" pattern). This is the
-   single highest-value fix and is already scoped and approved — just
-   needs building.
+1. **Tests exist now but have never been run.** Two real payout-affecting
+   bugs already happened before any test existed (payout-range estimate
+   reading dead fields; a CSS bug that was cosmetic, not money, but same
+   "shipped wrong, no test caught it" pattern) — the whole reason this was
+   ranked #1. The suite in `tests/` targets exactly that surface, but was
+   written and reasoned through without a PHP CLI available anywhere in
+   this environment to actually execute it. Until someone runs it for
+   real, treat it as "should be right" rather than "verified right" — the
+   remaining risk isn't zero-tests anymore, it's untested-tests.
 2. **No staging environment for either site.** Every change ships by
    editing files and deploying straight to the two live sites via FTP/REST.
    There's no tier between "wrote the code" and "a real affiliate/partner
@@ -202,8 +245,11 @@ Ranked by what would hurt most if development speed goes up:
 
 ## Next concrete steps (proposed order)
 
-1. Build the pure-logic PHPUnit suite (approved, not started) — closes
-   fragility item #1, the highest-value gap.
+1. **Get the PHPUnit suite actually run once**, by whoever first has a real
+   PHP CLI available (the incoming shared staging site should have one) —
+   `composer install && composer test` in `wp-plugin/gemz-affiliate-suite/`.
+   Until that happens, item #1 above stays open in spirit even though the
+   suite exists.
 2. Write down the ad-hoc REST/FTP smoke-check as an actual checklist or
    small script (approved, not started) — closes part of #7.
 3. Decide whether "reporting" needs date-range/export/trend work now, or

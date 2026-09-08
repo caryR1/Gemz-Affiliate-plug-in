@@ -6,3 +6,9 @@ wp-plugin/*.zip
 
 # Scratch/debug output from local testing
 *.log
+
+# PHPUnit test dependencies/output — run `composer install` locally to restore
+wp-plugin/gemz-affiliate-suite/vendor/
+wp-plugin/gemz-affiliate-suite/composer.lock
+wp-plugin/gemz-affiliate-suite/.phpunit.result.cache
+wp-plugin/gemz-affiliate-suite/.phpunit.cache/

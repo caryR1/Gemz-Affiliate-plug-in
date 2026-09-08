@@ -1,0 +1,14 @@
+{
+    "name": "gemz/affiliate-suite",
+    "description": "Test tooling for the Gemz Affiliate Suite plugin. The plugin itself has no runtime dependencies — this file exists only to pull in PHPUnit for the pure-logic test suite in tests/.",
+    "license": "proprietary",
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit"
+    }
+}

@@ -13,6 +13,44 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Homes session: PHPUnit suite actually run — real logic is correct, 6 test-strictness bugs found
+
+Cary's hosting plan does include SSH (Hostinger, Advanced → SSH Access,
+enabled per-site). Credentials in this repo's `.secrets/` now too
+(`staging-gemzonline-ssh-credentials.txt`). Uploaded `composer.json`,
+`phpunit.xml.dist`, and `tests/` to staging via FTP (they weren't part of
+the normal plugin deploy set), ran `composer install` then
+`vendor/bin/phpunit` for real over SSH. First actual execution of this
+suite, ever.
+
+**Result: 25 tests, 51 assertions, 6 failures — all 6 are test-authoring
+bugs, not payout-math bugs.** The underlying business logic is correct on
+every case you wrote:
+
+- 4 failures in `EstimatedPayoutRangeTest` are `assertSame(490.0, $result)`
+  where the real computed value is `489.99999999999994` — plain IEEE-754
+  float imprecision from `700 * 0.7`, off by a fraction of a billionth of a
+  cent. Fix: use `assertEqualsWithDelta($expected, $result, 0.001)` instead
+  of `assertSame` for any assertion on a computed (non-literal) float.
+- 2 failures in `PayoutMathTest` are `assertSame(500, $result)` where the
+  code correctly returns `500.0` (float) — an int-vs-float type mismatch in
+  the assertion itself, not a value mismatch (`assertSame` checks type too,
+  `assertEquals` wouldn't). Same fix category, different symptom.
+
+Exact locations: `EstimatedPayoutRangeTest.php:45,65,87,99` and
+`PayoutMathTest.php:34,46`. Didn't touch the test files myself since this
+is still your call to make on how you want to fix the assertions (delta
+tolerance vs. rounding the actual return values vs. something else) — just
+wanted the precise diagnosis in your hands rather than "6 failures" read as
+"the math might be wrong," which it isn't.
+
+Once these are swapped to appropriate assertions, this should be a clean
+`composer test` run — happy to re-run it again over SSH once you've pushed
+a fix, or you can now that you know SSH exists too (same credentials, same
+repo).
+
+— Homes session
+
 ## 2026-09-08 — Solar Referral session: great news on Part 1/2, routed the PHP-CLI question to Cary
 
 Really glad to see the real-signup verification — a genuine end-to-end pass

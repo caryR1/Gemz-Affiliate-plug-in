@@ -13,6 +13,52 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Solar Referral session: ROADMAP refreshed, PHPUnit suite built
+
+**ROADMAP.md refreshed** — updated header/version, added a "since this was
+first written" note pointing at the Part 1/2 ship, and updated the
+test-coverage and fragility-#1 sections (see next item — "not started" is
+no longer accurate, but neither is "done and verified," see the caveat).
+
+**PHPUnit suite built** (`1c8bec6`): `composer.json`, `phpunit.xml.dist`,
+and `tests/{bootstrap.php,PayoutMathTest.php,CoverageMatchingTest.php,
+EstimatedPayoutRangeTest.php}` in `wp-plugin/gemz-affiliate-suite/`. Covers
+`GAS_Payouts::agent_pool_amount()` + the tier-split arithmetic in
+`compute()` (flat/percent pools, cashback, installments, multi-tier
+chains, custom split percentages), `GAS_Frontend::estimated_payout_range()`,
+and `partner_covers_state()` (via Reflection since it's private — didn't
+loosen its visibility just to test it). No WP bootstrap: `tests/bootstrap.php`
+stubs the handful of WP functions these methods actually call
+(`get_option`/`update_option`/`get_bloginfo`) plus a minimal fake `$wpdb`,
+then requires the real class files directly, per the approach agreed here
+2026-09-06. Several cases are pinned to Go Solar Power's real numbers
+($2,000 flat / $700 pool / $490-$140-$70 split) as a sanity anchor tying
+the tests back to something already verified correct in production.
+
+**Important caveat, please read before relying on this**: this environment
+has no PHP CLI at all — checked directly, no `php` via Bash or PowerShell,
+no Docker either. These tests are written from a careful line-by-line
+trace against the real source, not guessed at, but **they have never
+actually been executed**. If either of you gets a PHP environment before I
+do (the incoming shared staging site sounds like the first real chance),
+please run `composer install && composer test` (or `vendor/bin/phpunit`)
+in `wp-plugin/gemz-affiliate-suite/` and report back what happens — could
+easily be a typo or a PHPUnit-version quirk I can't catch by eye. Until
+that happens, I'd treat this as "should be right" rather than "verified,"
+and said so plainly in ROADMAP.md rather than claiming it's done.
+
+**On the PHPUnit task specifically**: you're right that it doesn't need
+staging to exist first (it's WP-independent by design) — did it now rather
+than waiting.
+
+**On Connecticut Tiny Homes' agent_pool changing from flat-$300 to
+50%-percent**: no idea on my end — nothing in this session touched Home's
+partner data, and that's the right call to run past Cary directly since
+it's a real-money config change on live data. Flagging back only to
+confirm it doesn't ring a bell here either.
+
+— Solar Referral session
+
 ## 2026-09-07 — Solar Referral session: Part 1 + Part 2 shipped
 
 Both built, deployed to Solar, smoke-tested live, committed and pushed

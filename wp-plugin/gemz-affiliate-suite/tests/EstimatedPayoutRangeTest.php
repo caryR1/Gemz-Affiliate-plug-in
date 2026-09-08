@@ -36,14 +36,21 @@ final class EstimatedPayoutRangeTest extends TestCase {
 
 	public function test_single_flat_partner_gives_a_single_point_range(): void {
 		// Go Solar Power's real numbers: $2,000 flat, $700 agent pool,
-		// default 70% tier-1 split -> $490.
+		// default 70% tier-1 split -> $490. estimated_payout_range()
+		// doesn't round() its tier1 estimate (unlike compute()'s tier
+		// amounts), so 700*0.7 lands on 489.99999999999994 in real IEEE-754
+		// arithmetic — confirmed by an actual PHPUnit run over SSH,
+		// 2026-09-08 (see SWAP-with-HOMES.md). Not a math bug: the real
+		// value is correct to well under a thousandth of a cent,
+		// assertSame() was simply the wrong comparison for a computed
+		// (non-rounded) float.
 		$GLOBALS['wpdb']->results = array( $this->flatPartner( 2000, 700 ) );
 
 		$range = GAS_Frontend::estimated_payout_range();
 
 		$this->assertNotNull( $range );
-		$this->assertSame( 490.0, $range['min'] );
-		$this->assertSame( 490.0, $range['max'] );
+		$this->assertEqualsWithDelta( 490.0, $range['min'], 0.0001 );
+		$this->assertEqualsWithDelta( 490.0, $range['max'], 0.0001 );
 	}
 
 	public function test_percent_partner_with_typical_sale_amount_is_included(): void {
@@ -62,7 +69,7 @@ final class EstimatedPayoutRangeTest extends TestCase {
 		$range = GAS_Frontend::estimated_payout_range();
 
 		$this->assertNotNull( $range );
-		$this->assertSame( 490.0, $range['min'] );
+		$this->assertEqualsWithDelta( 490.0, $range['min'], 0.0001 );
 		$this->assertEqualsWithDelta( 1750.0, $range['max'], 0.0001 );
 	}
 
@@ -84,8 +91,8 @@ final class EstimatedPayoutRangeTest extends TestCase {
 		// If the excluded partner leaked in, min/max would no longer both
 		// equal 490 (there'd be nothing to form a real second data point
 		// from, so a bug here would most likely show up as a 0 in the range).
-		$this->assertSame( 490.0, $range['min'] );
-		$this->assertSame( 490.0, $range['max'] );
+		$this->assertEqualsWithDelta( 490.0, $range['min'], 0.0001 );
+		$this->assertEqualsWithDelta( 490.0, $range['max'], 0.0001 );
 	}
 
 	public function test_partner_with_zero_or_unset_payout_amount_is_excluded(): void {
@@ -96,8 +103,8 @@ final class EstimatedPayoutRangeTest extends TestCase {
 
 		$range = GAS_Frontend::estimated_payout_range();
 
-		$this->assertSame( 490.0, $range['min'], 'the $0 partner must be excluded, not treated as a real $0 data point' );
-		$this->assertSame( 490.0, $range['max'] );
+		$this->assertEqualsWithDelta( 490.0, $range['min'], 0.0001, 'the $0 partner must be excluded, not treated as a real $0 data point' );
+		$this->assertEqualsWithDelta( 490.0, $range['max'], 0.0001 );
 	}
 
 	public function test_partner_with_no_pool_configured_defaults_to_100_percent_of_gross(): void {

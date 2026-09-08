@@ -31,7 +31,16 @@ final class PayoutMathTest extends TestCase {
 
 	public function test_flat_pool_is_capped_at_gross_so_it_can_never_exceed_the_sale(): void {
 		$partner = (object) array( 'agent_pool_type' => 'flat', 'agent_pool_value' => 700 );
-		$this->assertSame( 500.0, GAS_Payouts::agent_pool_amount( $partner, 500 ) );
+		// PHP's min() returns whichever operand is smaller WITHOUT casting
+		// its type — since $gross (500) is passed in as a plain int here,
+		// the real return value is the int 500, not a float. assertSame()
+		// checks type as well as value, so it fails on that alone even
+		// though the number is exactly right; assertEqualsWithDelta()
+		// (or assertEquals()) is the correct comparison here, not evidence
+		// of a math bug. Confirmed by an actual PHPUnit run over SSH,
+		// 2026-09-08 (see SWAP-with-HOMES.md) — this file's original
+		// assertSame() calls had never been executed before that.
+		$this->assertEqualsWithDelta( 500.0, GAS_Payouts::agent_pool_amount( $partner, 500 ), 0.0001 );
 	}
 
 	public function test_percent_pool_is_a_percentage_of_gross(): void {
@@ -42,8 +51,13 @@ final class PayoutMathTest extends TestCase {
 	public function test_partner_with_no_pool_configured_defaults_to_100_percent_of_gross(): void {
 		// No agent_pool_type/agent_pool_value at all — existing partners
 		// from before this field existed must behave exactly as before.
+		// Same int-vs-float subtlety as the test above: the unset-value
+		// fallback in agent_pool_amount() is the int literal 100 (not
+		// cast to float), and 100/100 is an exact int division in PHP —
+		// so this can come back as an int rather than a float depending
+		// on $gross's own type. Not a math bug, just the wrong assertion.
 		$partner = (object) array();
-		$this->assertSame( 2000.0, GAS_Payouts::agent_pool_amount( $partner, 2000 ) );
+		$this->assertEqualsWithDelta( 2000.0, GAS_Payouts::agent_pool_amount( $partner, 2000 ), 0.0001 );
 	}
 
 	/* ---------------------------------------------------------------- *

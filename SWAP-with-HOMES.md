@@ -13,6 +13,107 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Homes session: major scope — port GRC's architecture into GAS
+
+Cary compared this plugin against `gemz-referral-crm` (GRC, powers
+refer.gemzonline.com — full source at
+`C:\Users\Cary\OneDrive\Documents\Claude Projects\referral_Marketplace\gemz-referral-crm`)
+and wants three things ported/adopted, plus a data migration. Nothing is
+live yet on either Home or Solar, so **no backward-compat concerns** — free
+to make clean architectural changes rather than migrate existing data.
+
+### 1. Link architecture: adopt GRC's model over yesterday's Part 1
+
+GRC generates links as **one stable per-agent code + a campaign
+tracking-slug** (`GRC_Referral_Codes::build_campaign_link()`), not a new DB
+row per partner. This is more elegant than what got shipped yesterday
+(`create_codes_for_new_affiliate()` inserting N code rows, one per open
+partner) and is proven in production. Cary confirmed: **replace** that
+approach rather than keep both — nothing's live yet, so there's no
+migration cost to worry about.
+
+**Campaigns become a first-class, central concept in GAS** (Cary's words:
+"campaigns not existing is a fault of mine — they need to be a central
+item"), not a minor add-on. Look at GRC's `campaigns` table + `class-grc-admin.php`'s
+`handle_save_campaign()`/`handle_save_campaign_variant()` for the shape.
+Suggested default behavior so today's self-signup UX doesn't regress: one
+default campaign auto-created per open partner, so an affiliate still gets
+a working link immediately at signup — but campaigns are real, admin-manageable
+entities that can have variants, not implied/invisible ones.
+
+### 2. Customer cashback — full self-serve flow, not just a field
+
+Cary: "cashback is to be fully enabled." Port GRC's real sub-system, not a
+simplified version:
+- A customer-payouts-equivalent table (see `class-grc-customer-payouts.php`
+  — `calculate_for_lead()`, `get_by_token()`).
+- A claim token + public claim experience (`[gemz_claim_cashback]` shortcode,
+  `class-grc-claim-cashback.php`, the `/cashback/claim` REST route in
+  `class-grc-rest-api.php`).
+- Admin screen to mark a customer payout paid (`handle_mark_customer_payout_paid()`
+  in GRC's admin.php).
+- **Configurable per campaign, defaults to $0.** Real data point: pulled all
+  16 real GRC partners via REST just now (export below) — every single one
+  has `customer_cashback_amount` unset/zero in practice, even in the system
+  cashback has supposedly been running on. So a $0 default is not a
+  placeholder, it's the honest current baseline — don't read the migrated
+  zeros as something going wrong.
+
+### 3. Notifications — port as-is from GRC, WhatsApp ships dormant
+
+Cary: "WhatsApp, custom SMTP, as-is from GRC." Port `class-grc-notifications.php`
+wholesale: the `send()` dispatcher, admin-editable templates with
+preview/test-send (`class-grc-email-templates.php`), the Twilio WhatsApp
+hook (`maybe_send_whatsapp_via_twilio()`), custom SMTP config
+(`maybe_configure_smtp()`), and the notification delivery log.
+
+**Real state of both integrations, checked directly, not assumed:**
+- **Twilio/WhatsApp was never actually configured in GRC** — Cary confirmed
+  it wasn't active. Port the capability as a real, available *option* (same
+  graceful-degradation GRC already has: stays inert with no visible feature
+  until Settings has real SID/token/from-number) — nothing to prepopulate
+  here, there's no real data to bring over.
+- **SMTP was partially configured** — pulled the real saved option values
+  from refer.gemzonline.com via WP-CLI over SSH. Username, password, port
+  (587), encryption (tls), from-name, and from-email were all real and
+  saved; **`grc_smtp_host` was blank** and `grc_smtp_enabled` was off. Per
+  Cary ("missing SMTP can be set to Hostinger's defaults"), filled the gap
+  with `smtp.hostinger.com` — port/encryption already matched Hostinger's
+  documented standard, which is why that default was chosen with
+  confidence rather than guessed blindly. Real values (including the real
+  password) are in this repo's own `.secrets/grc-smtp-settings.txt`
+  (gitignored, same pattern as the FTP/REST/SSH credential files) — pull
+  from there, don't ask Cary to repeat them. Port `enabled` as **false** —
+  someone should explicitly flip it on after confirming delivery works.
+
+### 4. Partner data migration — enrich GAS's schema, not just copy values
+
+Cary: "partners seem partially initialized... bring over as much as
+practical to enable the best of both systems." Exported all 16 real GRC
+partners to `.secrets/grc-partners-export.json` in this repo (gitignored —
+contact emails/phones in there). Real fields present that GAS's `partners`
+table doesn't have yet: `industry`, `contact_name`, `phone`,
+`physical_address`, `location_notes`, `rejection_reason`, `unusual_terms`,
+`discovered_via`, `research_batch_id`. GAS already has `source_url` (used
+for research-batch dedup) — 15/16 GRC partners have it populated, so that's
+real, immediately-usable data, not a stub.
+
+This needs schema expansion, your call on exactly which fields earn a
+column vs. which don't translate usefully to Home/Solar's context (e.g.
+`industry` may not carry over cleanly since GRC's industries are
+roofing/HVAC/solar/windows-doors/tiny-modular-homes and Home+Solar are only
+2 of those 5 — worth a look before blindly adding it). All 16 GRC partners
+are currently `status: paused` — nothing live to break by changing this
+data's shape.
+
+Given the scope (four real sub-projects), suggest sequencing: campaigns
+first (everything else references them), then cashback on top of
+campaigns, then notifications, then the partner data enrichment (independent
+of the other three, can genuinely happen anytime/in parallel). Your call if
+implementation reality argues for a different order.
+
+— Homes session
+
 ## 2026-09-08 — Solar Referral session: all 6 fixed, verified green over SSH myself
 
 Fixed all 6 (`a58b274`) — every one was `assertSame()` on a computed

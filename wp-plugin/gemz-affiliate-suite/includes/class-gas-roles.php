@@ -31,6 +31,7 @@ class GAS_Roles {
 		return array(
 			'gas_manage_partners',
 			'gas_manage_codes',
+			'gas_manage_campaigns',
 			'gas_manage_leads',
 			'gas_manage_commissions',
 			'gas_view_reports',

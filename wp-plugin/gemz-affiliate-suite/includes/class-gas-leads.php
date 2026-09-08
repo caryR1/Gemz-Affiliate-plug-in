@@ -6,10 +6,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * On-site lead capture, for partners whose fulfillment_mode is
  * 'lead_capture' rather than the default 'redirect'. GAS_Redirect sends
- * visitors here instead of straight to an external destination_url; the
- * attributing code is read from the same gas_affiliate_code cookie the
- * redirect handler already sets, so this form needs no query-string
- * attribution of its own.
+ * visitors here instead of straight to an external destination_url. Which
+ * PARTNER this lead belongs to is read from the gas_campaign_id cookie
+ * GAS_Redirect always sets on a valid campaign link; which AFFILIATE (if
+ * any) gets credited is read separately from the gas_affiliate_code
+ * cookie — the two are independent since campaigns 2026-09-08, so a
+ * visitor with no (or a stale) ?ref= still reaches a valid form as long
+ * as the campaign itself resolved.
  */
 class GAS_Leads {
 
@@ -76,6 +79,13 @@ class GAS_Leads {
 		return $id ? get_permalink( $id ) : home_url( '/get-a-quote/' );
 	}
 
+	/**
+	 * The affiliate to credit, if any — optional. An organic visitor (no
+	 * ?ref= on the campaign link, or a stale/invalid one) still reaches
+	 * this form with no code at all; that's a valid, expected case now
+	 * that the code is separate from which partner/campaign a lead
+	 * belongs to (see get_campaign_from_cookie() below for that part).
+	 */
 	private static function get_code_from_cookie() {
 		if ( empty( $_COOKIE[ GAS_Redirect::COOKIE_NAME ] ) ) {
 			return null;
@@ -86,18 +96,33 @@ class GAS_Leads {
 		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes} WHERE code = %s", $code ) );
 	}
 
+	/**
+	 * Which partner this lead belongs to is now resolved via the CAMPAIGN
+	 * the visitor arrived through (GAS_Redirect sets this cookie
+	 * independent of whether a ?ref= code resolved) — codes no longer
+	 * carry a partner_id of their own for self-signup affiliates, so this
+	 * (not the code) is the required part of a valid lead-capture visit.
+	 */
+	private static function get_campaign_from_cookie() {
+		if ( empty( $_COOKIE[ GAS_Redirect::CAMPAIGN_COOKIE_NAME ] ) ) {
+			return null;
+		}
+		return GAS_Campaigns::get( absint( $_COOKIE[ GAS_Redirect::CAMPAIGN_COOKIE_NAME ] ) );
+	}
+
 	public static function render_form() {
 		if ( isset( $_GET['gas_lead'] ) && 'success' === $_GET['gas_lead'] ) {
 			return '<div class="gas-notice gas-notice-success"><p>Thanks &mdash; we\'ve got your information and will be in touch shortly.</p></div>';
 		}
 
-		$code = self::get_code_from_cookie();
-		if ( ! $code ) {
+		$campaign = self::get_campaign_from_cookie();
+		if ( ! $campaign ) {
 			return '<div class="gas-notice"><p>We couldn\'t find a referral link for this visit. Please use the link that was shared with you.</p></div>';
 		}
+		$code = self::get_code_from_cookie(); // optional — organic visits have none
 
 		global $wpdb;
-		$partner = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $code->partner_id ) );
+		$partner = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $campaign->partner_id ) );
 		if ( ! $partner || 'lead_capture' !== $partner->fulfillment_mode ) {
 			return '<div class="gas-notice"><p>This link isn\'t set up to take requests directly &mdash; please use the link that was shared with you.</p></div>';
 		}
@@ -120,7 +145,10 @@ class GAS_Leads {
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">
 			<?php wp_nonce_field( 'gas_submit_lead' ); ?>
 			<input type="hidden" name="action" value="gas_submit_lead">
-			<input type="hidden" name="code" value="<?php echo esc_attr( $code->code ); ?>">
+			<input type="hidden" name="campaign_id" value="<?php echo esc_attr( $campaign->id ); ?>">
+			<?php if ( $code ) : ?>
+				<input type="hidden" name="code" value="<?php echo esc_attr( $code->code ); ?>">
+			<?php endif; ?>
 			<p style="position:absolute;left:-9999px;" aria-hidden="true">
 				<label>Leave this field empty<input type="text" name="gas_hp" tabindex="-1" autocomplete="off"></label>
 			</p>
@@ -174,14 +202,19 @@ class GAS_Leads {
 		};
 
 		global $wpdb;
-		$code_str = isset( $_POST['code'] ) ? sanitize_text_field( wp_unslash( $_POST['code'] ) ) : '';
-		$codes    = GAS_DB::table( 'codes' );
-		$code     = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes} WHERE code = %s", $code_str ) );
-		if ( ! $code ) {
+		$campaign_id = isset( $_POST['campaign_id'] ) ? absint( $_POST['campaign_id'] ) : 0;
+		$campaign    = $campaign_id ? GAS_Campaigns::get( $campaign_id ) : null;
+		if ( ! $campaign ) {
 			$fail( 'Something went wrong identifying your referral link. Please try again from the original link.' );
 		}
 
-		$partner = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $code->partner_id ) );
+		// The affiliate to credit, if any — optional, same as at render
+		// time; an organic (no-ref) submission is a valid lead, just with
+		// no one to pay a commission on it.
+		$code_str = isset( $_POST['code'] ) ? sanitize_text_field( wp_unslash( $_POST['code'] ) ) : '';
+		$code     = $code_str ? $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'codes' ) . ' WHERE code = %s', $code_str ) ) : null;
+
+		$partner = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $campaign->partner_id ) );
 		if ( ! $partner || 'lead_capture' !== $partner->fulfillment_mode ) {
 			$fail( 'This link isn\'t set up to take requests directly.' );
 		}
@@ -215,7 +248,8 @@ class GAS_Leads {
 			GAS_DB::table( 'leads' ),
 			array(
 				'partner_id'     => $partner->id,
-				'code_id'        => $code->id,
+				'code_id'        => $code ? $code->id : null,
+				'campaign_id'    => $campaign->id,
 				'customer_name'  => $name,
 				'customer_email' => $email,
 				'customer_phone' => $phone,

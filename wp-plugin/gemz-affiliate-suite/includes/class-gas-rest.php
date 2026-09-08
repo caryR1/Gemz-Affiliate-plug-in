@@ -71,6 +71,32 @@ class GAS_REST {
 			),
 		) );
 
+		// Campaigns — exposed from the start (unlike partners/settings,
+		// where a field missing from REST silently locked Home out of it
+		// once, see class-gas-rest.php's own history) since campaigns are
+		// exactly the kind of admin-managed data a site with only
+		// FTP+REST access (no wp-admin) needs to create/edit directly.
+		register_rest_route( 'gas/v1', '/campaigns', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'list_campaigns' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
+		register_rest_route( 'gas/v1', '/campaigns', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'create_campaign' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+		) );
+
+		register_rest_route( 'gas/v1', '/campaigns/(?P<id>\d+)', array(
+			'methods'             => 'POST',
+			'callback'            => array( __CLASS__, 'update_campaign' ),
+			'permission_callback' => array( __CLASS__, 'permission_check' ),
+			'args'                => array(
+				'id' => array( 'validate_callback' => function( $param ) { return is_numeric( $param ); } ),
+			),
+		) );
+
 		register_rest_route( 'gas/v1', '/codes', array(
 			'methods'             => 'GET',
 			'callback'            => array( __CLASS__, 'list_codes' ),
@@ -139,6 +165,101 @@ class GAS_REST {
 			unset( $r['installments_json'] );
 		}
 		return new WP_REST_Response( $rows, 200 );
+	}
+
+	public static function list_campaigns() {
+		global $wpdb;
+		$campaigns_table = GAS_DB::table( 'campaigns' );
+		$partners_table  = GAS_DB::table( 'partners' );
+		$rows = $wpdb->get_results(
+			"SELECT c.*, p.name AS partner_name FROM {$campaigns_table} c
+			 LEFT JOIN {$partners_table} p ON p.id = c.partner_id
+			 ORDER BY c.created_at DESC",
+			ARRAY_A
+		);
+		return new WP_REST_Response( $rows, 200 );
+	}
+
+	public static function create_campaign( WP_REST_Request $request ) {
+		global $wpdb;
+		$table = GAS_DB::table( 'campaigns' );
+		$body  = $request->get_json_params();
+
+		$name       = isset( $body['name'] ) ? sanitize_text_field( $body['name'] ) : '';
+		$partner_id = isset( $body['partner_id'] ) ? absint( $body['partner_id'] ) : 0;
+		$slug       = isset( $body['tracking_slug'] ) ? sanitize_title( $body['tracking_slug'] ) : '';
+
+		if ( '' === $name || ! $partner_id || '' === $slug ) {
+			return new WP_Error( 'gas_missing_fields', 'name, partner_id, and tracking_slug are all required.', array( 'status' => 400 ) );
+		}
+		if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE tracking_slug = %s", $slug ) ) ) {
+			return new WP_Error( 'gas_slug_taken', 'That tracking slug is already used by another campaign.', array( 'status' => 409 ) );
+		}
+
+		$now = current_time( 'mysql' );
+		$wpdb->insert( $table, array(
+			'name'            => $name,
+			'partner_id'      => $partner_id,
+			'tracking_slug'   => $slug,
+			'landing_page_id' => isset( $body['landing_page_id'] ) ? absint( $body['landing_page_id'] ) ?: null : null,
+			'status'          => isset( $body['status'] ) && 'paused' === $body['status'] ? 'paused' : 'active',
+			'is_default'      => 0,
+			'created_at'      => $now,
+			'updated_at'      => $now,
+		) );
+
+		GAS_Admin::audit_log( 'campaign', $wpdb->insert_id, 'created_via_rest', array( 'name' => $name ) );
+
+		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
+		return new WP_REST_Response( $created, 201 );
+	}
+
+	public static function update_campaign( WP_REST_Request $request ) {
+		global $wpdb;
+		$id    = absint( $request['id'] );
+		$table = GAS_DB::table( 'campaigns' );
+
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$table} WHERE id = %d", $id ) );
+		if ( ! $existing ) {
+			return new WP_Error( 'gas_not_found', 'Campaign not found.', array( 'status' => 404 ) );
+		}
+
+		$body    = $request->get_json_params();
+		$allowed = array( 'name', 'partner_id', 'tracking_slug', 'landing_page_id', 'status' );
+		$data    = array();
+
+		foreach ( $allowed as $field ) {
+			if ( ! array_key_exists( $field, $body ) ) {
+				continue;
+			}
+			if ( 'name' === $field ) {
+				$data['name'] = sanitize_text_field( $body['name'] );
+			} elseif ( 'partner_id' === $field ) {
+				$data['partner_id'] = absint( $body['partner_id'] );
+			} elseif ( 'tracking_slug' === $field ) {
+				$slug = sanitize_title( $body['tracking_slug'] );
+				$taken = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$table} WHERE tracking_slug = %s AND id != %d", $slug, $id ) );
+				if ( $taken ) {
+					return new WP_Error( 'gas_slug_taken', 'That tracking slug is already used by another campaign.', array( 'status' => 409 ) );
+				}
+				$data['tracking_slug'] = $slug;
+			} elseif ( 'landing_page_id' === $field ) {
+				$data['landing_page_id'] = absint( $body['landing_page_id'] ) ?: null;
+			} elseif ( 'status' === $field ) {
+				$data['status'] = 'paused' === $body['status'] ? 'paused' : 'active';
+			}
+		}
+
+		if ( empty( $data ) ) {
+			return new WP_Error( 'gas_no_fields', 'No recognized fields to update.', array( 'status' => 400 ) );
+		}
+
+		$data['updated_at'] = current_time( 'mysql' );
+		$wpdb->update( $table, $data, array( 'id' => $id ) );
+		GAS_Admin::audit_log( 'campaign', $id, 'updated_via_rest', $data );
+
+		$updated = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", $id ), ARRAY_A );
+		return new WP_REST_Response( $updated, 200 );
 	}
 
 	/**
@@ -300,6 +421,7 @@ class GAS_REST {
 		);
 
 		GAS_Roles::provision_partner_account( $wpdb->insert_id );
+		GAS_Campaigns::ensure_default_for_partner( $wpdb->insert_id );
 		if ( ! empty( $body['email'] ) ) {
 			GAS_Contacts::upsert( $body['email'], 'partner', array( 'name' => $name, 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $wpdb->insert_id ) );
 		}
@@ -319,10 +441,20 @@ class GAS_REST {
 			return new WP_Error( 'gas_not_found', 'Code not found.', array( 'status' => 404 ) );
 		}
 
+		// Since campaigns (2026-09-08), a code no longer implies one fixed
+		// partner — an explicit partner_id is required in the request body.
+		// Falls back to the code's own partner_id only for a
+		// manually-assigned code that still has one (partner_id != 0),
+		// purely for backward compatibility with existing callers.
+		$partner_id = isset( $body['partner_id'] ) ? absint( $body['partner_id'] ) : ( (int) $code->partner_id ?: 0 );
+		if ( ! $partner_id ) {
+			return new WP_Error( 'gas_missing_partner', 'partner_id is required — this code isn\'t tied to a single partner.', array( 'status' => 400 ) );
+		}
+
 		$partners_table = GAS_DB::table( 'partners' );
-		$partner        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$partners_table} WHERE id = %d", $code->partner_id ) );
+		$partner        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$partners_table} WHERE id = %d", $partner_id ) );
 		if ( ! $partner ) {
-			return new WP_Error( 'gas_not_found', 'Partner not found for this code.', array( 'status' => 404 ) );
+			return new WP_Error( 'gas_not_found', 'Partner not found.', array( 'status' => 404 ) );
 		}
 
 		$sale_amount       = isset( $body['sale_amount'] ) ? (float) $body['sale_amount'] : 0;
@@ -516,6 +648,7 @@ class GAS_REST {
 
 		$wpdb->update( $table, $data, array( 'id' => $id ), $formats, array( '%d' ) );
 		GAS_Roles::provision_partner_account( $id );
+		GAS_Campaigns::ensure_default_for_partner( $id );
 		if ( ! empty( $data['email'] ) ) {
 			$name_for_contact = $data['name'] ?? $wpdb->get_var( $wpdb->prepare( "SELECT name FROM {$table} WHERE id = %d", $id ) );
 			GAS_Contacts::upsert( $data['email'], 'partner', array( 'name' => $name_for_contact, 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $id ) );

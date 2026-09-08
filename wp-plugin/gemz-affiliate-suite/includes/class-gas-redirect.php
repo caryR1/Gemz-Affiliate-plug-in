@@ -15,6 +15,12 @@ class GAS_Redirect {
 	// same person's customer link too) without one clobbering the other.
 	const SPONSOR_COOKIE_NAME = 'gas_sponsor_code';
 
+	// Which campaign a click landed through — set independently of
+	// COOKIE_NAME above, since a campaign link can be clicked with no
+	// (or an invalid) ?ref=, and we still want that organic traffic
+	// attributed to a campaign/partner even with no affiliate credited.
+	const CAMPAIGN_COOKIE_NAME = 'gas_campaign_id';
+
 	public static function init() {
 		add_action( 'init', array( __CLASS__, 'add_rewrite_rule' ) );
 		add_filter( 'query_vars', array( __CLASS__, 'add_query_var' ) );
@@ -22,13 +28,22 @@ class GAS_Redirect {
 		add_action( 'template_redirect', array( __CLASS__, 'handle_join_redirect' ) );
 	}
 
+	/**
+	 * /go/{tracking_slug} now resolves a CAMPAIGN (see GAS_Campaigns),
+	 * not a code directly — ported from GRC's link architecture,
+	 * 2026-09-08. The affiliate's own stable code rides along as a
+	 * ?ref= query arg instead of being part of the path itself, e.g.
+	 * /go/go-solar-power-direct-link?ref=jane-smith. /join/{code} is
+	 * unrelated to campaigns (it's always been about recruiting a new
+	 * affiliate via another affiliate's own code) and is untouched.
+	 */
 	public static function add_rewrite_rule() {
-		add_rewrite_rule( '^go/([a-zA-Z0-9_-]+)/?$', 'index.php?gas_code=$matches[1]', 'top' );
+		add_rewrite_rule( '^go/([a-zA-Z0-9_-]+)/?$', 'index.php?gas_campaign_slug=$matches[1]', 'top' );
 		add_rewrite_rule( '^join/([a-zA-Z0-9_-]+)/?$', 'index.php?gas_sponsor=$matches[1]', 'top' );
 	}
 
 	public static function add_query_var( $vars ) {
-		$vars[] = 'gas_code';
+		$vars[] = 'gas_campaign_slug';
 		$vars[] = 'gas_sponsor';
 		return $vars;
 	}
@@ -77,48 +92,71 @@ class GAS_Redirect {
 	}
 
 	/**
-	 * On /go/{code}: look up the code, log the click, redirect to the
-	 * partner's real referral URL. Unknown codes fall through untouched
-	 * (WordPress will 404 normally, no click is logged).
+	 * On /go/{tracking_slug}?ref={code}&variant={id}: resolve the
+	 * campaign by slug, optionally the affiliate by ref, log the click,
+	 * and redirect. Two-hop resolution ported from GRC's
+	 * GRC_Public::maybe_redirect_tracking_link(): slug -> campaign is the
+	 * hard requirement (unknown/paused slug falls through to a normal
+	 * 404, same as an unknown code used to); ref -> affiliate is
+	 * best-effort (an organic click with no ref, or a stale/invalid one,
+	 * still resolves the campaign and still gets logged — it's just not
+	 * credited to anyone), matching GRC's "ref is opaque until lead
+	 * creation" philosophy but applied at click time since GAS, unlike
+	 * GRC, already logs clicks here rather than only at lead-creation.
 	 */
 	public static function handle_redirect() {
-		$code = get_query_var( 'gas_code' );
-		if ( empty( $code ) ) {
+		$slug = get_query_var( 'gas_campaign_slug' );
+		if ( empty( $slug ) ) {
 			return;
 		}
 
+		$campaign = GAS_Campaigns::get_by_slug( $slug );
+		if ( ! $campaign ) {
+			return; // Unknown or paused campaign: let WP 404 normally.
+		}
+
 		global $wpdb;
-		$codes_table    = GAS_DB::table( 'codes' );
 		$partners_table = GAS_DB::table( 'partners' );
+		$partner        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$partners_table} WHERE id = %d", $campaign->partner_id ) );
 
-		$row = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT c.id AS code_id, c.code, c.partner_id, c.active, c.wp_user_id, p.destination_url, p.fulfillment_mode
-				 FROM {$codes_table} c
-				 LEFT JOIN {$partners_table} p ON p.id = c.partner_id
-				 WHERE c.code = %s",
-				$code
-			)
-		);
-
-		if ( ! $row || ! $row->active ) {
-			return; // Unknown or disabled code: let WP 404 normally.
+		$code = null;
+		if ( ! empty( $_GET['ref'] ) ) {
+			$codes_table = GAS_DB::table( 'codes' );
+			$code = $wpdb->get_row( $wpdb->prepare(
+				"SELECT id, code, wp_user_id FROM {$codes_table} WHERE code = %s AND active = 1",
+				sanitize_text_field( wp_unslash( $_GET['ref'] ) )
+			) );
 		}
 
 		// Self-referral guard: an affiliate clicking their own link while
 		// logged in as themselves doesn't get a cookie or a logged click —
 		// otherwise they could trivially inflate their own click count or
 		// (if a sale were later attributed automatically) their own payout.
-		$is_self = $row->wp_user_id && is_user_logged_in() && get_current_user_id() === (int) $row->wp_user_id;
+		$is_self = $code && $code->wp_user_id && is_user_logged_in() && get_current_user_id() === (int) $code->wp_user_id;
 
-		if ( ! $is_self ) {
+		// The campaign cookie is set independent of whether ref resolved,
+		// so an organic (no-ref) click through a campaign link still
+		// attributes to that campaign/partner for reporting purposes.
+		setcookie(
+			self::CAMPAIGN_COOKIE_NAME,
+			(string) $campaign->id,
+			array(
+				'expires'  => time() + self::COOKIE_DAYS * DAY_IN_SECONDS,
+				'path'     => '/',
+				'secure'   => is_ssl(),
+				'httponly' => true,
+				'samesite' => 'Lax',
+			)
+		);
+
+		if ( $code && ! $is_self ) {
 			// Last-touch attribution: overwrite any existing cookie unconditionally,
 			// so whichever code was clicked most recently is the one that counts,
 			// for up to COOKIE_DAYS. Simple overwrite is what makes this last-touch
 			// rather than first-touch — no extra logic needed.
 			setcookie(
 				self::COOKIE_NAME,
-				$row->code,
+				$code->code,
 				array(
 					'expires'  => time() + self::COOKIE_DAYS * DAY_IN_SECONDS,
 					'path'     => '/',
@@ -127,20 +165,59 @@ class GAS_Redirect {
 					'samesite' => 'Lax',
 				)
 			);
+		}
 
-			self::maybe_log_click( $row );
+		if ( ! $is_self ) {
+			self::maybe_log_click( $campaign, $code, $partner );
+		}
+
+		// A campaign can override where it lands (a custom on-site page);
+		// otherwise it falls through to the partner's own normal
+		// fulfillment setup, unchanged from before campaigns existed.
+		if ( ! empty( $campaign->landing_page_id ) ) {
+			$landing_page_id = $campaign->landing_page_id;
+
+			// An explicit ?variant= overrides the campaign's own landing
+			// page, as long as it actually belongs to THIS campaign —
+			// falls back to the campaign's default silently on any
+			// mismatch (wrong campaign, deleted variant) rather than
+			// erroring, so a stale or tampered variant param never
+			// breaks the link. Ported from GRC's identical guard.
+			if ( ! empty( $_GET['variant'] ) ) {
+				$variants_table = GAS_DB::table( 'campaign_variants' );
+				$variant_page_id = $wpdb->get_var( $wpdb->prepare(
+					"SELECT landing_page_id FROM {$variants_table} WHERE id = %d AND campaign_id = %d",
+					absint( $_GET['variant'] ), $campaign->id
+				) );
+				if ( $variant_page_id ) {
+					$landing_page_id = $variant_page_id;
+				}
+			}
+
+			$target = add_query_arg( 'campaign_id', $campaign->id, get_permalink( $landing_page_id ) );
+			if ( $code ) {
+				$target = add_query_arg( 'ref', $code->code, $target );
+			}
+			wp_redirect( $target, 302 );
+			exit;
+		}
+
+		if ( ! $partner ) {
+			wp_redirect( home_url( '/' ), 302 );
+			exit;
 		}
 
 		// Lead-capture partners take the visitor to an on-site form instead
-		// of an external destination — the form reads the cookie we just
-		// set for attribution, so no query-string handoff is needed.
-		if ( 'lead_capture' === $row->fulfillment_mode ) {
+		// of an external destination — the form reads the campaign/ref
+		// cookies we just set for attribution, so no query-string handoff
+		// is needed.
+		if ( 'lead_capture' === $partner->fulfillment_mode ) {
 			wp_redirect( GAS_Leads::page_url(), 302 );
 			exit;
 		}
 
-		if ( ! empty( $row->destination_url ) ) {
-			wp_redirect( esc_url_raw( $row->destination_url ), 302 );
+		if ( ! empty( $partner->destination_url ) ) {
+			wp_redirect( esc_url_raw( $partner->destination_url ), 302 );
 			exit;
 		}
 
@@ -152,13 +229,16 @@ class GAS_Redirect {
 
 	/**
 	 * Logs the click, unless this exact visitor already clicked this exact
-	 * code today — so refreshing the page (or a slow double-click) doesn't
-	 * inflate the count shown on the affiliate's dashboard and the admin
-	 * Click Log. Deliberately still a full historical row per unique
+	 * campaign today — so refreshing the page (or a slow double-click)
+	 * doesn't inflate the count shown on the affiliate's dashboard and the
+	 * admin Click Log. Deliberately still a full historical row per unique
 	 * visitor/day (not just a counter), since the Click Log screen shows
-	 * IP/user-agent detail per row.
+	 * IP/user-agent detail per row. $code may be null (organic click, no
+	 * ref, or an invalid one) — code_id/code are stored as the 0/''
+	 * sentinel in that case, same convention GAS already uses elsewhere
+	 * for "unassigned."
 	 */
-	private static function maybe_log_click( $row ) {
+	private static function maybe_log_click( $campaign, $code, $partner ) {
 		global $wpdb;
 		$clicks_table = GAS_DB::table( 'clicks' );
 		$hash         = self::visitor_hash();
@@ -167,9 +247,9 @@ class GAS_Redirect {
 		$already = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT id FROM {$clicks_table}
-				 WHERE code_id = %d AND visitor_hash = %s AND DATE(clicked_at) = %s
+				 WHERE campaign_id = %d AND visitor_hash = %s AND DATE(clicked_at) = %s
 				 LIMIT 1",
-				$row->code_id,
+				$campaign->id,
 				$hash,
 				$today
 			)
@@ -183,9 +263,10 @@ class GAS_Redirect {
 		$wpdb->insert(
 			$clicks_table,
 			array(
-				'code_id'      => $row->code_id,
-				'code'         => $row->code,
-				'partner_id'   => $row->partner_id,
+				'code_id'      => $code ? $code->id : 0,
+				'code'         => $code ? $code->code : '',
+				'partner_id'   => $partner ? $partner->id : null,
+				'campaign_id'  => $campaign->id,
 				'clicked_at'   => current_time( 'mysql' ),
 				'ip_address'   => self::get_client_ip(),
 				'user_agent'   => isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 255 ) : '',

@@ -62,20 +62,40 @@ class GAS_DB {
 	 * — the first real partner needed to cover 4 states, not just one.
 	 * See GAS_Frontend::partner_covers_state() for how this is matched
 	 * against a referred customer's state.
+	 *
+	 * Note on campaigns/campaign_variants (2026-09-08): ported from
+	 * gemz-referral-crm's (GRC) architecture at Cary's explicit request —
+	 * replaces the previous day's "one code row per open partner" model
+	 * with GRC's proven one: a single stable per-affiliate code (see
+	 * GAS_Frontend::get_or_create_code_for_user()) plus a separate,
+	 * admin-managed `campaigns` table keyed by a URL tracking_slug. A
+	 * link is now `{code}` + `{tracking_slug}` combined at share time
+	 * (see GAS_Campaigns::build_link()), not a DB row per affiliate —
+	 * any active affiliate's code works with any active campaign's slug,
+	 * exactly like GRC's agents/campaigns relationship (no assignment
+	 * table between the two). One deliberate addition over GRC:
+	 * `is_default` marks the one auto-created campaign per partner (see
+	 * GAS_Campaigns::ensure_default_for_partner()) so self-signup can
+	 * still hand a new affiliate a working link immediately, without an
+	 * admin having to build a campaign by hand first — GRC has no
+	 * equivalent auto-provisioning, since campaign creation there is
+	 * always a manual admin step.
 	 */
 	private static function create_tables() {
 		global $wpdb;
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		$charset_collate = $wpdb->get_charset_collate();
 
-		$partners     = self::table( 'partners' );
-		$codes        = self::table( 'codes' );
-		$clicks       = self::table( 'clicks' );
-		$payouts      = self::table( 'payouts' );
-		$leads        = self::table( 'leads' );
-		$audit_log    = self::table( 'audit_log' );
-		$contacts     = self::table( 'contacts' );
-		$lead_magnets = self::table( 'lead_magnets' );
+		$partners          = self::table( 'partners' );
+		$codes             = self::table( 'codes' );
+		$clicks            = self::table( 'clicks' );
+		$payouts           = self::table( 'payouts' );
+		$leads             = self::table( 'leads' );
+		$audit_log         = self::table( 'audit_log' );
+		$contacts          = self::table( 'contacts' );
+		$lead_magnets      = self::table( 'lead_magnets' );
+		$campaigns         = self::table( 'campaigns' );
+		$campaign_variants = self::table( 'campaign_variants' );
 
 		$sql = "CREATE TABLE {$partners} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -142,17 +162,19 @@ class GAS_DB {
 
 		CREATE TABLE {$clicks} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-			code_id BIGINT UNSIGNED NOT NULL,
-			code VARCHAR(64) NOT NULL,
+			code_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+			code VARCHAR(64) NOT NULL DEFAULT '',
 			partner_id BIGINT UNSIGNED NULL,
+			campaign_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
 			clicked_at DATETIME NOT NULL,
 			ip_address VARCHAR(45) NULL,
 			user_agent VARCHAR(255) NULL,
 			visitor_hash VARCHAR(64) NULL,
 			PRIMARY KEY  (id),
 			KEY code_id (code_id),
+			KEY campaign_id (campaign_id),
 			KEY clicked_at (clicked_at),
-			KEY dedup (code_id, visitor_hash, clicked_at)
+			KEY dedup (campaign_id, visitor_hash, clicked_at)
 		) {$charset_collate};
 
 		CREATE TABLE {$payouts} (
@@ -190,6 +212,7 @@ class GAS_DB {
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
 			partner_id BIGINT UNSIGNED NOT NULL,
 			code_id BIGINT UNSIGNED NULL,
+			campaign_id BIGINT UNSIGNED NULL,
 			customer_name VARCHAR(191) NOT NULL,
 			customer_email VARCHAR(191) NULL,
 			customer_phone VARCHAR(64) NULL,
@@ -203,6 +226,7 @@ class GAS_DB {
 			PRIMARY KEY  (id),
 			KEY partner_id (partner_id),
 			KEY code_id (code_id),
+			KEY campaign_id (campaign_id),
 			KEY status (status)
 		) {$charset_collate};
 
@@ -245,6 +269,31 @@ class GAS_DB {
 			active TINYINT(1) NOT NULL DEFAULT 1,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id)
+		) {$charset_collate};
+
+		CREATE TABLE {$campaigns} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			name VARCHAR(200) NOT NULL,
+			partner_id BIGINT UNSIGNED NOT NULL,
+			tracking_slug VARCHAR(60) NOT NULL,
+			landing_page_id BIGINT UNSIGNED NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'active',
+			is_default TINYINT(1) NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			UNIQUE KEY tracking_slug (tracking_slug),
+			KEY partner_id (partner_id)
+		) {$charset_collate};
+
+		CREATE TABLE {$campaign_variants} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			campaign_id BIGINT UNSIGNED NOT NULL,
+			landing_page_id BIGINT UNSIGNED NOT NULL,
+			variant_name VARCHAR(100) NOT NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY campaign_id (campaign_id)
 		) {$charset_collate};";
 
 		dbDelta( $sql );

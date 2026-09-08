@@ -12,6 +12,7 @@ class GAS_Admin {
 	// manage users, or touch general WordPress settings.
 	const CAP_CODES       = 'gas_manage_codes';
 	const CAP_PARTNERS    = 'gas_manage_partners';
+	const CAP_CAMPAIGNS   = 'gas_manage_campaigns';
 	const CAP_LEADS       = 'gas_manage_leads';
 	const CAP_COMMISSIONS = 'gas_manage_commissions';
 	const CAP_REPORTS     = 'gas_view_reports';
@@ -61,6 +62,7 @@ class GAS_Admin {
 		add_submenu_page( 'gas-affiliates', 'Affiliates', 'Affiliates', self::CAP_CODES, 'gas-affiliates', array( __CLASS__, 'render_affiliates_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Sub-Affiliate Codes', 'Codes', self::CAP_CODES, 'gas-codes', array( __CLASS__, 'render_codes_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP_PARTNERS, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
+		add_submenu_page( 'gas-affiliates', 'Campaigns', 'Campaigns', self::CAP_CAMPAIGNS, 'gas-campaigns', array( __CLASS__, 'render_campaigns_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Leads', 'Leads', self::CAP_LEADS, 'gas-leads', array( __CLASS__, 'render_leads_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Click Log', 'Click Log', self::CAP_REPORTS, 'gas-clicks', array( __CLASS__, 'render_clicks_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Reports', 'Reports', self::CAP_REPORTS, 'gas-reports', array( __CLASS__, 'render_reports_page' ) );
@@ -633,6 +635,140 @@ class GAS_Admin {
 		self::wrap_end();
 	}
 
+	/**
+	 * Campaigns screen — ported from GRC's admin/views/campaigns.php,
+	 * adapted to GAS's plain-PHP (no separate view files) convention.
+	 * Same shape: an add/edit form, a "Landing Page Variants" section
+	 * that only appears while editing an existing campaign, and the
+	 * full campaign list below.
+	 */
+	public static function render_campaigns_page() {
+		if ( ! current_user_can( self::CAP_CAMPAIGNS ) ) {
+			return;
+		}
+		global $wpdb;
+		$edit_id  = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
+		$editing  = $edit_id ? GAS_Campaigns::get( $edit_id ) : null;
+		$partners = self::get_partners();
+		$pages    = get_posts( array( 'post_type' => 'page', 'post_status' => 'publish', 'numberposts' => -1, 'orderby' => 'title', 'order' => 'ASC' ) );
+
+		self::wrap_start( 'Campaigns' );
+
+		if ( isset( $_GET['saved'] ) ) {
+			echo '<div class="notice notice-success"><p>Saved.</p></div>';
+		}
+		if ( isset( $_GET['variant_saved'] ) ) {
+			echo '<div class="notice notice-success"><p>Variant saved.</p></div>';
+		}
+
+		echo '<h2>' . ( $editing ? 'Edit Campaign' : 'Add a Campaign' ) . '</h2>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'gas_save_campaign' );
+		echo '<input type="hidden" name="action" value="gas_save_campaign">';
+		if ( $editing ) {
+			echo '<input type="hidden" name="campaign_id" value="' . esc_attr( $editing->id ) . '">';
+		}
+		echo '<table class="form-table"><tbody>';
+		echo '<tr><th>Name</th><td><input type="text" name="name" class="regular-text" required value="' . esc_attr( $editing->name ?? '' ) . '"></td></tr>';
+
+		echo '<tr><th>Partner</th><td><select name="partner_id" required>';
+		echo '<option value="">-- choose a partner --</option>';
+		foreach ( $partners as $p ) {
+			echo '<option value="' . esc_attr( $p->id ) . '"' . selected( $editing->partner_id ?? 0, $p->id, false ) . '>' . esc_html( $p->name ) . '</option>';
+		}
+		echo '</select></td></tr>';
+
+		echo '<tr><th>Tracking slug</th><td>' . esc_html( home_url( '/go/' ) ) . '<input type="text" name="tracking_slug" style="width:220px;" required value="' . esc_attr( $editing->tracking_slug ?? '' ) . '"> <p class="description">URL-safe, must be unique across every campaign.</p></td></tr>';
+
+		echo '<tr><th>Landing page</th><td><select name="landing_page_id"><option value="">-- default (use the partner\'s own fulfillment setup) --</option>';
+		foreach ( $pages as $pg ) {
+			echo '<option value="' . esc_attr( $pg->ID ) . '"' . selected( $editing->landing_page_id ?? 0, $pg->ID, false ) . '>' . esc_html( $pg->post_title ) . '</option>';
+		}
+		echo '</select> <p class="description">Optional. Leave as default to send clicks through this partner\'s normal fulfillment (on-site lead form or external redirect, per the Partners screen) — only set this if this specific campaign should land somewhere else instead.</p></td></tr>';
+
+		echo '<tr><th>Status</th><td><select name="status">';
+		echo '<option value="active"' . selected( $editing->status ?? 'active', 'active', false ) . '>Active</option>';
+		echo '<option value="paused"' . selected( $editing->status ?? 'active', 'paused', false ) . '>Paused</option>';
+		echo '</select></td></tr>';
+
+		if ( $editing && $editing->is_default ) {
+			echo '<tr><th></th><td><p class="description">This is this partner\'s auto-created default campaign (from "Open to self-signup" on the Partners screen) — safe to rename or repoint, but if you delete/pause it, that partner loses its automatic self-signup link until a new default is created.</p></td></tr>';
+		}
+
+		echo '</tbody></table>';
+		submit_button( $editing ? 'Update Campaign' : 'Add Campaign' );
+		echo '</form>';
+
+		if ( $editing ) {
+			echo '<h2>Landing Page Variants</h2>';
+			echo '<p class="description">Additional landing pages an affiliate can choose to promote for this campaign, alongside its default above.</p>';
+			$variants = GAS_Campaigns::get_variants_for( $editing->id );
+			if ( $variants ) {
+				echo '<table class="widefat striped"><thead><tr><th>Variant Name</th><th>Landing Page</th><th>Link</th><th>Actions</th></tr></thead><tbody>';
+				foreach ( $variants as $v ) {
+					$page_title = get_the_title( $v->landing_page_id ) ?: '(page deleted)';
+					echo '<tr>';
+					echo '<td>' . esc_html( $v->variant_name ) . '</td>';
+					echo '<td>' . esc_html( $page_title ) . '</td>';
+					echo '<td><input type="text" readonly style="width:100%;" value="' . esc_attr( GAS_Campaigns::build_link( $editing, 'YOUR-CODE', $v->id ) ) . '" onclick="this.select();"></td>';
+					echo '<td><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" onsubmit="return confirm(\'Delete this variant?\');">';
+					wp_nonce_field( 'gas_delete_campaign_variant' );
+					echo '<input type="hidden" name="action" value="gas_delete_campaign_variant">';
+					echo '<input type="hidden" name="variant_id" value="' . esc_attr( $v->id ) . '">';
+					echo '<input type="hidden" name="campaign_id" value="' . esc_attr( $editing->id ) . '">';
+					echo '<button type="submit" class="button-link">Delete</button>';
+					echo '</form></td>';
+					echo '</tr>';
+				}
+				echo '</tbody></table>';
+			}
+
+			echo '<h3>Add a Variant</h3>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			wp_nonce_field( 'gas_save_campaign_variant' );
+			echo '<input type="hidden" name="action" value="gas_save_campaign_variant">';
+			echo '<input type="hidden" name="campaign_id" value="' . esc_attr( $editing->id ) . '">';
+			echo '<p><input type="text" name="variant_name" placeholder="Variant name" required> ';
+			echo '<select name="landing_page_id" required><option value="">-- landing page --</option>';
+			foreach ( $pages as $pg ) {
+				echo '<option value="' . esc_attr( $pg->ID ) . '">' . esc_html( $pg->post_title ) . '</option>';
+			}
+			echo '</select> ';
+			submit_button( 'Add Variant', 'secondary', 'submit', false );
+			echo '</p></form>';
+
+			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=gas-campaigns' ) ) . '">&larr; Back to campaign list</a></p>';
+		}
+
+		echo '<h2>All Campaigns</h2>';
+		$campaigns_table = GAS_DB::table( 'campaigns' );
+		$partners_table  = GAS_DB::table( 'partners' );
+		$campaigns = $wpdb->get_results(
+			"SELECT c.*, p.name AS partner_name FROM {$campaigns_table} c
+			 LEFT JOIN {$partners_table} p ON p.id = c.partner_id
+			 ORDER BY c.created_at DESC"
+		);
+		if ( ! $campaigns ) {
+			echo '<p>No campaigns yet. Add one above, or mark a partner "Open to self-signup" on the Partners screen to get one created automatically.</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Partner</th><th>Link</th><th>Default?</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+			foreach ( $campaigns as $c ) {
+				echo '<tr>';
+				echo '<td>' . esc_html( $c->name ) . '</td>';
+				echo '<td>' . esc_html( $c->partner_name ?: '&mdash;' ) . '</td>';
+				echo '<td><input type="text" readonly style="width:100%;" value="' . esc_attr( GAS_Campaigns::build_link( $c, 'YOUR-CODE' ) ) . '" onclick="this.select();"></td>';
+				echo '<td>' . ( $c->is_default ? 'Yes' : '&mdash;' ) . '</td>';
+				echo '<td>' . esc_html( ucfirst( $c->status ) ) . '</td>';
+				echo '<td><a href="' . esc_url( admin_url( 'admin.php?page=gas-campaigns&edit=' . $c->id ) ) . '">Edit</a></td>';
+				echo '</tr>';
+			}
+			echo '</tbody></table>';
+			echo '<p class="description">Swap <code>YOUR-CODE</code> in a link for a specific affiliate\'s real referral code (see the Affiliates screen) before sending it out — any active affiliate\'s code works with any active campaign\'s link.</p>';
+		}
+
+		self::wrap_end();
+	}
+
 	public static function handle_add_partner() {
 		if ( ! current_user_can( self::CAP_PARTNERS ) ) {
 			wp_die( 'Not allowed.' );
@@ -681,6 +817,7 @@ class GAS_Admin {
 		);
 
 		self::audit_log( 'partner', $wpdb->insert_id, 'created', array( 'name' => $name ) );
+		GAS_Campaigns::ensure_default_for_partner( $wpdb->insert_id );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&added=1' ) );
 		exit;
@@ -743,6 +880,7 @@ class GAS_Admin {
 
 		$wpdb->update( GAS_DB::table( 'partners' ), $data, array( 'id' => $id ) );
 		GAS_Roles::provision_partner_account( $id );
+		GAS_Campaigns::ensure_default_for_partner( $id );
 		if ( ! empty( $data['email'] ) ) {
 			GAS_Contacts::upsert( $data['email'], 'partner', array( 'name' => $data['name'], 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $id ) );
 		}
@@ -951,6 +1089,13 @@ class GAS_Admin {
 		foreach ( $codes as $c ) {
 			echo '<option value="' . esc_attr( $c->id ) . '" data-partner="' . esc_attr( $c->partner_id ) . '">' . esc_html( $c->code . ' — ' . $c->sub_affiliate_name . ' (' . $c->partner_name . ')' ) . '</option>';
 		}
+		echo '</select> <p class="description">Since campaigns (2026-09-08), a self-signup affiliate\'s code isn\'t tied to one partner &mdash; choose the partner this specific sale was actually with below. A manually-assigned code\'s own partner is preselected as a convenience, but always double-check it.</p></td></tr>';
+
+		echo '<tr><th>Partner</th><td><select name="partner_id" id="partner_id" required onchange="gasUpdateInstallments()">';
+		echo '<option value="">-- select the partner this sale was with --</option>';
+		foreach ( self::get_partners() as $p ) {
+			echo '<option value="' . esc_attr( $p->id ) . '">' . esc_html( $p->name ) . '</option>';
+		}
 		echo '</select></td></tr>';
 
 		echo '<tr><th>Sale amount ($)</th><td><input type="number" step="0.01" min="0" name="sale_amount" required></td></tr>';
@@ -971,9 +1116,23 @@ class GAS_Admin {
 		}
 		echo '<script>
 			var gasPartnerInstallments = ' . wp_json_encode( $partner_installments ) . ';
+			var gasPartnerAutoSelected = false;
 			function gasUpdateInstallments() {
 				var codeSel = document.getElementById("code_id");
-				var partnerId = codeSel.options[codeSel.selectedIndex] ? codeSel.options[codeSel.selectedIndex].getAttribute("data-partner") : null;
+				var partnerSel = document.getElementById("partner_id");
+				var codePartnerId = codeSel.options[codeSel.selectedIndex] ? codeSel.options[codeSel.selectedIndex].getAttribute("data-partner") : null;
+
+				// Convenience only: pre-select the code\'s own partner when
+				// choosing a manually-assigned code (partner_id != 0) and the
+				// admin hasn\'t already picked a different partner themselves —
+				// self-signup codes have no such partner (0), so nothing is
+				// preselected for those, which is correct now that one code
+				// can be used across many partners\' campaigns.
+				if (codePartnerId && codePartnerId !== "0" && !gasPartnerAutoSelected) {
+					partnerSel.value = codePartnerId;
+				}
+
+				var partnerId = partnerSel.value;
 				var instSel = document.getElementById("installment_index");
 				instSel.innerHTML = "<option value=\"\">Full amount / single payment</option>";
 				if (partnerId && gasPartnerInstallments[partnerId] && gasPartnerInstallments[partnerId].length) {
@@ -985,6 +1144,10 @@ class GAS_Admin {
 					});
 				}
 			}
+			document.getElementById("partner_id").addEventListener("change", function() {
+				gasPartnerAutoSelected = true;
+				gasUpdateInstallments();
+			});
 		</script>';
 
 		self::wrap_end();
@@ -997,6 +1160,7 @@ class GAS_Admin {
 		check_admin_referer( 'gas_calculate_payout' );
 
 		$code_id           = isset( $_POST['code_id'] ) ? absint( $_POST['code_id'] ) : 0;
+		$partner_id        = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
 		$sale_amount       = isset( $_POST['sale_amount'] ) ? (float) $_POST['sale_amount'] : 0;
 		$installment_index = isset( $_POST['installment_index'] ) && '' !== $_POST['installment_index'] ? absint( $_POST['installment_index'] ) : null;
 		$notes             = isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
@@ -1006,7 +1170,14 @@ class GAS_Admin {
 		if ( ! $code ) {
 			wp_die( 'Code not found.' );
 		}
-		$partner = self::get_partner( $code->partner_id );
+		// Since campaigns (2026-09-08), a code no longer implies one fixed
+		// partner (a self-signup affiliate's single code can be used across
+		// any partner's campaign) — the partner this specific sale was with
+		// is now always an explicit choice, not inferred from the code.
+		if ( ! $partner_id ) {
+			wp_die( 'Please choose which partner this sale was with.' );
+		}
+		$partner = self::get_partner( $partner_id );
 		if ( ! $partner ) {
 			wp_die( 'Partner not found.' );
 		}
@@ -1908,8 +2079,9 @@ class GAS_Admin {
 		<h2>Screens at a glance</h2>
 		<ul style="list-style:disc;margin-left:1.5em;">
 			<li><strong>Affiliates</strong> — every self-signed-up affiliate; suspend/reactivate their link here.</li>
-			<li><strong>Codes</strong> — every referral code, including manually-added ones. New self-signup affiliates are automatically matched to every partner marked "Open to self-signup" on the Partners screen — no manual step needed for those. Uncheck a partner's "Open to self-signup" box if you'd rather hand-match affiliates to it yourself from this screen instead.</li>
-			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), whether they're open to self-signup, the dashboard blurb/spotlight link/capability icons affiliates see on that partner's link card, and partner portal login.</li>
+			<li><strong>Codes</strong> — every affiliate's own stable referral code (one per affiliate, not per partner), plus any manually-added codes for real-world/offline referrals.</li>
+			<li><strong>Campaigns</strong> — the actual promotable links: a name, a partner, a URL tracking slug, and optional landing-page variants. Any affiliate's code works with any active campaign automatically — that's what actually makes a link "theirs." Marking a partner "Open to self-signup" auto-creates that partner's first default campaign; add more from this screen any time.</li>
+			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), whether they're open to self-signup (auto-creates a default campaign), the dashboard blurb/spotlight link/capability icons affiliates see on that partner's campaign cards, and partner portal login.</li>
 			<li><strong>Leads</strong> — on-site lead-capture submissions, for partners set to that mode.</li>
 			<li><strong>Click Log</strong> — raw click history per code.</li>
 			<li><strong>Reports</strong> — commission summary, partner outcomes, and agent/referrer performance ranked by earnings.</li>

@@ -11,8 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GAS_VERSION', '2.5.0' );
-define( 'GAS_DB_VERSION', '13' );
+define( 'GAS_VERSION', '2.6.0' );
+define( 'GAS_DB_VERSION', '14' );
 define( 'GAS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GAS_PLUGIN_FILE', __FILE__ );
 
@@ -22,6 +22,7 @@ require_once GAS_PLUGIN_DIR . 'includes/class-gas-db.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-paypal-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-wise-payouts.php';
+require_once GAS_PLUGIN_DIR . 'includes/class-gas-campaigns.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-redirect.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-leads.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-partner-portal.php';
@@ -55,6 +56,7 @@ register_deactivation_hook( __FILE__, function() {
 	wp_clear_scheduled_hook( 'gas_daily_stale_lead_check' );
 } );
 
+GAS_Campaigns::init();
 GAS_Redirect::init();
 GAS_Leads::init();
 GAS_Partner_Portal::init();

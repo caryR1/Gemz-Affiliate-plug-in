@@ -21,7 +21,6 @@ class GAS_Frontend {
 		add_action( 'admin_post_nopriv_gas_affiliate_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_gas_change_password', array( __CLASS__, 'handle_change_password' ) );
 		add_action( 'admin_post_gas_save_payment_info', array( __CLASS__, 'handle_save_payment_info' ) );
-		add_action( 'admin_post_gas_get_partner_link', array( __CLASS__, 'handle_get_partner_link' ) );
 	}
 
 	/**
@@ -236,26 +235,27 @@ class GAS_Frontend {
 		$site_name       = GAS_Settings::get( 'site_name' );
 		$sponsor_code_id = self::get_sponsor_code_id();
 
-		// An affiliate never chooses (or sees) which fulfillment partner
-		// handles their referrals, on any project this plugin runs — an
-		// admin always matches them to a partner afterward, from the
-		// Codes screen, UNLESS that partner is marked "Open to self-signup"
-		// (see create_codes_for_new_affiliate()), in which case they're
-		// pre-matched automatically at signup instead.
-		$created = self::create_codes_for_new_affiliate( $user_id, $name, $sponsor_code_id );
+		// One stable code per affiliate, campaign-agnostic — ported from
+		// GRC's link architecture, 2026-09-08. The affiliate never
+		// chooses (or needs to be matched to) a specific partner at all:
+		// their one code works with any active campaign's link
+		// immediately (see GAS_Campaigns::build_link()), no admin step
+		// needed for the common case, and no "which partner is this
+		// affiliate assigned to" concept exists anymore.
+		$code_row = self::get_or_create_code_for_user( $user_id, $name, $sponsor_code_id );
 
 		GAS_Contacts::upsert( $email, 'affiliate', array(
 			'name'          => $name,
 			'phone'         => $phone,
 			'source'        => 'signup',
 			'related_table' => 'codes',
-			'related_id'    => $created[0]['code']->id,
+			'related_id'    => $code_row->id,
 		) );
 
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New affiliate joined: ' . $name,
-			self::new_affiliate_admin_email_body( $name, $email, $phone, $created, $site_name )
+			"A new affiliate signed up and is live immediately.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nReferral code: {$code_row->code}\n\nTheir dashboard already shows a working link for every active campaign — no matching step needed."
 		);
 
 		// One-time attribution: clear the sponsor cookie now that it's been
@@ -389,66 +389,6 @@ class GAS_Frontend {
 			)
 		);
 		return $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE id = %d", $wpdb->insert_id ) );
-	}
-
-	/**
-	 * A brand-new self-signup affiliate used to get exactly one code with
-	 * partner_id=0, unmatched until an admin manually paired it from the
-	 * Codes screen — unnecessary friction for the common case (Cary,
-	 * 2026-09-07). Now: one pre-matched code per partner that's both
-	 * `outreach_status = 'approved'` AND has opted in via the new
-	 * `open_to_self_signup` checkbox on the Partners screen, so a new
-	 * affiliate has a working link immediately for every such partner.
-	 * Falls back to the old single-unmatched-code behavior when no partner
-	 * is currently open, so an affiliate is never left with zero links.
-	 * Manually-added Codes-screen entries (real-world/offline referrals)
-	 * are untouched by this — it only changes what self-signup creates.
-	 *
-	 * @return array List of ['code' => stdClass row, 'partner_name' => string|null].
-	 */
-	private static function create_codes_for_new_affiliate( $user_id, $name, $sponsor_code_id ) {
-		global $wpdb;
-		$partners_table = GAS_DB::table( 'partners' );
-		$open_partners  = $wpdb->get_results( "SELECT id, name FROM {$partners_table} WHERE outreach_status = 'approved' AND open_to_self_signup = 1" );
-
-		if ( ! $open_partners ) {
-			return array( array(
-				'code'         => self::insert_code_row( $user_id, $name, 0, $sponsor_code_id, 'Self-signup, live immediately. No partner assigned yet.' ),
-				'partner_name' => null,
-			) );
-		}
-
-		$result = array();
-		foreach ( $open_partners as $p ) {
-			$result[] = array(
-				'code'         => self::insert_code_row( $user_id, $name, (int) $p->id, $sponsor_code_id, 'Self-signup, auto-matched: this partner is marked "Open to self-signup".' ),
-				'partner_name' => $p->name,
-			);
-		}
-		return $result;
-	}
-
-	/**
-	 * The "New affiliate joined" admin email used to always say "no partner
-	 * assigned yet, match them manually" — now conditional on whether any
-	 * partner was actually open to self-signup at signup time, so the email
-	 * doesn't ask Cary to do a manual step that's already done.
-	 */
-	private static function new_affiliate_admin_email_body( $name, $email, $phone, array $created, $site_name, $extra = '' ) {
-		$matched_names = array_values( array_filter( wp_list_pluck( $created, 'partner_name' ) ) );
-		$codes_summary = implode( ', ', array_map( function( $c ) { return $c['code']->code; }, $created ) );
-
-		$body  = "A new affiliate signed up and is live immediately.\n\n";
-		$body .= "Name: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\n";
-		$body .= 1 === count( $created ) ? "Code: {$codes_summary}\n" : "Codes: {$codes_summary}\n";
-
-		if ( $matched_names ) {
-			$body .= 'Automatically matched to: ' . implode( ', ', $matched_names ) . ' (marked "Open to self-signup" — no manual step needed for ' . ( 1 === count( $matched_names ) ? 'this partner' : 'these partners' ) . ").\n";
-		} else {
-			$body .= "No partner is currently marked \"Open to self-signup\", so this affiliate has one unmatched link — match them to a partner in wp-admin under {$site_name} > Codes.\n";
-		}
-
-		return $body . $extra;
 	}
 
 	private static function generate_verify_token( $user_id ) {
@@ -694,9 +634,9 @@ class GAS_Frontend {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}
 
-		$created  = self::create_codes_for_new_affiliate( $user_id, $name, $sponsor_code_id );
-		$code_row = $created[0]['code'];
-		$any_matched = (bool) array_filter( wp_list_pluck( $created, 'partner_name' ) );
+		// One stable code per affiliate, campaign-agnostic — see the
+		// matching comment in handle_signup() above.
+		$code_row = self::get_or_create_code_for_user( $user_id, $name, $sponsor_code_id );
 
 		GAS_Contacts::upsert( $email, 'affiliate', array(
 			'name'          => $name,
@@ -712,22 +652,18 @@ class GAS_Frontend {
 			$referral_note = "\n\nYou also referred {$friend_name} — they'll get their own note from us, and you'll see this in your dashboard once a partner is matched.";
 		}
 
-		$partner_line = $any_matched
-			? "\n\nYour account is already matched to a partner, so your link is live and ready to share right now — see your dashboard for the details."
-			: "\n\nNo partner is assigned to your account yet; we'll match you to one shortly and you'll see it reflected on your dashboard.";
-
 		$verify_link = self::generate_verify_token( $user_id );
 		wp_mail(
 			$email,
 			"Welcome to {$site_name}",
-			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}{$partner_line}"
+			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nYour dashboard already shows a working link for every active campaign — nothing else to wait on."
 		);
 
-		$admin_extra = $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) . " (match the referral under Leads)\n" : '';
+		$admin_extra = $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) . " (match the referral under Leads)" : '';
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New affiliate joined: ' . $name,
-			self::new_affiliate_admin_email_body( $name, $email, $phone, $created, $site_name, $admin_extra )
+			"A new affiliate signed up and is live immediately.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nReferral code: {$code_row->code}{$admin_extra}"
 		);
 
 		if ( $sponsor_code_id ) {
@@ -924,9 +860,8 @@ class GAS_Frontend {
 
 		if ( isset( $_GET['gas_notice'] ) ) {
 			$notices = array(
-				'password_updated'    => 'Password updated.',
-				'payment_updated'     => 'Payment information saved.',
-				'partner_link_added'  => 'Your new link is ready below.',
+				'password_updated' => 'Password updated.',
+				'payment_updated'  => 'Payment information saved.',
 			);
 			$key = sanitize_text_field( wp_unslash( $_GET['gas_notice'] ) );
 			if ( isset( $notices[ $key ] ) ) {
@@ -1008,52 +943,50 @@ class GAS_Frontend {
 		return ob_get_clean();
 	}
 
+	/**
+	 * Rewritten 2026-09-08 for the campaigns architecture: an affiliate
+	 * has exactly ONE code (fetched once below), and "their links" is now
+	 * that code combined with every active campaign for an approved
+	 * partner — see GAS_Campaigns::build_link()/get_active_for_approved_partners().
+	 * There's no more per-partner matching step to wait on, so the old
+	 * "here's a partner you don't have a link for yet" self-serve section
+	 * (render_missing_partner_links()/handle_get_partner_link()) no longer
+	 * has anything to do and was removed along with it.
+	 */
 	private static function render_stats_section( $user_id ) {
 		global $wpdb;
-		$codes_table    = GAS_DB::table( 'codes' );
-		$partners_table = GAS_DB::table( 'partners' );
-		$clicks_table   = GAS_DB::table( 'clicks' );
+		$codes_table  = GAS_DB::table( 'codes' );
+		$clicks_table = GAS_DB::table( 'clicks' );
 
-		$codes = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT c.*, p.name AS partner_name, p.state AS partner_state, p.blurb AS partner_blurb,
-					p.spotlight_url AS partner_spotlight_url, p.capability_tags AS partner_capability_tags,
-					p.requires_appointment AS partner_requires_appointment
-				 FROM {$codes_table} c
-				 LEFT JOIN {$partners_table} p ON p.id = c.partner_id
-				 WHERE c.wp_user_id = %d ORDER BY c.created_at ASC",
-				$user_id
-			)
-		);
+		$my_code = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1", $user_id ) );
+		$campaigns = $my_code ? GAS_Campaigns::get_active_for_approved_partners() : array();
 
 		echo '<h2>Your links</h2>';
-		if ( ! $codes ) {
-			echo '<p>No referral links yet.</p>';
+		if ( ! $my_code || ! $campaigns ) {
+			echo '<p>No referral links yet' . ( $my_code ? ' — check back once a partner campaign is active' : '' ) . '.</p>';
 		} else {
 			$totals = GAS_Payouts::totals_for_affiliate( $user_id );
+			$recruit_link = home_url( '/join/' . rawurlencode( $my_code->code ) . '/' );
 
-			foreach ( $codes as $c ) {
-				$link         = home_url( '/go/' . rawurlencode( $c->code ) . '/' );
-				$recruit_link = home_url( '/join/' . rawurlencode( $c->code ) . '/' );
-				$click_count  = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE code_id = %d", $c->id ) );
+			foreach ( $campaigns as $c ) {
+				$link        = GAS_Campaigns::build_link( $c, $my_code->code );
+				$click_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE campaign_id = %d AND code_id = %d", $c->id, $my_code->id ) );
 
 				echo '<div class="gas-code-card">';
-				echo '<p><strong>' . esc_html( $c->partner_name ?: '(unassigned)' ) . '</strong>';
-				if ( $c->partner_name && $c->partner_blurb ) {
+				echo '<p><strong>' . esc_html( $c->partner_name ) . '</strong>';
+				if ( $c->partner_blurb ) {
 					echo ' ' . self::render_popover_icon( 'dashicons-info-outline', 'About ' . $c->partner_name, $c->partner_blurb, 'gas-info-toggle' );
 				}
-				echo ' &mdash; status: ' . esc_html( $c->status ) . '</p>';
+				echo '</p>';
 
-				if ( $c->partner_name && $c->partner_state ) {
+				if ( $c->partner_state ) {
 					$states = implode( ', ', array_map( 'trim', explode( ',', $c->partner_state ) ) );
 					echo '<p class="gas-fineprint">Serves: ' . esc_html( $states ) . '</p>';
 				}
 
-				if ( $c->partner_name ) {
-					$icons = self::render_capability_icons( $c->partner_capability_tags, $c->partner_requires_appointment );
-					if ( $icons ) {
-						echo '<p class="gas-capability-icons">' . $icons . '</p>';
-					}
+				$icons = self::render_capability_icons( $c->partner_capability_tags, $c->partner_requires_appointment );
+				if ( $icons ) {
+					echo '<p class="gas-capability-icons">' . $icons . '</p>';
 				}
 
 				if ( $c->partner_spotlight_url ) {
@@ -1061,12 +994,23 @@ class GAS_Frontend {
 				}
 
 				echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
-				echo '<p>Invite others to become an affiliate too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
+
+				$variants = GAS_Campaigns::get_variants_for( $c->id );
+				if ( $variants ) {
+					echo '<p class="gas-fineprint">Or a specific version:</p><ul class="gas-fineprint">';
+					foreach ( $variants as $v ) {
+						echo '<li>' . esc_html( $v->variant_name ) . ': <code>' . esc_html( GAS_Campaigns::build_link( $c, $my_code->code, $v->id ) ) . '</code></li>';
+					}
+					echo '</ul>';
+				}
+
 				echo '<div class="gas-stat-row">';
 				echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $click_count ) . '</span><span class="gas-stat-label">Clicks</span></div>';
 				echo '</div>';
 				echo '</div>';
 			}
+
+			echo '<p>Invite others to become an affiliate too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
 
 			echo '<div class="gas-stat-row">';
 			echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['unpaid'], 2 ) ) . '</span><span class="gas-stat-label">Unpaid balance</span></div>';
@@ -1078,86 +1022,9 @@ class GAS_Frontend {
 			}
 		}
 
-		self::render_missing_partner_links( $user_id, $codes ? wp_list_pluck( $codes, 'partner_id' ) : array() );
-
-		if ( $codes ) {
+		if ( $my_code ) {
 			self::render_pending_and_finalized_section( $user_id );
 		}
-	}
-
-	/**
-	 * Self-serve backfill for the common case Part 1's auto-assignment
-	 * doesn't cover: an affiliate who signed up before a partner existed,
-	 * or before that partner turned "Open to self-signup" on. Rather than
-	 * waiting on an admin to notice and manually match them (the old-and-
-	 * still-available path via the Codes screen), they can grab the
-	 * missing link themselves the moment they notice it's gone. Generates
-	 * exactly one new code, same as signup-time generation would have.
-	 */
-	private static function render_missing_partner_links( $user_id, $existing_partner_ids ) {
-		global $wpdb;
-		$partners_table = GAS_DB::table( 'partners' );
-		$open_partners  = $wpdb->get_results( "SELECT id, name FROM {$partners_table} WHERE outreach_status = 'approved' AND open_to_self_signup = 1" );
-
-		$existing_partner_ids = array_map( 'intval', $existing_partner_ids );
-		$missing = array_filter( $open_partners, function( $p ) use ( $existing_partner_ids ) {
-			return ! in_array( (int) $p->id, $existing_partner_ids, true );
-		} );
-
-		if ( ! $missing ) {
-			return;
-		}
-
-		echo '<div class="gas-notice">';
-		echo '<p>' . ( count( $missing ) === 1 ? 'There\'s a partner' : 'There are partners' ) . ' you don\'t have a link for yet:</p>';
-		foreach ( $missing as $p ) {
-			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline-block;margin:0 0.5em 0.5em 0;">';
-			wp_nonce_field( 'gas_get_partner_link_' . $p->id );
-			echo '<input type="hidden" name="action" value="gas_get_partner_link">';
-			echo '<input type="hidden" name="partner_id" value="' . esc_attr( $p->id ) . '">';
-			echo '<button type="submit" class="gas-button">Get a link for ' . esc_html( $p->name ) . '</button>';
-			echo '</form>';
-		}
-		echo '</div>';
-	}
-
-	public static function handle_get_partner_link() {
-		if ( ! is_user_logged_in() || ! GAS_Roles::is_affiliate() ) {
-			wp_die( 'Please log in as an affiliate first.' );
-		}
-
-		$partner_id = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
-		check_admin_referer( 'gas_get_partner_link_' . $partner_id );
-
-		global $wpdb;
-		$partners_table = GAS_DB::table( 'partners' );
-		$partner = $wpdb->get_row( $wpdb->prepare(
-			"SELECT * FROM {$partners_table} WHERE id = %d AND outreach_status = 'approved' AND open_to_self_signup = 1",
-			$partner_id
-		) );
-		if ( ! $partner ) {
-			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( 'That partner is no longer available for self-signup.' ), self::dashboard_url() ) );
-			exit;
-		}
-
-		$user_id     = get_current_user_id();
-		$user        = wp_get_current_user();
-		$codes_table = GAS_DB::table( 'codes' );
-
-		// Don't create a second code for the same partner if one already
-		// exists (e.g. a double-submit) — same "check first" pattern as
-		// get_or_create_code_for_user().
-		$already = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM {$codes_table} WHERE wp_user_id = %d AND partner_id = %d", $user_id, $partner_id ) );
-		if ( ! $already ) {
-			// Reuse whichever sponsor_code_id this affiliate's other codes
-			// already carry, if any, so a link generated after the fact
-			// stays attributed to the same sponsor chain as their others.
-			$sponsor_code_id = $wpdb->get_var( $wpdb->prepare( "SELECT sponsor_code_id FROM {$codes_table} WHERE wp_user_id = %d AND sponsor_code_id IS NOT NULL LIMIT 1", $user_id ) );
-			self::insert_code_row( $user_id, $user->display_name, (int) $partner->id, $sponsor_code_id ?: null, 'Self-serve: affiliate requested this partner\'s link from their dashboard.' );
-		}
-
-		wp_safe_redirect( add_query_arg( 'gas_notice', 'partner_link_added', self::dashboard_url() ) );
-		exit;
 	}
 
 	/**

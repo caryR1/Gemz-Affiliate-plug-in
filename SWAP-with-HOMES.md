@@ -13,6 +13,28 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Solar Referral session: Part 1 (campaigns) shipped and verified; 2-4 not started
+
+**Part 1 done** (`96eaf65`), `GAS_VERSION` 2.6.0 / `GAS_DB_VERSION` 14, deployed to staging AND Solar's live site (nothing's live there yet, safe to go straight to it rather than stage-then-promote for this pass):
+
+- New `gas_campaigns` + `gas_campaign_variants` tables, `campaign_id` added to `clicks`/`leads`. New `class-gas-campaigns.php` (`GAS_Campaigns`): `build_link()`, `get_by_slug()`, `get_active_for_approved_partners()`, admin save/delete handlers for campaigns + variants, and `ensure_default_for_partner()` — the one deliberate addition over a straight GRC port: auto-creates a partner's first default campaign the moment it's approved + "Open to self-signup", so self-signup still hands a new affiliate a working link immediately with zero admin step, matching yesterday's UX without keeping yesterday's per-partner-code-row mechanism.
+- `GAS_Redirect` rewritten for the slug→campaign, ref→affiliate two-hop resolution (ported from `GRC_Public::maybe_redirect_tracking_link()`) — `/go/{tracking_slug}?ref={code}&variant={id}`, two independent cookies (`gas_campaign_id` always set on a valid campaign link, `gas_affiliate_code` only when `ref` resolves), click logging now keyed on `campaign_id`.
+- `GAS_Leads` (on-site lead capture) now resolves the fulfillment partner via the campaign cookie instead of the code's own `partner_id` — necessary since codes are now partner-agnostic. `ref`/affiliate credit stays optional (organic clicks are valid leads with no one to pay).
+- `GAS_Frontend` self-signup simplified a lot — one `get_or_create_code_for_user()` call, no more N-code-per-partner loop, no more "get a link for X" self-serve backfill (nothing left for it to backfill). Dashboard now iterates active campaigns joined to their partner for Part 2's blurb/coverage/capability-icon display, one link per campaign built from the affiliate's single code, plus per-variant links where they exist.
+- New Campaigns admin screen + `gas/v1/campaigns` REST GET/POST endpoints, added from the start this time.
+
+**Two real bugs caught by actually testing on staging, not just reading the diff**:
+1. I initially only wired `ensure_default_for_partner()` into the wp-admin save handlers, not the REST `create_partner`/`update_partner` — would have silently broken campaign auto-provisioning for REST-only sites (i.e. yours). Caught when a REST partner touch-update produced zero campaigns; fixed and redeployed before telling you it worked.
+2. The Payout Calculator and REST `POST /gas/v1/payouts` both inferred the partner from the code's own `partner_id` — always 0 now for a self-signup affiliate, which would have broken payout entry for every campaign-based affiliate. Both now require the partner to be chosen explicitly (Calculator got a real partner dropdown; REST returns a clear 400 asking for `partner_id` instead of silently miscomputing).
+
+**Verified for real, end to end, on staging**: a fresh signup got 2 working links immediately (no admin step) with correct blurb/coverage/capability icons per partner; a real `/go/{slug}?ref={code}` request correctly resolved the campaign + affiliate, set both cookies, and logged the click with the right `campaign_id`/`partner_id`; a real `POST /gas/v1/payouts` with an explicit `partner_id` computed and stored the exact expected commission split. Also re-ran the PHPUnit suite over SSH after all of this — still 25 tests / 55 assertions, all green, confirming the campaigns work didn't touch the payout math itself.
+
+**One environmental gotcha, not a plugin bug, worth naming since it cost real debugging time**: staging has the same LiteSpeed Cache Redis setup that caused the object-cache staleness bug on Solar earlier this project — except this time it was LiteSpeed's REST/page caching serving a stale response for `/wp-json/gas/v1/campaigns` and for a `/go/` redirect, making working code look broken until I added a cache-busting query param and got the real (correct) response. Didn't touch LiteSpeed's config on staging since it's not mine to change — flagging so neither of us burns time re-diagnosing "why did my test show the old result" on staging specifically.
+
+**Not started**: Part 2 (cashback), Part 3 (notifications), Part 4 (partner data enrichment). Your proposed sequencing (campaigns → cashback → notifications → data, data independent) still makes sense to me now that campaigns are actually built — cashback's `calculate_for_lead()` trigger point (`grc_lead_marked_completed` → an equivalent `gas_lead_marked_completed` hook GAS doesn't have yet) and its home in the data model (a `customer_cashback_amount` column on `partners`, per your GRC export) both slot in cleanly on top of what's here now. Planning to pick up Part 2 next unless you or Cary want a different order.
+
+— Solar Referral session
+
 ## 2026-09-08 — Homes session: major scope — port GRC's architecture into GAS
 
 Cary compared this plugin against `gemz-referral-crm` (GRC, powers

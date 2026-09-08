@@ -173,61 +173,58 @@ missing from an allowlist is invisible to that side — see gaps below.
   that's a different gap, still open.)
 - **No SMS/text notifications** — every notification path is `wp_mail()`
   only.
-- **Automated test coverage: written, not yet run.** The pure-logic
-  PHPUnit suite (see `tests/` — `PayoutMathTest`, `CoverageMatchingTest`,
-  `EstimatedPayoutRangeTest`) is built and covers
+- **Automated test coverage: built, run for real, currently green.**
+  Resolved 2026-09-08. Cary's hosting does include SSH — Home got
+  credentials, uploaded the suite to staging (it isn't part of the normal
+  plugin deploy set), ran `composer install && vendor/bin/phpunit` for
+  real over SSH, and got 25 tests / 51 assertions / 6 failures, all 6 of
+  which were test-authoring bugs (float-precision `assertSame()` calls and
+  an int-vs-float type mismatch from PHP's `min()`), not payout-math bugs —
+  the actual business logic was correct on every case written. Fixed all 6
+  (switched to `assertEqualsWithDelta()` for computed floats) and
+  re-verified over SSH myself: **25 tests, 55 assertions, all green.**
+  (55 not 51 — the 4 fixed `EstimatedPayoutRangeTest` methods each had a
+  second assertion that never ran before, since the first failure halted
+  the test.) This now really is a safety net for the money math, not just
+  a carefully-reasoned-through one. See `tests/` (`PayoutMathTest`,
+  `CoverageMatchingTest`, `EstimatedPayoutRangeTest`) — covers
   `GAS_Payouts::agent_pool_amount()` + the tier-split arithmetic in
   `compute()`, `GAS_Frontend::estimated_payout_range()`, and
-  `partner_covers_state()` — including a case pinned to Go Solar Power's
-  real, already-verified numbers ($2,000 flat / $700 pool / $490-$140-$70
-  split) as a sanity anchor. **Caveat that matters: no session has found a
-  real PHP command-line interpreter anywhere yet** — confirmed absent in
-  Solar's own environment (no `php` via Bash or PowerShell, no Docker), and
-  Home confirmed staging.gemzonline.com doesn't provide one either (FTP +
-  REST only, same as the two live sites) — so these tests have never
-  actually been executed. They're written from a careful line-by-line
-  trace against the real source, not guessed at, but "written correctly"
-  and "passing" are different claims until someone runs
-  `composer install && composer test` (or `vendor/bin/phpunit`) inside
-  `wp-plugin/gemz-affiliate-suite/` on an environment that actually has a
-  PHP CLI. Whether Cary's hosting includes SSH or a PHP-CLI panel feature
-  is an open question, asked directly in the "Gemz Affiliate Plugin"
-  Gmail draft 2026-09-08 — do that before leaning on these tests as a
-  safety net for the money math.
+  `partner_covers_state()`, with cases pinned to Go Solar Power's real
+  numbers ($2,000 flat / $700 pool / $490-$140-$70 split) as a sanity
+  anchor. Re-run with `composer install && composer test` (or
+  `vendor/bin/phpunit`) in `wp-plugin/gemz-affiliate-suite/` on any
+  environment with SSH/PHP-CLI going forward — Solar's own Claude Code
+  environment still doesn't have one, so re-verifying after a future
+  change to this math needs staging (or wherever Cary's SSH access
+  reaches) rather than being runnable from here directly.
   
-  Separately, and not a substitute for the above: Home ran a REAL signup
-  through the actual form on the new staging site (2026-09-08) and
-  confirmed Part 1/2's self-signup auto-matching and dashboard features
-  work correctly end-to-end on live infrastructure. That's genuine
-  functional verification of the shipped feature — it just doesn't touch
-  the payout-math edge cases (multi-tier chains, custom splits, etc.) the
-  PHPUnit suite specifically exists to catch.
+  Separately: Home also ran a REAL signup through the actual form on
+  staging (2026-09-08) and confirmed Part 1/2's self-signup auto-matching
+  and dashboard features work correctly end-to-end on live
+  infrastructure — genuine functional verification of the shipped
+  feature, complementary to but distinct from the PHPUnit run above.
 - No A/B testing or campaign-level tracking beyond a flat referral code.
 
 ## What's actually fragile right now
 
 Ranked by what would hurt most if development speed goes up:
 
-1. **Tests exist now but have never been run.** Two real payout-affecting
-   bugs already happened before any test existed (payout-range estimate
-   reading dead fields; a CSS bug that was cosmetic, not money, but same
-   "shipped wrong, no test caught it" pattern) — the whole reason this was
-   ranked #1. The suite in `tests/` targets exactly that surface, but no
-   session (Solar, Home, or staging) has found a real PHP CLI to actually
-   execute it with — a WordPress site with FTP+REST, even a dedicated
-   staging one, doesn't provide that on its own. Until someone runs it for
-   real, treat it as "should be right" rather than "verified right" — the
-   remaining risk isn't zero-tests anymore, it's untested-tests. Whether
-   Cary's hosting offers SSH/PHP-CLI is an open question as of 2026-09-08.
-2. **Staging now exists (2026-09-08) — partially closes this, worth noting
-   what it does and doesn't cover.** `staging.gemzonline.com` gives both
-   sessions a real place to deploy and click-test before either live site,
-   and Home already used it for genuine value: a real signup through the
-   actual form confirmed Part 1/2 work end-to-end, not just by reading the
-   code. What it does NOT provide: a PHP CLI (see #1) — so it derisks
-   "does this feature actually work when a real user hits it," but not
-   "is the payout math correct in edge cases nobody happened to click
-   through." Both matter; staging only closes the first one.
+1. **Resolved 2026-09-08 — closing this out rather than renumbering
+   everything below.** The money-math tests are now built, run for real
+   over SSH on staging (Cary's hosting does have it), and green: 25 tests,
+   55 assertions. 6 initial failures were all test-authoring bugs (float
+   precision / int-vs-float assertion mismatches), fixed and re-verified.
+   No longer the top risk — kept here as a record that it was, and how it
+   got closed, since the next fragility item down inherits the #1 slot in
+   spirit. See the "Automated test coverage" entry above for full detail.
+2. **Staging exists (2026-09-08) and is proving its worth.** Both a
+   real-signup functional verification of Part 1/2 (Home, on the actual
+   form) and the PHPUnit run above happened there. What it still doesn't
+   change: Solar's own Claude Code environment has no PHP CLI of its own,
+   so re-verifying this math after any future change to it needs staging
+   (or Cary's SSH) rather than being runnable from here directly — a
+   smaller, more specific gap than "no staging exists" used to be.
 3. **The REST settings allowlist is hand-maintained and already caused one
    real bug** (`conversion_noun` had a wp-admin field but was missing from
    `class-gas-rest.php`'s `update_settings()` allowed array, silently
@@ -263,15 +260,9 @@ Ranked by what would hurt most if development speed goes up:
 
 ## Next concrete steps (proposed order)
 
-1. **Get the PHPUnit suite actually run once**, by whoever first has a real
-   PHP CLI available — confirmed as of 2026-09-08 that staging.gemzonline.com
-   does NOT provide one (FTP+REST only, same as the two live sites), so
-   this is now blocked on Cary confirming whether his hosting offers
-   SSH or a PHP-CLI panel feature (asked directly in the "Gemz Affiliate
-   Plugin" Gmail draft). Once available: `composer install && composer
-   test` in `wp-plugin/gemz-affiliate-suite/`. Until that happens, item #1
-   in the fragility list above stays open in spirit even though the
-   suite exists.
+1. ~~Get the PHPUnit suite actually run once~~ — **done 2026-09-08.**
+   Cary's hosting does have SSH; Home ran it, found 6 test-authoring bugs
+   (not math bugs), fixed and re-verified: 25 tests, 55 assertions, green.
 2. Write down the ad-hoc REST/FTP smoke-check as an actual checklist or
    small script (approved, not started) — closes part of #7.
 3. Decide whether "reporting" needs date-range/export/trend work now, or
@@ -281,7 +272,9 @@ Ranked by what would hurt most if development speed goes up:
    term.
 5. Now that staging exists, make it the default first stop for any new
    feature before Solar or Home — Home's real-signup verification of
-   Part 1/2 is the model to repeat, not a one-off.
+   Part 1/2 is the model to repeat, not a one-off. Same for any future
+   change to the payout math specifically: re-run the PHPUnit suite on
+   staging (or wherever Cary's SSH reaches) before considering it done.
 
 Everything else above is tracked but not prioritized — flag if any of it
 should jump the queue.

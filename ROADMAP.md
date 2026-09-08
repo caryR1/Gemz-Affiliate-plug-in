@@ -180,15 +180,28 @@ missing from an allowlist is invisible to that side — see gaps below.
   `compute()`, `GAS_Frontend::estimated_payout_range()`, and
   `partner_covers_state()` — including a case pinned to Go Solar Power's
   real, already-verified numbers ($2,000 flat / $700 pool / $490-$140-$70
-  split) as a sanity anchor. **Caveat that matters: this environment has no
-  PHP CLI at all (confirmed — neither Bash nor PowerShell has `php`, and no
-  Docker), so these tests have never actually been executed.** They're
-  written from a careful line-by-line trace against the real source, not
-  guessed at, but "written correctly" and "passing" are different claims
-  until someone with a PHP environment runs `composer install && composer
-  test` (or `vendor/bin/phpunit`) inside
-  `wp-plugin/gemz-affiliate-suite/`. Do that before leaning on these tests
-  as a safety net for the money math.
+  split) as a sanity anchor. **Caveat that matters: no session has found a
+  real PHP command-line interpreter anywhere yet** — confirmed absent in
+  Solar's own environment (no `php` via Bash or PowerShell, no Docker), and
+  Home confirmed staging.gemzonline.com doesn't provide one either (FTP +
+  REST only, same as the two live sites) — so these tests have never
+  actually been executed. They're written from a careful line-by-line
+  trace against the real source, not guessed at, but "written correctly"
+  and "passing" are different claims until someone runs
+  `composer install && composer test` (or `vendor/bin/phpunit`) inside
+  `wp-plugin/gemz-affiliate-suite/` on an environment that actually has a
+  PHP CLI. Whether Cary's hosting includes SSH or a PHP-CLI panel feature
+  is an open question, asked directly in the "Gemz Affiliate Plugin"
+  Gmail draft 2026-09-08 — do that before leaning on these tests as a
+  safety net for the money math.
+  
+  Separately, and not a substitute for the above: Home ran a REAL signup
+  through the actual form on the new staging site (2026-09-08) and
+  confirmed Part 1/2's self-signup auto-matching and dashboard features
+  work correctly end-to-end on live infrastructure. That's genuine
+  functional verification of the shipped feature — it just doesn't touch
+  the payout-math edge cases (multi-tier chains, custom splits, etc.) the
+  PHPUnit suite specifically exists to catch.
 - No A/B testing or campaign-level tracking beyond a flat referral code.
 
 ## What's actually fragile right now
@@ -199,18 +212,22 @@ Ranked by what would hurt most if development speed goes up:
    bugs already happened before any test existed (payout-range estimate
    reading dead fields; a CSS bug that was cosmetic, not money, but same
    "shipped wrong, no test caught it" pattern) — the whole reason this was
-   ranked #1. The suite in `tests/` targets exactly that surface, but was
-   written and reasoned through without a PHP CLI available anywhere in
-   this environment to actually execute it. Until someone runs it for
+   ranked #1. The suite in `tests/` targets exactly that surface, but no
+   session (Solar, Home, or staging) has found a real PHP CLI to actually
+   execute it with — a WordPress site with FTP+REST, even a dedicated
+   staging one, doesn't provide that on its own. Until someone runs it for
    real, treat it as "should be right" rather than "verified right" — the
-   remaining risk isn't zero-tests anymore, it's untested-tests.
-2. **No staging environment for either site.** Every change ships by
-   editing files and deploying straight to the two live sites via FTP/REST.
-   There's no tier between "wrote the code" and "a real affiliate/partner
-   is looking at it." This is a deliberate, accepted tradeoff for now (see
-   the testing-strategy decision), but it means every mistake is
-   user-facing immediately, and that risk compounds as more features ship
-   faster.
+   remaining risk isn't zero-tests anymore, it's untested-tests. Whether
+   Cary's hosting offers SSH/PHP-CLI is an open question as of 2026-09-08.
+2. **Staging now exists (2026-09-08) — partially closes this, worth noting
+   what it does and doesn't cover.** `staging.gemzonline.com` gives both
+   sessions a real place to deploy and click-test before either live site,
+   and Home already used it for genuine value: a real signup through the
+   actual form confirmed Part 1/2 work end-to-end, not just by reading the
+   code. What it does NOT provide: a PHP CLI (see #1) — so it derisks
+   "does this feature actually work when a real user hits it," but not
+   "is the payout math correct in edge cases nobody happened to click
+   through." Both matter; staging only closes the first one.
 3. **The REST settings allowlist is hand-maintained and already caused one
    real bug** (`conversion_noun` had a wp-admin field but was missing from
    `class-gas-rest.php`'s `update_settings()` allowed array, silently
@@ -235,20 +252,25 @@ Ranked by what would hurt most if development speed goes up:
    (LiteSpeed Cache's Redis object-cache.php masking page edits on Solar,
    fixed by deactivating the plugin) **and the same drop-in is confirmed
    present, unfixed, on Home.** Same failure mode is latent there.
-7. **Two live sites sharing one codebase, no CI.** A change is effectively
-   tested live on whichever site's session deploys it first. Fine at
-   today's pace; will not scale gracefully if a third site joins or release
-   cadence increases further without some shared smoke-check step running
-   before either side deploys (the smoke-check formalization from the
-   testing-strategy decision addresses this in part, but isn't written
-   down as an actual checklist/script yet either).
+7. **No CI, but staging (2026-09-08) meaningfully changes this one.**
+   Previously a change was tested live on whichever site's session
+   deployed it first — now there's a real staging tier to deploy and
+   click-test on before touching Solar or Home. Doesn't eliminate the gap
+   (still no automated pipeline, still relies on someone remembering to
+   use staging first, and the smoke-check formalization from the
+   testing-strategy decision still isn't written down as an actual
+   checklist/script), but it's a real improvement over "no tier at all."
 
 ## Next concrete steps (proposed order)
 
 1. **Get the PHPUnit suite actually run once**, by whoever first has a real
-   PHP CLI available (the incoming shared staging site should have one) —
-   `composer install && composer test` in `wp-plugin/gemz-affiliate-suite/`.
-   Until that happens, item #1 above stays open in spirit even though the
+   PHP CLI available — confirmed as of 2026-09-08 that staging.gemzonline.com
+   does NOT provide one (FTP+REST only, same as the two live sites), so
+   this is now blocked on Cary confirming whether his hosting offers
+   SSH or a PHP-CLI panel feature (asked directly in the "Gemz Affiliate
+   Plugin" Gmail draft). Once available: `composer install && composer
+   test` in `wp-plugin/gemz-affiliate-suite/`. Until that happens, item #1
+   in the fragility list above stays open in spirit even though the
    suite exists.
 2. Write down the ad-hoc REST/FTP smoke-check as an actual checklist or
    small script (approved, not started) — closes part of #7.
@@ -257,6 +279,9 @@ Ranked by what would hurt most if development speed goes up:
 4. Decide whether "scheduling" means finishing calendar-grade appointment
    handling now, or whether the current one-way email is good enough short
    term.
+5. Now that staging exists, make it the default first stop for any new
+   feature before Solar or Home — Home's real-signup verification of
+   Part 1/2 is the model to repeat, not a one-off.
 
 Everything else above is tracked but not prioritized — flag if any of it
 should jump the queue.

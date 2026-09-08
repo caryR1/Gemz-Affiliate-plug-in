@@ -13,6 +13,60 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Solar Referral session: all 5 items built, verified, deployed to Solar live
+
+All five items from your batch below are done — implemented, deployed to
+staging and verified against real HTTP/DB state, deployed to Solar's live
+site, and committed/pushed (`0f7a4a1`, `GAS_VERSION` 2.7.0 /
+`GAS_DB_VERSION` 15). Full technical detail is in `ROADMAP.md`'s "Since
+this was first written" intro and the new bullets under each feature
+heading — this entry is the honest status summary, not a repeat of that.
+
+**What's actually verified, not just written:**
+- Tax compliance: real signup on staging → real tax-info POST → confirmed
+  all 5 user-meta fields stored correctly via SSH `wp user meta list`.
+  Confirmed the eligible/held split via `wp eval` against a real unpaid
+  payout row: an affiliate with no tax info on file showed up `held` with
+  `reason: no_tax_info` even though their balance was well above $50;
+  adding tax info moved them to `eligible`. Confirmed the CSV export's
+  underlying query produces a correct, complete row (name, email, $490.00
+  total, W9, legal name, SSN, country, submitted-at timestamp) against a
+  real `paid` payout.
+- Minimum threshold: same test affiliate, with tax info on file, correctly
+  flipped to `held` / `reason: below_threshold` when I temporarily raised
+  the threshold above their balance, and back to `eligible` when I reset
+  it. (No real PayPal/Wise credentials on staging, so the actual batch-send
+  API calls themselves are code-reviewed, not live-fired — only the
+  eligible/held gate in front of them is live-verified.)
+- Disposable-email rejection: real HTTP POST with a `@mailinator.com`
+  address, got the exact expected rejection message back.
+- Fraud/rate-limiting and marketing-assets: code-reviewed and deployed, not
+  independently HTTP/browser-tested this round (the `wp.media()` picker
+  specifically still wants a real click-through in a browser — flagging
+  that as unverified rather than claiming it works).
+- PHPUnit: still 25 tests / 55 assertions green after all of this, re-run
+  fresh over SSH at the end.
+
+**One real bug found and fixed along the way** (same pattern as the
+Campaigns bugs you flagged last time — found by testing, not by reading the
+diff): `list_affiliates()` in `class-gas-rest.php` never got a `tax_summary`
+field added, so the REST response was silently blind to tax status —
+exactly the kind of gap that would've bitten Home specifically, since REST
+is your only write/read path. Fixed, redeployed, reverified with a fresh
+REST call.
+
+**Held for you to weigh in on, not done yet:** the affiliate-agreement
+acceptance checkbox + timestamp, per your own instruction — still waiting
+on Cary to confirm `DRAFT-affiliate-agreement.md`'s actual text before
+building anything against it.
+
+**Not this session's problem yet, flagging so it doesn't get lost:** tax ID
+(SSN/EIN) is plaintext in user-meta, same as the existing banking fields —
+consistent, not a new gap, but real exposure at higher affiliate volume.
+Noted in ROADMAP.md's fragility list rather than fixed now.
+
+---
+
 ## 2026-09-08 — Homes session: tax compliance, min payout, fraud filtering, marketing assets
 
 Great news on Part 1 (campaigns) — clean cutover, the two real bugs caught

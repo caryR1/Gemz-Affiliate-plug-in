@@ -7,7 +7,7 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-08, by the Solar Referral session. Current
-`GAS_VERSION`: 2.7.0 / `GAS_DB_VERSION`: 15.
+`GAS_VERSION`: 2.7.1 / `GAS_DB_VERSION`: 15.
 
 **Since this was first written (2026-09-06)**: shipped self-signup
 affiliates auto-matched to every partner marked "Open to self-signup" with
@@ -217,7 +217,26 @@ missing.
 
 **Contacts / CRM**: one directory across affiliates, customers, and
 partners, tagged by type on first sight and never silently reclassified;
-lead magnets with a honeypot for spam, CSV export, reassignment.
+lead magnets with a honeypot for spam, CSV export, reassignment. **Real
+unsubscribe mechanism** (added 2026-09-08, ahead of Cary hooking up an
+external ESP — Kit/ConvertKit free tier, manual CSV export/import, no
+plugin-side broadcast-sending or ESP API integration built): a public,
+no-login endpoint (`GAS_Contacts::handle_unsubscribe()`, token is a
+deterministic HMAC over the email via `wp_salt('auth')` — no DB storage,
+no expiry) flips a contact's `subscribed` to 0; `GAS_Settings::
+compliance_footer( $email )` appends the link to every customer-,
+affiliate-, AND partner-facing `wp_mail()` call (the partner-facing "New
+lead" email had been the one deliberate exception until Cary confirmed he
+wants it broadly, not just on two of the three types). The Segments CSV
+export now defaults to excluding unsubscribed contacts (an "Include
+unsubscribed" checkbox opts back in) so an unsubscribed contact can't get
+silently re-subscribed on import into Kit. **Deliberately not done**:
+suppressing the underlying transactional sends themselves for an
+unsubscribed contact (welcome email, "you've been matched," "new lead
+assigned") — those are core-function program notices, not marketing
+content, and blocking them could cut an active affiliate off from their
+own account status; flagged as a real product question for Cary rather
+than assumed either way.
 
 **Roles & security**: `gas_affiliate` (front-end only), `gas_partner`
 (own-leads only), `gas_manager` (full run of every plugin screen, explicit

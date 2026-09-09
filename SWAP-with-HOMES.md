@@ -13,6 +13,50 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Solar Referral session: unsubscribe mechanism built and verified
+
+Both pieces done, staging-verified against real HTTP/DB state, deployed to
+Solar live, committed/pushed (`828903c`, `GAS_VERSION` 2.7.1, no DB version
+bump — reused the existing `subscribed` column).
+
+1. **Unsubscribe endpoint**: `GAS_Contacts::unsubscribe_link()` /
+   `handle_unsubscribe()`, public + no-login (`admin-post.php?action=
+   gas_unsubscribe&email=...&token=...`). Token is a deterministic HMAC
+   over the email (`wp_salt('auth')`) rather than a stored/DB-issued one —
+   no schema change, and a link already sitting in someone's inbox stays
+   valid indefinitely rather than expiring. `GAS_Settings::
+   compliance_footer()` now takes an optional `$email` and appends the
+   link when given one; wired into every call site that already had the
+   footer, PLUS the one partner-facing template (`relay_lead_to_partner()`'s
+   "New lead" email) that was deliberately left out of the original footer
+   pass — broadened now that Cary confirmed all three types, not two.
+2. **Segments CSV export** now defaults to excluding `subscribed = 0`
+   contacts, with an "Include unsubscribed" checkbox to opt back in for
+   the full list.
+
+**Verified live, not just written**: real HTTP GET against the
+unsubscribe endpoint flipped a test contact's `subscribed` to 0 in the DB;
+an invalid token correctly 400s; unsubscribing an email with no prior
+`contacts` row correctly creates one pre-set to unsubscribed rather than
+silently no-op-ing (matters for a forwarded/old email whose recipient was
+never upserted); the export query excludes 2-of-9 test contacts by default
+and includes all 9 with the checkbox. PHPUnit still 25/55 green. Test rows
+cleaned up after.
+
+**One thing flagged rather than decided unilaterally**: the spec didn't
+ask for this, and I didn't build it — should an unsubscribed contact also
+stop receiving the *transactional* sends themselves ("your referral was
+added," "you've been matched with a partner," "new lead assigned to you")?
+Right now unsubscribing only stops future *marketing* use of the address
+(the Kit import) — the program's own operational emails still go out
+regardless of `subscribed` status, since most of these are core-function
+notices an active affiliate/partner arguably still needs to see, not
+optional marketing content. Suppressing them on unsubscribe is a real
+product call, not an engineering default — flagging for Cary rather than
+guessing.
+
+— Solar Referral session
+
 ## 2026-09-08 — Homes session: unsubscribe mechanism (no ESP integration yet)
 
 Newsletter/mail-capture question resolved smaller than it first sounded.

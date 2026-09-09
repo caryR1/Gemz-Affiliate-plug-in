@@ -1659,7 +1659,16 @@ class GAS_Admin {
 		}
 		echo '</p>';
 
-		echo '<p><a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_export_contacts_csv' . ( $filter ? '&contact_type=' . $filter : '' ) ), 'gas_export_contacts_csv' ) ) . '" class="button">Export CSV</a></p>';
+		echo '<form method="get" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin:1em 0;">';
+		echo '<input type="hidden" name="action" value="gas_export_contacts_csv">';
+		if ( $filter ) {
+			echo '<input type="hidden" name="contact_type" value="' . esc_attr( $filter ) . '">';
+		}
+		wp_nonce_field( 'gas_export_contacts_csv' );
+		echo '<label><input type="checkbox" name="include_unsubscribed" value="1"> Include unsubscribed</label> ';
+		echo '<button type="submit" class="button">Export CSV</button>';
+		echo '<span class="description" style="display:block;margin-top:4px;">Unchecked (default) excludes anyone who\'s unsubscribed — safe to import straight into an ESP like Kit.</span>';
+		echo '</form>';
 
 		$sql = "SELECT * FROM {$table}";
 		if ( $filter ) {
@@ -1726,10 +1735,23 @@ class GAS_Admin {
 		global $wpdb;
 		$table  = GAS_DB::table( 'contacts' );
 		$filter = isset( $_GET['contact_type'] ) && in_array( $_GET['contact_type'], GAS_Contacts::TYPES, true ) ? sanitize_key( $_GET['contact_type'] ) : '';
+		// Default excludes unsubscribed — this CSV is meant to feed
+		// straight into an ESP (Kit/ConvertKit), and someone who already
+		// unsubscribed here shouldn't silently get re-subscribed there on
+		// import. "Include unsubscribed" is an explicit opt-in checkbox.
+		$include_unsubscribed = ! empty( $_GET['include_unsubscribed'] );
+
+		$where = array();
+		if ( $filter ) {
+			$where[] = $wpdb->prepare( 'contact_type = %s', $filter );
+		}
+		if ( ! $include_unsubscribed ) {
+			$where[] = 'subscribed = 1';
+		}
 
 		$sql = "SELECT * FROM {$table}";
-		if ( $filter ) {
-			$sql = $wpdb->prepare( $sql . ' WHERE contact_type = %s', $filter );
+		if ( $where ) {
+			$sql .= ' WHERE ' . implode( ' AND ', $where );
 		}
 		$rows = $wpdb->get_results( $sql . ' ORDER BY created_at DESC' );
 

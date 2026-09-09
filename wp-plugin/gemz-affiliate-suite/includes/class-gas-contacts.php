@@ -20,6 +20,79 @@ class GAS_Contacts {
 		add_shortcode( 'gas_lead_magnet', array( __CLASS__, 'render_lead_magnet' ) );
 		add_action( 'admin_post_gas_lead_magnet_optin', array( __CLASS__, 'handle_lead_magnet_optin' ) );
 		add_action( 'admin_post_nopriv_gas_lead_magnet_optin', array( __CLASS__, 'handle_lead_magnet_optin' ) );
+		add_action( 'admin_post_gas_unsubscribe', array( __CLASS__, 'handle_unsubscribe' ) );
+		add_action( 'admin_post_nopriv_gas_unsubscribe', array( __CLASS__, 'handle_unsubscribe' ) );
+	}
+
+	/* ---------------------------------------------------------------- *
+	 * UNSUBSCRIBE
+	 * ---------------------------------------------------------------- */
+
+	/**
+	 * Deterministic, HMAC-based token instead of a stored/DB-issued one —
+	 * needs no schema change and stays valid indefinitely (an email footer
+	 * link shouldn't silently break just because time passed). Keyed off
+	 * wp_salt('auth') so it can't be forged without server secrets, and
+	 * compared with hash_equals() to avoid a timing side-channel.
+	 */
+	public static function unsubscribe_token( $email ) {
+		return substr( hash_hmac( 'sha256', strtolower( trim( $email ) ), wp_salt( 'auth' ) ), 0, 32 );
+	}
+
+	public static function unsubscribe_link( $email ) {
+		return add_query_arg(
+			array(
+				'action' => 'gas_unsubscribe',
+				'email'  => rawurlencode( $email ),
+				'token'  => self::unsubscribe_token( $email ),
+			),
+			admin_url( 'admin-post.php' )
+		);
+	}
+
+	/**
+	 * Flips (or creates, pre-unsubscribed) a contact row by email. Creating
+	 * one even if we've never logged this address before matters: someone
+	 * could still click an old/forwarded email whose recipient was never
+	 * upserted into `contacts`, and their unsubscribe request should still
+	 * stick rather than silently no-op.
+	 */
+	public static function unsubscribe_by_email( $email ) {
+		$email = sanitize_email( $email );
+		if ( ! is_email( $email ) ) {
+			return false;
+		}
+
+		global $wpdb;
+		$table    = GAS_DB::table( 'contacts' );
+		$now      = current_time( 'mysql' );
+		$existing = $wpdb->get_row( $wpdb->prepare( "SELECT id FROM {$table} WHERE email = %s", $email ) );
+
+		if ( $existing ) {
+			$wpdb->update( $table, array( 'subscribed' => 0, 'updated_at' => $now ), array( 'id' => $existing->id ) );
+		} else {
+			$wpdb->insert( $table, array(
+				'email'        => $email,
+				'contact_type' => 'customer',
+				'source'       => 'unsubscribe',
+				'subscribed'   => 0,
+				'created_at'   => $now,
+				'updated_at'   => $now,
+			) );
+		}
+		return true;
+	}
+
+	public static function handle_unsubscribe() {
+		$email = isset( $_GET['email'] ) ? sanitize_email( wp_unslash( $_GET['email'] ) ) : '';
+		$token = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : '';
+
+		if ( ! is_email( $email ) || ! $token || ! hash_equals( self::unsubscribe_token( $email ), $token ) ) {
+			wp_die( 'This unsubscribe link is invalid or has expired. If you\'d like to stop receiving emails, please contact us directly.', 'Unsubscribe', array( 'response' => 400 ) );
+		}
+
+		self::unsubscribe_by_email( $email );
+		wp_die( 'You\'ve been unsubscribed — ' . esc_html( $email ) . ' will no longer receive emails from us.', 'Unsubscribed', array( 'response' => 200 ) );
 	}
 
 	/**
@@ -161,7 +234,7 @@ class GAS_Contacts {
 		wp_mail(
 			$email,
 			'Your download: ' . $magnet->title,
-			"Here's your download link:\n\n{$download_url}\n\nThanks for your interest!" . GAS_Settings::compliance_footer()
+			"Here's your download link:\n\n{$download_url}\n\nThanks for your interest!" . GAS_Settings::compliance_footer( $email )
 		);
 
 		wp_safe_redirect( add_query_arg( 'gas_magnet_sent', $magnet_id, $redirect_back ) );

@@ -389,7 +389,7 @@ class GAS_Leads {
 			} else {
 				$body = "Hi {$lead->customer_name},\n\nGood news — you've been matched with {$partner->name}. They'll be reaching out to you directly with next steps.";
 			}
-			wp_mail( $lead->customer_email, 'You\'ve been matched with a ' . GAS_Settings::get( 'partner_label' ), $body . GAS_Settings::compliance_footer() );
+			wp_mail( $lead->customer_email, 'You\'ve been matched with a ' . GAS_Settings::get( 'partner_label' ), $body . GAS_Settings::compliance_footer( $lead->customer_email ) );
 		}
 
 		self::relay_lead_to_partner( $lead );
@@ -425,7 +425,12 @@ class GAS_Leads {
 			. ( $lead->appointment_at ? "Requested appointment: {$lead->appointment_at}\n" : '' )
 			. "\nLog in to your Partner Portal to update this lead's status as you work it: " . GAS_Partner_Portal::page_url();
 
-		wp_mail( $partner->email, 'New lead: ' . $lead->customer_name, $body );
+		// Compliance footer (incl. unsubscribe) added 2026-09-08 — this was
+		// the one contact-facing template deliberately left without it
+		// when the footer first shipped (scoped to "customer AND
+		// affiliate-facing" only, not partner); broadened once Cary
+		// confirmed he wants it on all three contact types, not just two.
+		wp_mail( $partner->email, 'New lead: ' . $lead->customer_name, $body . GAS_Settings::compliance_footer( $partner->email ) );
 		GAS_Admin::audit_log( 'lead', $lead->id, 'relayed_to_partner', array( 'partner_email' => $partner->email ) );
 	}
 }

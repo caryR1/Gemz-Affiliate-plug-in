@@ -67,15 +67,20 @@ class GAS_Settings {
 	}
 
 	/**
-	 * A standard plain-text footer for every customer- and affiliate-facing
-	 * email — added 2026-09-08 after confirming gemz-referral-crm's own
-	 * default templates have no compliance notice at all (business
-	 * name/address, why-you're-receiving-this, terms link). Admin-facing
-	 * notifications (new-affiliate-joined, stale-lead, coverage-match, etc.)
-	 * deliberately don't get this — it's for people outside the
-	 * organization, not Cary's own inbox.
+	 * A standard plain-text footer for every customer-, affiliate-, and
+	 * partner-facing email — added 2026-09-08 after confirming
+	 * gemz-referral-crm's own default templates have no compliance notice
+	 * at all (business name/address, why-you're-receiving-this, terms
+	 * link). Admin-facing notifications (new-affiliate-joined, stale-lead,
+	 * coverage-match, etc.) deliberately don't get this — it's for people
+	 * outside the organization, not Cary's own inbox.
+	 *
+	 * Pass the recipient's own email to also append a working unsubscribe
+	 * link (added 2026-09-08 alongside the plugin's unsubscribe mechanism,
+	 * GAS_Contacts::unsubscribe_link()) — omit it only for a transactional
+	 * template where unsubscribing wouldn't make sense to offer.
 	 */
-	public static function compliance_footer() {
+	public static function compliance_footer( $email = '' ) {
 		$business = self::get( 'business_name' ) ?: self::get( 'site_name' );
 		$address  = self::get( 'business_address' );
 		$terms    = self::get( 'program_terms_url' );
@@ -86,6 +91,9 @@ class GAS_Settings {
 		$lines[] = 'You\'re receiving this because of your participation in the ' . $business . ' referral program.';
 		if ( $terms ) {
 			$lines[] = 'Program terms: ' . $terms;
+		}
+		if ( $email && is_email( $email ) ) {
+			$lines[] = 'No longer want these emails? Unsubscribe: ' . GAS_Contacts::unsubscribe_link( $email );
 		}
 
 		return "\n\n" . implode( "\n", $lines );

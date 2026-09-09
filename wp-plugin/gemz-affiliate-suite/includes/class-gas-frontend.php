@@ -602,7 +602,7 @@ class GAS_Frontend {
 				wp_mail(
 					$existing_affiliate->user_email,
 					'New referral added to your account',
-					"Hi {$existing_affiliate->display_name},\n\nSomeone just referred {$friend_name} using your details on {$site_name}. It's been added to your account under your referral code {$code->code}.\n\nLog in to your dashboard to keep an eye on it: " . self::dashboard_url() . GAS_Settings::compliance_footer()
+					"Hi {$existing_affiliate->display_name},\n\nSomeone just referred {$friend_name} using your details on {$site_name}. It's been added to your account under your referral code {$code->code}.\n\nLog in to your dashboard to keep an eye on it: " . self::dashboard_url() . GAS_Settings::compliance_footer( $existing_affiliate->user_email )
 				);
 				wp_mail(
 					get_option( 'admin_email' ),
@@ -673,7 +673,7 @@ class GAS_Frontend {
 		wp_mail(
 			$email,
 			"Welcome to {$site_name}",
-			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nYour dashboard already shows a working link for every active campaign — nothing else to wait on." . GAS_Settings::compliance_footer()
+			"Hi {$name},\n\nYour affiliate account is live. Your referral link and dashboard are ready here: " . self::dashboard_url() . "{$referral_note}\n\nOne quick thing — please confirm your email so we know it's really you: {$verify_link}\n\nYour dashboard already shows a working link for every active campaign — nothing else to wait on." . GAS_Settings::compliance_footer( $email )
 		);
 
 		$admin_extra = $is_referral ? "\nAlso referred: {$friend_name} / " . ( $friend_email ?: '(no email)' ) . ' / ' . ( $friend_phone ?: '(no phone)' ) . " (match the referral under Leads)" : '';
@@ -737,7 +737,7 @@ class GAS_Frontend {
 			wp_mail(
 				$friend_email,
 				"{$code->sub_affiliate_name} referred you to {$site_name}",
-				"Hi {$friend_name},\n\n{$code->sub_affiliate_name} thought you'd want to know about {$site_name}. We'll be in touch shortly with next steps.\n\nIf you have any questions in the meantime, feel free to reach out, or just ask {$code->sub_affiliate_name} directly since they already know what this is about." . GAS_Settings::compliance_footer()
+				"Hi {$friend_name},\n\n{$code->sub_affiliate_name} thought you'd want to know about {$site_name}. We'll be in touch shortly with next steps.\n\nIf you have any questions in the meantime, feel free to reach out, or just ask {$code->sub_affiliate_name} directly since they already know what this is about." . GAS_Settings::compliance_footer( $friend_email )
 			);
 		}
 

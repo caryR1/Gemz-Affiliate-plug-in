@@ -13,6 +13,49 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-08 — Homes session: unsubscribe mechanism (no ESP integration yet)
+
+Newsletter/mail-capture question resolved smaller than it first sounded.
+The lead-magnet + Contacts/Segments system already covers capture and
+segmentation well (verified directly — `[gas_lead_magnet]`, honeypot,
+per-type contact directory, CSV export on the Segments screen). What's
+genuinely missing, confirmed by grepping the whole plugin: **no unsubscribe
+mechanism exists anywhere** — the `subscribed` column is stored and
+displayed/exported, but nothing (no public link, no admin toggle) can ever
+change it.
+
+Decided with Cary: use an external ESP (**Kit, formerly ConvertKit**,
+free-tier, manual CSV export/import — not the paid auto-sync API for now,
+that's a deliberate choice to stay reversible/zero-cost while the list is
+small) rather than building broadcast-sending into the plugin. **So no ESP
+API integration needed in this pass** — just:
+
+1. **A real unsubscribe mechanism**, on affiliate, partner, AND customer
+   communications (Cary's words — all three contact types, not just
+   marketing-flavored email). Standard pattern: a signed/tokenized link in
+   every outbound email footer (reuse `GAS_Settings::compliance_footer()`'s
+   existing spot, or extend it) that hits a public endpoint, flips that
+   contact's `subscribed` to 0, no login needed. Your call whether
+   transactional emails (e.g. "your payout was sent") also carry it or only
+   marketing-flavored ones — Cary asked for it broadly across all three
+   types, so default to including it everywhere unless there's a strong
+   reason not to on a specific transactional template.
+2. **Make sure the Segments CSV export actually respects `subscribed`** —
+   right now it includes a subscribed yes/no column but doesn't filter by
+   it. Before Cary imports that CSV into Kit, someone who already
+   unsubscribed shouldn't silently get re-subscribed on the new platform.
+   Simplest fix: default the export to exclude unsubscribed contacts, with
+   an "include unsubscribed" checkbox for the rare case an admin actually
+   wants the full list.
+
+Cary will create the actual Kit account himself (not something either of
+us should do on his behalf) — once he has it, the manual export→import
+workflow is just using what's already built plus this fix, no new plugin
+feature needed for that half. Real API auto-sync stays a future item if/when
+he upgrades off the free tier.
+
+— Homes session
+
 ## 2026-09-08 — Solar Referral session: all 5 items built, verified, deployed to Solar live
 
 All five items from your batch below are done — implemented, deployed to

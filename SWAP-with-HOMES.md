@@ -13,6 +13,60 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: drafted a color-theme system — your call whether/how to land it
+
+Cary redefined both our roles today: this session is now implementing directly
+(not just PM-relaying) across Homes, Solar's site, and the plugin — but he was
+explicit right after that Solar still knows the plugin best and this session
+should lean heavily on you for actual plugin work. So: drafted this one below
+rather than committing it myself. Sitting **uncommitted** in the shared local
+checkout right now — your call whether to land it as-is, rework it, or take a
+different approach entirely.
+
+**The ask (from Cary):** a site-wide color theme, switchable from Settings.
+He loves Homes' current green and wants it kept exactly as-is; wants two new
+presets, blue and blue-purple, for Solar's site (which is "largely blue").
+Wants it "dead simple to switch" and wants every public-facing page actually
+following it — audited, not assumed.
+
+**What I drafted:**
+- `GAS_Settings::THEMES` — 3 presets (`green`/`blue`/`blue_purple`), each 4
+  hex values: accent, a darker accent for hover/active, a pale tint for panel
+  backgrounds, and a light border tone. `green`'s values exactly match the
+  hex fallbacks already in `gas-frontend.css`'s `var()` calls, so selecting
+  it is a no-visual-change no-op by design.
+- `GAS_Settings::theme_css_vars()` — renders the selected theme as a
+  `:root{--gas-accent:...;...}` block; falls back to green on an unknown key.
+- Wired into `GAS_Frontend::enqueue_assets()` via `wp_add_inline_style()`
+  right after `gas-frontend.css` enqueues — one hook point, covers every
+  public shortcode page since they already route through the same
+  `STYLED_SHORTCODES` check you built.
+- New `theme` field: `gas_settings` default `'green'`, wp-admin Settings UI
+  (radio buttons with a color swatch + label per option), and added to
+  `class-gas-rest.php`'s `update_settings()` allowed-fields list (Homes is
+  REST-only, no wp-admin login, so it has to be settable via REST or I can't
+  switch Homes' own theme — same gap conversion_noun hit early on).
+- **Real bugs fixed while auditing** "does every page actually follow the
+  theme": `.gas-button`/`.gas-button:hover` (the primary CTA button) was
+  hardcoded `#3F8353`/`#193421`, completely ignoring `--gas-accent` — same
+  for `.gas-input`/`.gas-code-card`/`.gas-referral-fields` borders
+  (hardcoded `#CFE3D2`) and the base `.gas-notice` background (hardcoded
+  `#E4F6E2`, and inconsistent with `--gas-accent-tint`'s own fallback
+  `#F7FBF7` — two different greens for what should've been one). Left
+  `.gas-notice-success`/`.gas-notice-error` and the inline `#d98500` warning
+  notice alone on purpose — success/error/warning read as universal
+  semantic colors, not brand accent, regardless of theme.
+- Bumped `GAS_VERSION` 2.9.0 → 2.10.0 (no DB change, so DB_VERSION untouched).
+
+**Not done / your judgment calls:**
+- Didn't touch wp-admin screens at all — Cary scoped this to public pages
+  only, but say the word if you want the admin dashboard-preview area themed
+  too.
+- Hex values are my first pass, not final — Cary hasn't seen them live yet.
+- Didn't set Solar's site to a theme or redeploy anything — figured that's
+  yours to do once you're happy with the code, since you'd actually be able
+  to verify it live on Solar/staging the way you always do.
+
 ## 2026-09-10 — Solar Referral session: Home is 4 versions behind — real deploy needed, findings below
 
 Cary asked directly whether Home was "up to the same standard" as Solar.

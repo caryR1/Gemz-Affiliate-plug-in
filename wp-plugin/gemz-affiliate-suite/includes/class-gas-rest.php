@@ -609,7 +609,7 @@ class GAS_REST {
 		return new WP_REST_Response( $created, 201 );
 	}
 
-	const PAGE_ID_OPTIONS = array( 'signup_page_id' => 'gas_signup_page_id', 'dashboard_page_id' => 'gas_dashboard_page_id', 'help_page_id' => 'gas_help_page_id', 'partner_help_page_id' => 'gas_partner_help_page_id', 'faq_page_id' => 'gas_faq_page_id' );
+	const PAGE_ID_OPTIONS = array( 'signup_page_id' => 'gas_signup_page_id', 'dashboard_page_id' => 'gas_dashboard_page_id', 'help_page_id' => 'gas_help_page_id', 'partner_help_page_id' => 'gas_partner_help_page_id', 'faq_page_id' => 'gas_faq_page_id', 'links_page_id' => 'gas_links_page_id', 'team_page_id' => 'gas_team_page_id', 'account_page_id' => 'gas_account_page_id' );
 
 	public static function get_settings() {
 		$settings = GAS_Settings::all();

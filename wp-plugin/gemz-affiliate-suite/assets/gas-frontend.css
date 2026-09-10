@@ -57,3 +57,26 @@
 .gas-popover-icon:hover .gas-popover,
 .gas-popover-icon:focus .gas-popover,
 .gas-popover-icon.gas-open .gas-popover{display:block;}
+
+/* Dashboard restructure (2026-09-10) — subnav tying the 4
+   dashboard-family pages together, the Overview hero stat strip, share
+   buttons, and downline-tree indentation. */
+.gas-dashboard-nav{display:flex;gap:.3em;flex-wrap:wrap;margin-bottom:1.4em;border-bottom:1.5px solid var(--gas-accent-border,#CFE3D2);}
+.gas-dashboard-nav-link{padding:.7em 1em;font-weight:600;color:var(--gas-accent,#3F8353);text-decoration:none;border-bottom:3px solid transparent;margin-bottom:-1.5px;}
+.gas-dashboard-nav-link:hover{background:var(--gas-accent-tint,#F7FBF7);}
+.gas-dashboard-nav-active{border-bottom-color:var(--gas-accent,#3F8353);}
+
+.gas-hero{border:2px solid var(--gas-accent,#3F8353);}
+.gas-hero .gas-stat-num{font-size:1.8em;}
+
+.gas-share-row{display:flex;gap:.6em;flex-wrap:wrap;margin:.8em 0 1.2em;}
+.gas-share-btn{display:inline-flex;align-items:center;gap:.4em;background:var(--gas-accent,#3F8353);color:#fff;border:none;border-radius:6px;padding:.55em 1em;font-size:.9em;font-weight:600;cursor:pointer;text-decoration:none;}
+.gas-share-btn:hover{background:var(--gas-accent-dark,#193421);color:#fff;}
+.gas-share-btn .dashicons{width:18px;height:18px;font-size:18px;line-height:18px;}
+.gas-share-label{color:#fff;}
+
+.gas-team-indent td:first-child{padding-left:2.4em;color:inherit;opacity:.9;}
+@media (max-width:600px){
+	.gas-dashboard-nav-link{padding:.6em .7em;font-size:.9em;}
+	.gas-share-btn{padding:.5em .8em;font-size:.85em;}
+}

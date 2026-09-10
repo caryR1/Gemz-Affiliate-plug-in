@@ -7,7 +7,17 @@ class GAS_Frontend {
 
 	public static function init() {
 		add_shortcode( 'gas_affiliate_signup', array( __CLASS__, 'render_signup' ) );
+		// Dashboard restructure (2026-09-10, Cary's ask after user-testing
+		// feedback): one long page split into 4 — Overview stays on the
+		// original shortcode/page (least disruptive, since dashboard_url()
+		// is baked into emails/redirects everywhere already), the other 3
+		// are new. See render_dashboard_subnav() for how they're tied
+		// together, and DASHBOARD_FAMILY_SHORTCODES below for where a
+		// logged-in affiliate's personal theme choice applies.
 		add_shortcode( 'gas_affiliate_dashboard', array( __CLASS__, 'render_dashboard' ) );
+		add_shortcode( 'gas_affiliate_links', array( __CLASS__, 'render_links_page' ) );
+		add_shortcode( 'gas_affiliate_team', array( __CLASS__, 'render_team_page' ) );
+		add_shortcode( 'gas_affiliate_account', array( __CLASS__, 'render_account_page' ) );
 		add_shortcode( 'gas_signup_or_refer', array( __CLASS__, 'render_signup_or_refer' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'init', array( __CLASS__, 'maybe_create_pages' ) );
@@ -25,6 +35,19 @@ class GAS_Frontend {
 		add_action( 'admin_post_gas_save_dashboard_theme', array( __CLASS__, 'handle_save_dashboard_theme' ) );
 		add_action( 'admin_post_gas_dashboard_add_referral', array( __CLASS__, 'handle_dashboard_add_referral' ) );
 	}
+
+	/**
+	 * The 4 dashboard-family shortcodes, together — used to decide where a
+	 * logged-in affiliate's personal dashboard-color preference applies
+	 * (every one of "their" pages, not just Overview) and to build the
+	 * shared subnav. Order here is the display order in that subnav.
+	 */
+	const DASHBOARD_FAMILY = array(
+		'gas_affiliate_dashboard' => array( 'label' => 'Overview', 'url_fn' => 'dashboard_url' ),
+		'gas_affiliate_links'     => array( 'label' => 'My Links & Earnings', 'url_fn' => 'links_url' ),
+		'gas_affiliate_team'      => array( 'label' => 'My Team', 'url_fn' => 'team_url' ),
+		'gas_affiliate_account'   => array( 'label' => 'Account', 'url_fn' => 'account_url' ),
+	);
 
 	/**
 	 * True if the given shortcode appears on this post — checked against
@@ -62,6 +85,9 @@ class GAS_Frontend {
 	const STYLED_SHORTCODES = array(
 		'gas_affiliate_signup',
 		'gas_affiliate_dashboard',
+		'gas_affiliate_links',
+		'gas_affiliate_team',
+		'gas_affiliate_account',
 		'gas_signup_or_refer',
 		'gas_partner_dashboard',
 		'gas_help',
@@ -92,7 +118,7 @@ class GAS_Frontend {
 					// not their own admin account's (which has none set).
 					$css_vars   = GAS_Settings::theme_css_vars();
 					$view_as_id = 0;
-					if ( 'gas_affiliate_dashboard' === $tag ) {
+					if ( array_key_exists( $tag, self::DASHBOARD_FAMILY ) ) {
 						$preview = GAS_Roles::get_admin_preview();
 						if ( $preview && 'agent' === $preview['type'] ) {
 							$view_as_id = (int) $preview['id'];
@@ -110,11 +136,19 @@ class GAS_Frontend {
 					break;
 				}
 			}
-			// Dashicons is normally admin-only — the dashboard's per-link
-			// capability icons (see render_capability_icons()) reuse it on
-			// the front end instead of adding a new icon-font dependency.
-			if ( self::post_has_shortcode( $post, 'gas_affiliate_dashboard' ) ) {
-				wp_enqueue_style( 'dashicons' );
+			// Dashicons is normally admin-only — the per-link capability
+			// icons (see render_capability_icons()) and the share-button
+			// row reuse it on the front end instead of adding a new
+			// icon-font dependency. Checked against every dashboard-family
+			// page, not just Overview/Links & Earnings: the Team page's
+			// "invite someone" row also calls render_share_buttons() (its
+			// recruit-link share row) — a bug caught in review, since those
+			// icons would silently render as missing glyphs without this.
+			foreach ( array_keys( self::DASHBOARD_FAMILY ) as $family_tag ) {
+				if ( self::post_has_shortcode( $post, $family_tag ) ) {
+					wp_enqueue_style( 'dashicons' );
+					break;
+				}
 			}
 		}
 	}
@@ -135,11 +169,34 @@ class GAS_Frontend {
 	public static function maybe_create_pages() {
 		GAS_Help::create_or_adopt_page( 'gas_signup_page_id', 'Become an Affiliate', 'become-an-affiliate', '[gas_affiliate_signup]' );
 		GAS_Help::create_or_adopt_page( 'gas_dashboard_page_id', 'Affiliate Dashboard', 'affiliate-dashboard', '[gas_affiliate_dashboard]' );
+		// 3 new pages from the 2026-09-10 dashboard restructure — same
+		// auto-create-once pattern as every other GAS page.
+		GAS_Help::create_or_adopt_page( 'gas_links_page_id', 'My Links & Earnings', 'my-links-earnings', '[gas_affiliate_links]' );
+		GAS_Help::create_or_adopt_page( 'gas_team_page_id', 'My Team', 'my-team', '[gas_affiliate_team]' );
+		// Not "my-account" — that's WooCommerce's own page on most
+		// installs (including Home's), would silently adopt/collide with
+		// it via create_or_adopt_page()'s existing-slug check.
+		GAS_Help::create_or_adopt_page( 'gas_account_page_id', 'Affiliate Account', 'affiliate-account', '[gas_affiliate_account]' );
 	}
 
 	public static function dashboard_url() {
 		$id = get_option( 'gas_dashboard_page_id' );
 		return $id ? get_permalink( $id ) : home_url( '/affiliate-dashboard/' );
+	}
+
+	public static function links_url() {
+		$id = get_option( 'gas_links_page_id' );
+		return $id ? get_permalink( $id ) : home_url( '/my-links-earnings/' );
+	}
+
+	public static function team_url() {
+		$id = get_option( 'gas_team_page_id' );
+		return $id ? get_permalink( $id ) : home_url( '/my-team/' );
+	}
+
+	public static function account_url() {
+		$id = get_option( 'gas_account_page_id' );
+		return $id ? get_permalink( $id ) : home_url( '/affiliate-account/' );
 	}
 
 	public static function signup_url() {
@@ -943,59 +1000,61 @@ class GAS_Frontend {
 	}
 
 	/* ---------------------------------------------------------------- *
-	 * DASHBOARD
+	 * DASHBOARD (4 pages as of 2026-09-10 — see DASHBOARD_FAMILY above)
 	 * ---------------------------------------------------------------- */
 
-	public static function render_dashboard() {
+	/**
+	 * Shared open sequence for all 4 dashboard-family pages — login check,
+	 * admin-preview resolution, suspended/notice banners, the welcome bar,
+	 * and the subnav. Was all duplicated inline in render_dashboard()
+	 * before this split; factored out so the other 3 pages don't each
+	 * re-implement (and risk drifting on) the exact same cache/preview/
+	 * suspension logic. Returns `array(false, $html_to_return_directly)`
+	 * for a not-logged-in/not-an-affiliate/gone case — caller should
+	 * `return` that html immediately, page not rendered. Otherwise
+	 * returns `array(true, array($user_id, $user, $is_previewing))` with
+	 * output buffering already started (caller echoes page-specific
+	 * content next, then calls dashboard_page_close()).
+	 */
+	private static function dashboard_page_open( $active_tag ) {
 		// Never let a page-cache/CDN layer serve this response to anyone
-		// but the exact visitor who requested it — this page's content is
-		// entirely per-user (a logged-out visitor's login form, one
-		// specific affiliate's data, or an admin's read-only preview of a
-		// DIFFERENT affiliate). Added 2026-09-10 after a real bug: an
-		// admin's "View Dashboard" preview click correctly set the
-		// preview transient, but LiteSpeed/Hostinger's edge cache
-		// (confirmed via `X-LiteSpeed-Cache: hit` on a second identical
-		// request) was serving back a stale, previously-cached response —
-		// "This dashboard is for affiliates only" — from before the admin
-		// was ever previewing anything. Plain nocache_headers() alone
-		// turned out NOT to be enough on this host: LiteSpeed Cache (the
-		// actual WP plugin, confirmed active on both Solar and staging)
-		// kept caching the page regardless of the Cache-Control header —
-		// it needs its own explicit no-op-if-absent API to actually skip
-		// caching a page.
+		// but the exact visitor who requested it — every one of these
+		// pages is entirely per-user content. See the 2026-09-10 LiteSpeed
+		// bug this guards against: nocache_headers() alone wasn't enough
+		// on this host, needs LiteSpeed Cache's own explicit API too.
 		nocache_headers();
 		do_action( 'litespeed_control_set_nocache', 'gas dashboard is per-user content' );
 
 		if ( ! is_user_logged_in() ) {
-			return self::render_login_form();
+			return array( false, self::render_login_form() );
 		}
 
 		$preview       = GAS_Roles::get_admin_preview();
 		$is_previewing = $preview && 'agent' === $preview['type'];
 
 		if ( ! $is_previewing && ! GAS_Roles::is_affiliate() ) {
-			return '<div class="gas-notice">This dashboard is for affiliates only. <a href="' . esc_url( wp_logout_url( self::signup_url() ) ) . '">Log out</a> and sign up as an affiliate, or contact us if you think this is a mistake.</div>';
+			return array( false, '<div class="gas-notice">This dashboard is for affiliates only. <a href="' . esc_url( wp_logout_url( self::signup_url() ) ) . '">Log out</a> and sign up as an affiliate, or contact us if you think this is a mistake.</div>' );
 		}
 
 		if ( $is_previewing ) {
 			$user_id = (int) $preview['id'];
 			$user    = get_userdata( $user_id );
 			if ( ! $user ) {
-				return '<div class="gas-notice">That affiliate account no longer exists.</div>';
+				return array( false, '<div class="gas-notice">That affiliate account no longer exists.</div>' );
 			}
 		} else {
 			$user_id = get_current_user_id();
 			$user    = wp_get_current_user();
 		}
-		$status  = get_user_meta( $user_id, 'gas_status', true ) ?: 'active';
+		$status = get_user_meta( $user_id, 'gas_status', true ) ?: 'active';
 
 		ob_start();
 
 		if ( isset( $_GET['gas_notice'] ) ) {
 			$notices = array(
-				'password_updated'       => 'Password updated.',
-				'payment_updated'        => 'Payment information saved.',
-				'tax_info_updated'       => 'Tax information submitted — thank you.',
+				'password_updated'        => 'Password updated.',
+				'payment_updated'         => 'Payment information saved.',
+				'tax_info_updated'        => 'Tax information submitted — thank you.',
 				'dashboard_theme_updated' => 'Dashboard color updated.',
 				'referral_added'          => 'Referral added — thanks for the introduction!',
 			);
@@ -1011,6 +1070,8 @@ class GAS_Frontend {
 		echo '<div class="gas-dashboard">';
 		echo '<p>Welcome back, ' . esc_html( $user->display_name ) . '. <a href="' . esc_url( wp_logout_url( self::dashboard_url() ) ) . '">Log out</a> &middot; <a href="' . esc_url( GAS_Help::page_url() ) . '">Help</a></p>';
 
+		self::render_dashboard_subnav( $active_tag );
+
 		if ( $is_previewing ) {
 			echo '<div class="gas-notice" style="border-left:4px solid #d98500;padding:8px 12px;background:#fff8e5;">';
 			echo 'Previewing <strong>' . esc_html( $user->display_name ) . '\'s</strong> dashboard (read-only). ';
@@ -1022,21 +1083,19 @@ class GAS_Frontend {
 			echo '<div class="gas-notice gas-notice-error">Your affiliate account is currently suspended and your link is inactive. Contact us if you have questions.</div>';
 		}
 
-		self::render_stats_section( $user_id );
-		self::render_marketing_assets_section( $user_id );
-		self::render_downline_section( $user_id );
-		self::render_add_referral_section( $user_id, $is_previewing );
-		self::render_theme_preference_section( $user_id, $is_previewing );
-		self::render_password_section( $is_previewing );
-		self::render_payment_section( $user_id, $is_previewing );
-		self::render_tax_section( $user_id, $is_previewing );
+		return array( true, array( $user_id, $user, $is_previewing ) );
+	}
 
+	/**
+	 * Closes the `<div class="gas-dashboard">` opened by dashboard_page_open()
+	 * and appends the tap-to-reveal script for any popover icons on the
+	 * page (harmless no-op if none rendered) — same script every
+	 * dashboard-family page needs, kept in one place.
+	 */
+	private static function dashboard_page_close() {
 		echo '</div>';
 		?>
 		<script>
-			// Tap-to-reveal for the blurb/capability popovers: CSS already
-			// shows .gas-popover on :hover/:focus (mouse + keyboard), this
-			// just adds a plain tap on touch devices via a toggled class.
 			(function() {
 				document.querySelectorAll('.gas-popover-icon').forEach(function(el) {
 					el.addEventListener('click', function(e) {
@@ -1049,9 +1108,199 @@ class GAS_Frontend {
 				document.addEventListener('click', function() {
 					document.querySelectorAll('.gas-popover-icon.gas-open').forEach(function(o) { o.classList.remove('gas-open'); });
 				});
+				// Share row: "Copy Link"/"Instagram" buttons write to the
+				// clipboard client-side (there's no server-side share
+				// action to submit) — Instagram also opens Instagram
+				// afterward since it has no real share-by-URL intent, see
+				// render_share_buttons()'s own comment for why.
+				document.querySelectorAll('.gas-share-copy, .gas-share-instagram').forEach(function(btn) {
+					btn.addEventListener('click', function() {
+						var text = btn.getAttribute('data-copy-text') || '';
+						var label = btn.querySelector('.gas-share-label');
+						var original = label ? label.textContent : '';
+						navigator.clipboard.writeText(text).then(function() {
+							if (label) { label.textContent = 'Copied!'; setTimeout(function() { label.textContent = original; }, 2000); }
+							if (btn.classList.contains('gas-share-instagram')) {
+								window.open('https://www.instagram.com/', '_blank', 'noopener');
+							}
+						});
+					});
+				});
 			})();
 		</script>
 		<?php
+	}
+
+	/**
+	 * The nav bar shown at the top of every dashboard-family page, so an
+	 * affiliate can move between Overview/Links & Earnings/Team/Account —
+	 * added 2026-09-10 as part of splitting one long page into 4 (Cary's
+	 * ask, after real user-testing feedback that the single-page version
+	 * buried money and team info under settings-type content).
+	 */
+	private static function render_dashboard_subnav( $active_tag ) {
+		echo '<nav class="gas-dashboard-nav" aria-label="Dashboard sections">';
+		foreach ( self::DASHBOARD_FAMILY as $tag => $info ) {
+			$url   = call_user_func( array( __CLASS__, $info['url_fn'] ) );
+			$class = 'gas-dashboard-nav-link' . ( $tag === $active_tag ? ' gas-dashboard-nav-active' : '' );
+			echo '<a class="' . esc_attr( $class ) . '" href="' . esc_url( $url ) . '"' . ( $tag === $active_tag ? ' aria-current="page"' : '' ) . '>' . esc_html( $info['label'] ) . '</a>';
+		}
+		echo '</nav>';
+	}
+
+	/**
+	 * How many people this affiliate has personally recruited (direct),
+	 * and how many their recruits have in turn recruited (indirect) —
+	 * shared by the Overview hero stat and the Team page's own fuller
+	 * breakdown so the two numbers can never drift apart from being
+	 * computed two different ways.
+	 */
+	private static function get_downline_counts( $user_id ) {
+		global $wpdb;
+		$codes_table = GAS_DB::table( 'codes' );
+		$my_code_ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$codes_table} WHERE wp_user_id = %d", $user_id ) );
+		if ( ! $my_code_ids ) {
+			return array( 0, 0 );
+		}
+		$placeholders = implode( ',', array_fill( 0, count( $my_code_ids ), '%d' ) );
+		$direct_ids   = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$codes_table} WHERE sponsor_code_id IN ({$placeholders})", $my_code_ids ) );
+		if ( ! $direct_ids ) {
+			return array( 0, 0 );
+		}
+		$placeholders2 = implode( ',', array_fill( 0, count( $direct_ids ), '%d' ) );
+		$indirect_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$codes_table} WHERE sponsor_code_id IN ({$placeholders2})", $direct_ids ) );
+		return array( count( $direct_ids ), $indirect_count );
+	}
+
+	/**
+	 * OVERVIEW — the "at a glance" landing page (same shortcode/page this
+	 * plugin has always used, dashboard_url(), left unchanged on purpose:
+	 * it's baked into login redirects, signup-confirmation emails, and
+	 * "go to your dashboard" copy throughout the plugin already, so
+	 * repointing it would mean hunting down every one of those). Before
+	 * 2026-09-10 this page WAS the entire dashboard, every section
+	 * stacked in one long scroll with no hierarchy — money buried inside
+	 * a "Your links" panel, "Change password" given the same visual
+	 * weight as your unpaid balance. This is now just the hero: the
+	 * numbers that matter, and your link if you only have the one —
+	 * everything else lives on its own page now, reachable from the
+	 * subnav above.
+	 */
+	public static function render_dashboard() {
+		list( $ok, $data ) = self::dashboard_page_open( 'gas_affiliate_dashboard' );
+		if ( ! $ok ) {
+			return $data;
+		}
+		list( $user_id, $user, $is_previewing ) = $data;
+
+		global $wpdb;
+		$my_code  = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . GAS_DB::table( 'codes' ) . " WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1", $user_id ) );
+		$campaigns = $my_code ? GAS_Campaigns::get_active_for_approved_partners() : array();
+		$totals   = $my_code ? GAS_Payouts::totals_for_affiliate( $user_id ) : array( 'unpaid' => 0, 'paid' => 0 );
+		list( $direct_count, $indirect_count ) = self::get_downline_counts( $user_id );
+
+		echo '<div class="gas-panel gas-hero">';
+		echo '<h2>Your business at a glance</h2>';
+		echo '<div class="gas-stat-row">';
+		echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['unpaid'], 2 ) ) . '</span><span class="gas-stat-label">Unpaid balance</span></div>';
+		echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['paid'], 2 ) ) . '</span><span class="gas-stat-label">Paid to date</span></div>';
+		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( count( $campaigns ) ) . '</span><span class="gas-stat-label">Active link' . ( 1 === count( $campaigns ) ? '' : 's' ) . '</span></div>';
+		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $direct_count + $indirect_count ) . '</span><span class="gas-stat-label">People on your team</span></div>';
+		echo '</div>';
+		echo '<p><a href="' . esc_url( self::links_url() ) . '">See the full earnings breakdown by tier &rarr;</a> &middot; <a href="' . esc_url( self::team_url() ) . '">See your team &rarr;</a></p>';
+		echo '</div>';
+
+		if ( ! $my_code ) {
+			// no-op: nothing to show yet, avoid an empty/confusing panel
+		} elseif ( 1 === count( $campaigns ) ) {
+			// The common case (one partner) — show the real share widget
+			// right here so the single most useful action (share your
+			// link) doesn't need a second page visit. 2+ partners means
+			// "which one" is a real question, so that case just points to
+			// Links & Earnings instead of guessing which one to feature.
+			$c    = $campaigns[0];
+			$link = GAS_Campaigns::build_link( $c, $my_code->code );
+			echo '<div class="gas-panel">';
+			echo '<h2>Your link</h2>';
+			echo '<p><strong>' . esc_html( $c->partner_alias ) . '</strong></p>';
+			echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
+			echo self::render_share_buttons( $link, 'Check this out:' );
+			echo '<p class="gas-fineprint"><a href="' . esc_url( self::links_url() ) . '">Full details, service info, and marketing materials &rarr;</a></p>';
+			echo '</div>';
+		} elseif ( count( $campaigns ) > 1 ) {
+			echo '<div class="gas-panel">';
+			echo '<h2>Your links</h2>';
+			echo '<p>You have ' . esc_html( count( $campaigns ) ) . ' active links. <a href="' . esc_url( self::links_url() ) . '">See them all, with sharing options &rarr;</a></p>';
+			echo '</div>';
+		} else {
+			echo '<div class="gas-panel"><h2>Your links</h2><p>No referral links yet' . ( $my_code ? ' — check back once a partner campaign is active' : '' ) . '.</p></div>';
+		}
+
+		self::dashboard_page_close();
+		return ob_get_clean();
+	}
+
+	/**
+	 * MY LINKS & EARNINGS — every promotable link (alias, coverage,
+	 * services, share buttons, click count) plus the earnings-by-tier
+	 * breakdown, on one page since they're really one story ("here's what
+	 * you're promoting and what it's earned you"), not two disconnected
+	 * ones like the pre-2026-09-10 layout had them.
+	 */
+	public static function render_links_page() {
+		list( $ok, $data ) = self::dashboard_page_open( 'gas_affiliate_links' );
+		if ( ! $ok ) {
+			return $data;
+		}
+		list( $user_id, $user, $is_previewing ) = $data;
+
+		self::render_stats_section( $user_id );
+		self::render_marketing_assets_section( $user_id );
+
+		self::dashboard_page_close();
+		return ob_get_clean();
+	}
+
+	/**
+	 * MY TEAM — the downline tree plus both ways to grow it (add a
+	 * referral for someone directly, or invite someone to become an
+	 * affiliate themselves) — these lived in two disconnected spots
+	 * before 2026-09-10 (one buried in "Your links," the other its own
+	 * panel near the bottom); both are "grow my team" actions, so now
+	 * they're together.
+	 */
+	public static function render_team_page() {
+		list( $ok, $data ) = self::dashboard_page_open( 'gas_affiliate_team' );
+		if ( ! $ok ) {
+			return $data;
+		}
+		list( $user_id, $user, $is_previewing ) = $data;
+
+		self::render_downline_section( $user_id );
+		self::render_add_referral_section( $user_id, $is_previewing );
+
+		self::dashboard_page_close();
+		return ob_get_clean();
+	}
+
+	/**
+	 * ACCOUNT — everything administrative (dashboard color, password,
+	 * payment, tax) lives here now, separated from performance content so
+	 * neither competes with the other for attention.
+	 */
+	public static function render_account_page() {
+		list( $ok, $data ) = self::dashboard_page_open( 'gas_affiliate_account' );
+		if ( ! $ok ) {
+			return $data;
+		}
+		list( $user_id, $user, $is_previewing ) = $data;
+
+		self::render_theme_preference_section( $user_id, $is_previewing );
+		self::render_password_section( $is_previewing );
+		self::render_payment_section( $user_id, $is_previewing );
+		self::render_tax_section( $user_id, $is_previewing );
+
+		self::dashboard_page_close();
 		return ob_get_clean();
 	}
 
@@ -1107,7 +1356,6 @@ class GAS_Frontend {
 			echo '<p>No referral links yet' . ( $my_code ? ' — check back once a partner campaign is active' : '' ) . '.</p>';
 		} else {
 			$totals = GAS_Payouts::totals_for_affiliate( $user_id );
-			$recruit_link = home_url( '/join/' . rawurlencode( $my_code->code ) . '/' );
 
 			foreach ( $campaigns as $c ) {
 				$link        = GAS_Campaigns::build_link( $c, $my_code->code );
@@ -1126,15 +1374,19 @@ class GAS_Frontend {
 
 				if ( $c->partner_state ) {
 					$states = implode( ', ', array_map( 'trim', explode( ',', $c->partner_state ) ) );
-					echo '<p class="gas-fineprint">Serves: ' . esc_html( $states ) . '</p>';
+					echo '<p class="gas-fineprint"><strong>Coverage area:</strong> ' . esc_html( $states ) . '</p>';
 				}
 
 				$icons = self::render_capability_icons( $c->partner_capability_tags, $c->partner_requires_appointment );
 				if ( $icons ) {
-					echo '<p class="gas-capability-icons">' . $icons . '</p>';
+					// Labeled explicitly (2026-09-10, Cary's ask) rather
+					// than left as bare icons a visitor has to hover/tap to
+					// understand — "label liberally" applied here.
+					echo '<p class="gas-capability-icons"><strong>Services:</strong> ' . $icons . '</p>';
 				}
 
-				echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
+				echo '<p><strong>Your link:</strong> <code>' . esc_html( $link ) . '</code></p>';
+				echo self::render_share_buttons( $link, 'Check this out:' );
 
 				$variants = GAS_Campaigns::get_variants_for( $c->id );
 				if ( $variants ) {
@@ -1146,12 +1398,10 @@ class GAS_Frontend {
 				}
 
 				echo '<div class="gas-stat-row">';
-				echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $click_count ) . '</span><span class="gas-stat-label">Clicks</span></div>';
+				echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $click_count ) . '</span><span class="gas-stat-label">Clicks on this link</span></div>';
 				echo '</div>';
 				echo '</div>';
 			}
-
-			echo '<p>Invite others to become an affiliate too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
 
 			echo '<div class="gas-stat-row">';
 			echo '<div class="gas-stat"><span class="gas-stat-num">$' . esc_html( number_format( $totals['unpaid'], 2 ) ) . '</span><span class="gas-stat-label">Unpaid balance</span></div>';
@@ -1249,8 +1499,15 @@ class GAS_Frontend {
 		global $wpdb;
 		$codes_table = GAS_DB::table( 'codes' );
 
+		$my_code    = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1", $user_id ) );
 		$my_code_ids = $wpdb->get_col( $wpdb->prepare( "SELECT id FROM {$codes_table} WHERE wp_user_id = %d", $user_id ) );
+
+		echo '<div class="gas-panel">';
+		echo '<h2>Your team</h2>';
+		echo '<p class="gas-fineprint">People you\'ve personally recruited, and the people they\'ve recruited in turn — your own tree only.</p>';
+
 		if ( ! $my_code_ids ) {
+			echo '</div>';
 			return;
 		}
 		$placeholders = implode( ',', array_fill( 0, count( $my_code_ids ), '%d' ) );
@@ -1270,24 +1527,42 @@ class GAS_Frontend {
 			) );
 		}
 
-		echo '<div class="gas-panel">';
-		echo '<h2>Your team</h2>';
-		echo '<p class="gas-fineprint">People you\'ve personally recruited, and the people they\'ve recruited in turn — your own tree only.</p>';
 		echo '<div class="gas-stat-row">';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( count( $direct ) ) . '</span><span class="gas-stat-label">Direct recruits</span></div>';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( count( $indirect ) ) . '</span><span class="gas-stat-label">Their recruits</span></div>';
 		echo '</div>';
 
 		if ( $direct ) {
+			// Grouped as a real tree (2026-09-10 — was a flat table before,
+			// with a text "Direct"/"Their recruit" column and no way to
+			// tell WHICH direct recruit an indirect one actually belongs
+			// under). Group indirect recruits by their sponsor_code_id and
+			// interleave them right after their own direct-recruit parent,
+			// visually indented, instead of two disconnected blocks.
+			$indirect_by_sponsor = array();
+			foreach ( $indirect as $i ) {
+				$indirect_by_sponsor[ $i->sponsor_code_id ][] = $i;
+			}
+
 			echo '<div class="gas-table-wrap"><table class="gas-table"><thead><tr><th>Name</th><th>Contact</th><th>Level</th></tr></thead><tbody>';
 			foreach ( $direct as $d ) {
-				self::render_downline_row( $d, 'Direct' );
-			}
-			foreach ( $indirect as $i ) {
-				self::render_downline_row( $i, 'Their recruit' );
+				self::render_downline_row( $d, 'Direct recruit' );
+				foreach ( $indirect_by_sponsor[ $d->id ] ?? array() as $child ) {
+					self::render_downline_row( $child, 'Recruited by ' . $d->sub_affiliate_name, true );
+				}
 			}
 			echo '</tbody></table></div>';
 		}
+
+		if ( $my_code ) {
+			// Moved here from the Links & Earnings page (2026-09-10) —
+			// recruiting another affiliate belongs with the rest of team-
+			// building, not tucked into a page about promotable links.
+			$recruit_link = home_url( '/join/' . rawurlencode( $my_code->code ) . '/' );
+			echo '<p><strong>Invite someone to become an affiliate</strong> too, and earn a bonus on their sales: <code>' . esc_html( $recruit_link ) . '</code></p>';
+			echo self::render_share_buttons( $recruit_link, 'Join me as an affiliate:' );
+		}
+
 		echo '</div>';
 	}
 
@@ -1364,7 +1639,7 @@ class GAS_Frontend {
 		}
 		$user_id = $is_previewing ? (int) $preview['id'] : get_current_user_id();
 
-		$redirect_back = add_query_arg( 'gas_notice', 'referral_added', self::dashboard_url() );
+		$redirect_back = add_query_arg( 'gas_notice', 'referral_added', self::team_url() );
 		$fail          = function( $msg ) use ( $redirect_back ) {
 			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), remove_query_arg( 'gas_notice', $redirect_back ) ) );
 			exit;
@@ -1393,11 +1668,45 @@ class GAS_Frontend {
 	}
 
 	/**
+	 * 5 one-tap share options for a link (2026-09-10, Cary's ask) —
+	 * WhatsApp, Facebook, and SMS/Email are real "share via URL" intents
+	 * (open with the message pre-filled); Copy Link and Instagram are
+	 * handled client-side (see the script in dashboard_page_close()).
+	 * Instagram deliberately does NOT get a real share-intent link —
+	 * unlike the others, Instagram has no public "share this URL with a
+	 * pre-filled message" endpoint at all (by design: they don't allow
+	 * clickable links in ordinary posts/captions either, only in bio or a
+	 * story link sticker) — so it copies the message+link to the
+	 * clipboard and opens Instagram, rather than faking a button that
+	 * would silently do nothing. Icons render in the SITE'S theme color
+	 * (var(--gas-accent)), not each platform's own brand color, per
+	 * Cary's direct request, so they read as "this site's share buttons,"
+	 * not a row of competing platform logos.
+	 */
+	private static function render_share_buttons( $link, $message ) {
+		$text_with_link = $message . ' ' . $link;
+		$whatsapp = 'https://wa.me/?text=' . rawurlencode( $text_with_link );
+		$facebook = 'https://www.facebook.com/sharer/sharer.php?u=' . rawurlencode( $link );
+		$sms      = 'sms:?body=' . rawurlencode( $text_with_link );
+		$email    = 'mailto:?subject=' . rawurlencode( $message ) . '&body=' . rawurlencode( $text_with_link );
+
+		$html  = '<div class="gas-share-row" role="group" aria-label="Share this link">';
+		$html .= '<button type="button" class="gas-share-btn gas-share-copy" data-copy-text="' . esc_attr( $link ) . '"><span class="dashicons dashicons-admin-page" aria-hidden="true"></span><span class="gas-share-label">Copy Link</span></button>';
+		$html .= '<a class="gas-share-btn" href="' . esc_url( $whatsapp ) . '" target="_blank" rel="noopener"><span class="dashicons dashicons-format-chat" aria-hidden="true"></span><span class="gas-share-label">WhatsApp</span></a>';
+		$html .= '<a class="gas-share-btn" href="' . esc_url( $facebook ) . '" target="_blank" rel="noopener"><span class="dashicons dashicons-facebook-alt" aria-hidden="true"></span><span class="gas-share-label">Facebook</span></a>';
+		$html .= '<a class="gas-share-btn" href="' . esc_url( $sms ) . '"><span class="dashicons dashicons-smartphone" aria-hidden="true"></span><span class="gas-share-label">Text Message</span></a>';
+		$html .= '<a class="gas-share-btn" href="' . esc_url( $email ) . '"><span class="dashicons dashicons-email" aria-hidden="true"></span><span class="gas-share-label">Email</span></a>';
+		$html .= '<button type="button" class="gas-share-btn gas-share-instagram" data-copy-text="' . esc_attr( $text_with_link ) . '"><span class="dashicons dashicons-camera" aria-hidden="true"></span><span class="gas-share-label">Instagram</span></button>';
+		$html .= '</div>';
+		return $html;
+	}
+
+	/**
 	 * One tap/click-to-reveal icon with a hidden text popover — shared by
 	 * the partner blurb icon and each capability tag icon so both use the
 	 * same interaction (no separate persistent legend needed, per spec).
 	 * Works via CSS :hover/:focus for mouse and keyboard, plus the small
-	 * script in render_dashboard() for a plain tap on touch devices.
+	 * script in dashboard_page_close() for a plain tap on touch devices.
 	 */
 	private static function render_popover_icon( $dashicon, $aria_label, $popover_text, $extra_class = '' ) {
 		return '<span class="gas-popover-icon dashicons ' . esc_attr( $dashicon ) . ( $extra_class ? ' ' . esc_attr( $extra_class ) : '' ) . '" tabindex="0" role="button" aria-label="' . esc_attr( $aria_label ) . '"><span class="gas-popover">' . esc_html( $popover_text ) . '</span></span>';
@@ -1429,11 +1738,11 @@ class GAS_Frontend {
 		return $html;
 	}
 
-	private static function render_downline_row( $code, $level ) {
+	private static function render_downline_row( $code, $level, $indented = false ) {
 		$user  = $code->wp_user_id ? get_userdata( $code->wp_user_id ) : null;
 		$phone = $code->wp_user_id ? get_user_meta( $code->wp_user_id, 'gas_phone', true ) : '';
-		echo '<tr>';
-		echo '<td>' . esc_html( $code->sub_affiliate_name ) . '</td>';
+		echo '<tr' . ( $indented ? ' class="gas-team-indent"' : '' ) . '>';
+		echo '<td>' . ( $indented ? '&#8627; ' : '' ) . esc_html( $code->sub_affiliate_name ) . '</td>';
 		echo '<td>' . ( $user ? esc_html( $user->user_email ) : '' ) . ( $phone ? '<br>' . esc_html( $phone ) : '' ) . '</td>';
 		echo '<td>' . esc_html( $level ) . '</td>';
 		echo '</tr>';
@@ -1489,7 +1798,7 @@ class GAS_Frontend {
 			update_user_meta( get_current_user_id(), 'gas_dashboard_theme', $theme );
 		}
 
-		wp_safe_redirect( add_query_arg( 'gas_notice', 'dashboard_theme_updated', self::dashboard_url() ) );
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'dashboard_theme_updated', self::account_url() ) );
 		exit;
 	}
 
@@ -1536,7 +1845,7 @@ class GAS_Frontend {
 		$new_pass2 = isset( $_POST['new_password2'] ) ? (string) $_POST['new_password2'] : '';
 
 		$fail = function( $msg ) {
-			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), self::dashboard_url() ) );
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), self::account_url() ) );
 			exit;
 		};
 
@@ -1553,7 +1862,7 @@ class GAS_Frontend {
 		wp_set_current_user( $user_id );
 		wp_set_auth_cookie( $user_id );
 
-		wp_safe_redirect( add_query_arg( 'gas_notice', 'password_updated', self::dashboard_url() ) );
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'password_updated', self::account_url() ) );
 		exit;
 	}
 
@@ -1655,7 +1964,7 @@ class GAS_Frontend {
 		$user_id = get_current_user_id();
 		GAS_Payouts::save_details( $user_id, wp_unslash( $_POST ) );
 
-		wp_safe_redirect( add_query_arg( 'gas_notice', 'payment_updated', self::dashboard_url() ) );
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'payment_updated', self::account_url() ) );
 		exit;
 	}
 
@@ -1733,11 +2042,11 @@ class GAS_Frontend {
 		$saved   = GAS_Payouts::save_tax_info( $user_id, wp_unslash( $_POST ) );
 
 		if ( ! $saved ) {
-			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( 'Please fill in your name, tax ID type, and country of residence — a US person also needs an SSN or EIN.' ), self::dashboard_url() ) );
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( 'Please fill in your name, tax ID type, and country of residence — a US person also needs an SSN or EIN.' ), self::account_url() ) );
 			exit;
 		}
 
-		wp_safe_redirect( add_query_arg( 'gas_notice', 'tax_info_updated', self::dashboard_url() ) );
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'tax_info_updated', self::account_url() ) );
 		exit;
 	}
 }

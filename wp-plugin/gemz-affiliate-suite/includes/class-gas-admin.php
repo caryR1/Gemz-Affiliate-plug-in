@@ -2513,7 +2513,8 @@ class GAS_Admin {
 		</ul>
 
 		<h2>Front-end pages this plugin manages</h2>
-		<p>Become an Affiliate, Affiliate Dashboard, Affiliate Help, Partner Portal, Partner Help, Get a Quote (lead capture), and FAQ are all auto-created on first activation — safe to move in your nav menu, but avoid changing their slugs since the plugin links to them by page ID.</p>
+		<p>Become an Affiliate, Affiliate Dashboard (Overview), My Links &amp; Earnings, My Team, Affiliate Account, Affiliate Help, Partner Portal, Partner Help, Get a Quote (lead capture), and FAQ are all auto-created on first activation — safe to move in your nav menu, but avoid changing their slugs since the plugin links to them by page ID.</p>
+		<p>Affiliate Dashboard, My Links &amp; Earnings, My Team, and Affiliate Account (2026-09-10) are a linked set — a subnav at the top of each one lets an affiliate move between them. Affiliate Dashboard is the "Overview"/landing page and the one every login/signup/email flow already points to; the other 3 hold the fuller detail (promotable links + earnings, team/downline, and account settings respectively) that used to all be stacked on one long page.</p>
 		<?php
 		self::wrap_end();
 	}

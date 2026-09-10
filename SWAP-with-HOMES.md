@@ -13,6 +13,19 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: 2 more theme presets added (pink, pink & purple) — trivial, same array
+
+Cary asked for two more color presets, for a future project ("the girls" —
+no site attached yet, just wanted the colors ready). Added straight to
+`GAS_Settings::THEMES` in `class-gas-settings.php`: `pink` and
+`pink_purple`, same 4-value shape as the existing 3. No new mechanism
+needed — both pickers (admin Settings, affiliate dashboard preference)
+already loop over this array, so this is the entire change. Mentioning
+separately from the fuller Demo Admin entry below just so it doesn't get
+lost in that one.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: added a Demo Admin role (read-only, sales-preview use case) — please review carefully, it's a permissions feature
 
 Cary's ask directly: a WordPress user type that sees everything an admin

@@ -13,7 +13,7 @@ filled in.
 ## 1. The Program
 
 This Agreement governs your participation as an affiliate/referral partner
-("you," "Affiliate") in the [PROGRAM NAME] referral program operated by
+("you," "Affiliate") in the Gemz Online Solar Referral Program operated by
 Gemz Online LLC, a Georgia limited liability company ("we," "us,"
 "Company"). By signing up, checking the acceptance box, and receiving a
 referral link, you agree to these terms.
@@ -131,7 +131,7 @@ regard to conflict-of-law principles.
 ## 14. Arbitration
 
 Any dispute arising out of or relating to this Agreement will be resolved
-through binding arbitration administered in [CITY], Georgia, under the
+through binding arbitration administered in Grayson, Georgia, under the
 American Arbitration Association's Commercial Arbitration Rules then in
 effect, rather than in court — except that either party may bring an
 individual claim in small claims court instead. **You and the Company each
@@ -140,24 +140,30 @@ This section survives termination of this Agreement.
 
 ---
 
-## Things I'm flagging as needing your judgment specifically, not guessed at:
+## Status: all placeholders filled, this version is Solar-specific
 
-- **Legal name filled in as "Gemz Online LLC"** — you wrote "Gems Online,"
-  which reads like the same dictation slip that's shown up elsewhere this
-  project (GRC/CRC, mail/meal) given every other reference across both
-  sites is spelled "Gemz." Correct me if you actually meant a literal
-  different entity name.
-- **State and arbitration added** — Georgia governing law, arbitration in
-  Georgia under AAA Commercial Rules, jury trial and class action waived.
-  **[CITY]** is still a placeholder — which Georgia city should arbitration
-  be administered in (Atlanta is the typical default if you don't have a
-  preference)?
-- **[PROGRAM NAME]** still open — a single generic name across Home/Solar,
-  or a distinct name per site?
-- **Section 4's self-referral prohibition is UNCHANGED, deliberately** —
-  you just asked to allow some form of self-referral, which directly
-  conflicts with that clause as written. Holding it until we've worked out
-  exactly what you want to allow (see chat) rather than editing it on a
-  guess.
-- I kept the $50 minimum payout threshold consistent with the plugin's
-  actual configured behavior, so the agreement and the system match.
+- Legal name: **Gemz Online LLC** (a Georgia LLC) — filled in from "Gems
+  Online," read as the same dictation slip that's shown up elsewhere this
+  project (GRC/CRC, mail/meal). Flag if you actually meant something
+  different.
+- Governing law/arbitration: **Georgia**, arbitration administered in
+  **Grayson, Georgia**, under AAA Commercial Rules, jury trial and class
+  action waived.
+- Program name: **Gemz Online Solar Referral Program** — this makes this
+  specific document the Solar-branded version. Per the original note this
+  agreement was built to allow ("a single unified agreement... only the
+  program name/commission specifics would differ"), **Home now needs its
+  own equivalently-named counterpart** (e.g. something like "Gemz Online
+  Home[s] Affiliate Program") rather than reusing this exact file as-is —
+  flag me whenever you're ready to name that one and I'll produce the
+  Home-specific version from this same base.
+- Section 4 (self-referral) already reflects your later decision — single-
+  account self-referral on a real completed transaction is permitted,
+  multi-account tier stacking is prohibited (see the 2026-09-09 swap-file
+  entry for the full reasoning).
+- $50 minimum payout threshold kept consistent with the plugin's actual
+  configured behavior.
+- **Still not legal advice** — worth an actual attorney pass before this is
+  presented to a real affiliate as binding, especially the arbitration/
+  class-action-waiver section, which carries real, non-boilerplate legal
+  weight in a way the rest of the document doesn't.

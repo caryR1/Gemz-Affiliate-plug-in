@@ -7,7 +7,17 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.14.1 / `GAS_DB_VERSION`: 18.
+`GAS_VERSION`: 2.15.0 / `GAS_DB_VERSION`: 18.
+
+**Same day, one more feature**: affiliates can now add a referral
+directly from their own dashboard ("Add a referral" panel) instead of
+having to leave it and re-enter their own name/email on the public
+/refer-a-friend page — reuses the existing `create_referral_lead()`
+logic, no new DB schema. Stays usable under admin preview so an admin
+can add one on an affiliate's behalf. Verified live using a real
+affiliate (Uton Moodie) — a real test referral and a real test team
+member (recruited via his `/join/` link) both landed correctly
+attributed to his account.
 
 **Same day, one more fix**: Homes found (by actually logging into a real
 Demo Admin account on Home) that Manager and Demo Admin couldn't reach

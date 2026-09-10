@@ -144,6 +144,33 @@ class GAS_Roles {
 		// handler — this runs first every time, not a generic 'admin_post'
 		// action (WP core doesn't actually fire one unconditionally).
 		add_action( 'admin_init', array( __CLASS__, 'block_demo_admin_writes' ), 1 );
+
+		// WooCommerce bug found 2026-09-10 by Homes actually logging in as
+		// a real Demo Admin account on Home (which runs WooCommerce):
+		// WooCommerce redirects any logged-in user lacking `edit_posts`
+		// away from wp-admin entirely, on the assumption they're a plain
+		// customer, not staff. Manager and Demo Admin were both built
+		// purely on this plugin's own gas_* capabilities, deliberately
+		// never granted a real WP-core capability like edit_posts (see
+		// dangerous_wp_caps() above — the whole point of these roles is
+		// NOT having ordinary WP-core abilities) — so on any WooCommerce
+		// install, both roles have silently been unable to reach
+		// wp-admin at all until now. No-op on a site without WooCommerce
+		// active, since nothing ever fires this filter there.
+		add_filter( 'woocommerce_prevent_admin_access', array( __CLASS__, 'allow_admin_access_for_gas_roles' ) );
+	}
+
+	/**
+	 * Only overrides WooCommerce's own redirect-away decision for someone
+	 * holding ACCESS_ADMIN_CAP (Administrator, Manager, Demo Admin) —
+	 * every other visitor (a real WooCommerce customer, say) keeps
+	 * whatever WooCommerce would have decided for them anyway.
+	 */
+	public static function allow_admin_access_for_gas_roles( $prevent_admin_access ) {
+		if ( current_user_can( self::ACCESS_ADMIN_CAP ) ) {
+			return false;
+		}
+		return $prevent_admin_access;
 	}
 
 	/**

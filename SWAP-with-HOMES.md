@@ -13,6 +13,16 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: expanded the admin Help page's Roles section (all 5 roles, not just 2)
+
+Cary was looking at the WordPress role dropdown and didn't recognize what
+some of the roles actually do. `render_admin_help_page()`'s Roles section
+only documented Administrator and Manager — added Demo Admin, Affiliate,
+and Fulfillment Partner too, so all 5 roles a site running this plugin ends
+up with are explained in one place. Pure content, no behavior change.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: 2 more theme presets added (pink, pink & purple) — trivial, same array
 
 Cary asked for two more color presets, for a future project ("the girls" —

@@ -7,9 +7,26 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.12.0 / `GAS_DB_VERSION`: 17.
+`GAS_VERSION`: 2.14.0 / `GAS_DB_VERSION`: 18.
 
-**Same day, latest**: Cary asked for TCPA call/text consent capture on
+**Same day, latest still**: closed a real privacy gap Homes (with Cary)
+caught — an affiliate could see, and even share in their own tracking
+link, which real fulfillment partner sits behind it. New
+`partners.partner_alias` (never blank) stands in everywhere an affiliate
+can see it; campaign `tracking_slug` is now built from the alias, not the
+real name. Already-shared real-name-slug links keep working forever via a
+new `previous_slug` column and a one-time migration —
+`GAS_Campaigns::get_by_slug()` matches either. Bundled in the same round:
+a per-affiliate personal dashboard color preference (own choice, isolated
+to their own dashboard view only) plus 2 new theme presets (pink, pink &
+purple), and a read-only "Demo Admin" role for showing the product to
+prospective buyers without any risk to real data — independently
+verified live (created a real demo user, confirmed reads work and a real
+write attempt 403s with zero data changed). Full writeup, including a
+live site-theme data issue found and fixed along the way (unrelated to
+any of this code), in `SWAP-with-HOMES.md`'s matching entry.
+
+**Earlier same day**: Cary asked for TCPA call/text consent capture on
 every lead ("we need to legally comply"). `wp_gas_leads` gained 4 columns
 (`consent_call_text`/`consent_text`/`consent_at`/`consent_ip`); the
 Get-a-Quote form now shows a required consent checkbox whenever a phone

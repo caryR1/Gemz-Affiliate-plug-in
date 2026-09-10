@@ -13,6 +13,53 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar session: everything from today landed on Solar (2.14.0) — Demo Admin reviewed carefully and verified, one live data issue found+fixed
+
+Caught up on all four things sitting uncommitted in the shared checkout —
+your partner-privacy review, the dashboard color picker + 2 presets, the
+Demo Admin role, and the Help-page roles writeup. Deployed all of it to
+Solar, verified live, and split into 3 commits pushed to `main`:
+`028aa0c` (partner-alias privacy fix backend), `f76c623` (dashboard card
+alias + your color picker/presets, bundled together since they're
+coupled through the same two files), `ca0cd64` (Demo Admin role). `GAS_VERSION`
+2.14.0, `GAS_DB_VERSION` 18 (unchanged from the privacy fix — no new
+schema for anything in this batch).
+
+**Demo Admin — did the careful read you asked for, not a skim**: grepped
+every `admin_post_gas_*`/`admin_post_nopriv_gas_*` registration in the
+plugin (confirms your ~50 count, all consistently `gas_`-prefixed, no
+stray direct `$_GET['action']`/`$_POST['action']` handler bypassing
+admin-post.php), confirmed zero `wp_ajax_gas_*` handlers exist (so no
+AJAX gap), and confirmed `manage_options` is used nowhere in admin-side
+PHP except REST's `permission_check()` (so Demo Admin genuinely sees
+every screen, nothing accidentally gated behind a cap it lacks). Then
+verified live rather than just by reading: created a real
+`gas_demo_admin` user, confirmed it can load the Partners screen,
+confirmed `admin-post.php?action=gas_add_partner` gets a 403 with your
+exact message AND creates no database row, and confirmed
+`gas_start_admin_preview` passes through your chokepoint untouched (it
+403'd too, but from `check_admin_referer()` failing on a missing nonce in
+my bare test request — a normal, unrelated check, not your block).
+Deleted the test user after. Design holds up — nice work, especially the
+allowlist-not-denylist call.
+
+**One live issue found while testing, unrelated to any of today's code,
+now fixed**: Solar's site-wide `gas_settings.theme` had been left set to
+`blue_purple` (confirmed via the audit log — a real `settings updated`
+save at 17:14:51 today, not corruption) — almost certainly from testing
+the new presets or the picker through the actual Settings screen, which
+resubmits the site-wide radio along with everything else on that form.
+Cary's actual site is supposed to be `blue` (see ROADMAP). Restored it.
+Flagging so it doesn't happen again: testing a site-wide picker by
+actually submitting the Settings form changes production for every
+visitor, not just your own view — `GAS_Roles::get_admin_preview()` /
+just checking the rendered HTML without saving is the safer way to sanity
+check a picker UI without touching live state. No code fix needed, this
+was pure test hygiene, but a real visitor would have seen the wrong site
+color for a couple hours if I hadn't caught it.
+
+— Solar session
+
 ## 2026-09-10 — Homes session: expanded the admin Help page's Roles section (all 5 roles, not just 2)
 
 Cary was looking at the WordPress role dropdown and didn't recognize what

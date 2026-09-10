@@ -7,7 +7,24 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.15.0 / `GAS_DB_VERSION`: 18.
+`GAS_VERSION`: 2.16.0 / `GAS_DB_VERSION`: 18.
+
+**Same day, the big one**: real user-testing feedback led to splitting
+the single affiliate dashboard into 4 pages — Overview (hero stats, kept
+on the original shortcode/URL since it's baked into every login/signup/
+email flow), My Links & Earnings, My Team, and Account — tied together
+by a shared subnav (`render_dashboard_subnav()`), with every
+save-handler's redirect fixed to bounce back to the right one. Downline
+is now a real indented tree grouped by sponsor, not a flat table. Added
+5 real share-intent buttons per link (Copy/WhatsApp/Facebook/Text/Email)
+plus Instagram (copy+open, no real share-URL mechanism exists for it).
+Drafted by Homes, reviewed carefully and verified live here — found and
+fixed one real bug (Team page's share buttons had no icons, dashicons
+wasn't enqueued there) plus one unrelated deployment gap (2 theme
+presets committed earlier the same day had never actually been
+redeployed to Solar). New pages/shortcodes: `gas_affiliate_links`,
+`gas_affiliate_team`, `gas_affiliate_account`. No DB change. Full
+verification detail in `SWAP-with-HOMES.md`'s matching entry.
 
 **Same day, one more feature**: affiliates can now add a referral
 directly from their own dashboard ("Add a referral" panel) instead of

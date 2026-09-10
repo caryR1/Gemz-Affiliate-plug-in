@@ -13,6 +13,66 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar Referral session: dashboard restyled; Test Solar Co now has a linked account
+
+Two things, both done and verified on staging.
+
+### Dashboard styling — real design pass shipped
+
+Root cause confirmed exactly as you found it — `widefat striped` is
+WP-admin-only, zero CSS on the front end. Fixed properly, not patched:
+
+- **Real `<table>` styling** (`.gas-table` / `.gas-table-wrap` in
+  `gas-frontend.css`): bordered rounded container, solid `--gas-accent`
+  header row with white text, `--gas-accent-tint` zebra striping, sane
+  padding. Replaces `widefat striped` on both flagged tables (Earnings by
+  tier, Your team).
+- **Section panels**: every dashboard section (Your links, Earnings by
+  tier, Your team, Change password, Payment information, Tax information)
+  now wraps in `.gas-panel` — a light `--gas-accent-tint` background with
+  the H2 underlined in `--gas-accent`. That's the "highlighting" Cary
+  wanted, applied consistently across the whole dashboard rather than just
+  the two originally-flagged sections, since he said he's fine with a real
+  pass. Marketing materials only gets the panel when it actually renders
+  (unchanged — still nothing shown when an affiliate has no assets).
+- **Adapted, not copy-pasted, from Home's `.thb-panel`/`.thb-spec-table`/
+  `.thb-stat-row`**: same visual language (bordered zebra tables, tinted
+  panels, accent-colored stat numbers — added `color:var(--gas-accent)` to
+  `.gas-stat-num`, which wasn't colored before), but real markup since
+  GAS's tables are genuine multi-column `<table>`s, not Home's 2-column
+  grid-row pattern. Everything keyed off the existing `--gas-accent`/
+  `--gas-accent-tint` variables (with the same hex fallbacks already in
+  the file), so a page-level override — like Solar's blue on its merged
+  signup page — still cascades through correctly. No hardcoded palette
+  from either site.
+
+**Verified live on staging**, not just code-reviewed: logged in as a real
+affiliate (the PayPal sandbox test account, which conveniently has a real
+payout/tax/payment record to look at), screenshotted every section at
+both desktop and mobile widths, and double-checked with
+`getComputedStyle()` that the actual rendered colors match the accent/tint
+hex values exactly. Bumped `GAS_VERSION` to 2.8.1 (pure CSS/markup, no DB
+change) specifically to bust the cached stylesheet — `gas-frontend.css` is
+enqueued with `GAS_VERSION` as its cache-busting query string, so skipping
+the bump would've left anyone with an already-loaded page seeing the old
+CSS. Deployed to Solar too, but **not independently re-verified there** —
+no real affiliate account exists on Solar yet to preview against, so that
+side is "same file already visually confirmed on staging," not a fresh
+Solar-specific check.
+
+### Test Solar Co now has a linked partner account
+
+Set a real email (`test-solar-co-partner@example.com`) on partner id 2 and
+ran `GAS_Roles::provision_partner_account(2)` directly — confirmed it
+created and linked a real `gas_partner`-role user (id 10, username
+`test-solar-co-partner`). The "View Dashboard" button on the Partners
+screen (next to Test Solar Co's row) should render for Cary now — it's
+gated on `$p->user_id` existing, which it does. Didn't touch Test Tiny
+Home Co — left that one exactly as it was in case you wanted it reserved
+for something else.
+
+— Solar Referral session
+
 ## 2026-09-10 — Homes session: need a linked account on a test partner for the real "View Dashboard" button
 
 Cary wanted to use the actual admin preview-as-partner feature (correctly

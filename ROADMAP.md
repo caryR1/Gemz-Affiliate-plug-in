@@ -6,8 +6,8 @@ solar.gemzonline.com and homes.gemzonline.com). Unlike `SWAP-with-HOMES.md`
 current — update it in place as features land or plans change, rather than
 appending entries.
 
-Last written: 2026-09-09, by the Solar Referral session. Current
-`GAS_VERSION`: 2.8.0 / `GAS_DB_VERSION`: 16.
+Last written: 2026-09-10, by the Solar Referral session. Current
+`GAS_VERSION`: 2.8.1 / `GAS_DB_VERSION`: 16.
 
 **Since this was first written (2026-09-06)**: shipped self-signup
 affiliates auto-matched to every partner marked "Open to self-signup" with
@@ -45,7 +45,13 @@ from scratch — previously only a math placeholder existed, `cashback_paid`
 was never actually set anywhere). Full detail in `SWAP-with-HOMES.md`
 2026-09-09.
 
-## What it does today (verified against the actual code, not memory)
+**2026-09-10**: Cary looked at the affiliate dashboard on staging and
+flagged it as looking unstyled — real root cause, not a deeper gap: the
+"Earnings by tier" and "Your team" tables used `widefat striped`, a
+WordPress **admin-only** class with zero CSS on the public-facing site, so
+they rendered as bare browser-default tables regardless of theme. Fixed
+with a real design pass, not a minimal patch (Cary's call) — see
+"Dashboard styling" below.
 
 **Signup & referral**
 - Self-service affiliate signup (`[gas_affiliate_signup]`) and a merged
@@ -141,6 +147,30 @@ to; there was no way to identify or pay the customer at all. Now:
 - Current-month pending estimate vs. prior-months' finalized exact totals.
 - Downline/team view, payment-info form (PayPal / Wise / "other" with free
   text), self-service password change.
+- **Dashboard styling** (2026-09-10, `gas-frontend.css`): every section
+  ("Your links," "Earnings by tier," "Your team," "Change password,"
+  "Payment information," "Tax information") is now wrapped in a `.gas-panel`
+  — a light tinted background (`--gas-accent-tint`) with the heading
+  underlined in `--gas-accent`, giving each a distinct, visually separated
+  card instead of bare headings running together. Real `<table>` styling
+  (`.gas-table`/`.gas-table-wrap`) replaces the two data tables that had
+  been using `widefat` — WordPress's admin-only table class, invisible on
+  the front end regardless of theme, which was the actual root cause Cary's
+  screenshot surfaced, not a deeper styling gap. New classes deliberately
+  reuse the existing `--gas-accent`/`--gas-accent-tint` CSS variables
+  (already how the capability icons and per-partner cards theme themselves)
+  rather than hardcoding either site's palette, so a page-level accent
+  override (like Solar's blue on its merged signup page) still cascades
+  correctly. Visual language adapted from — not copy-pasted from — Home's
+  own proven `.thb-panel`/`.thb-spec-table`/`.thb-stat-row` patterns
+  (`homes.gemzonline.com/content/style.css`); adapted rather than reused
+  verbatim since those are 2-column CSS-grid "spec rows," while GAS's
+  tables are real multi-column `<table>` markup. Verified live on staging
+  (screenshot, plus computed-style checks confirming the exact accent/tint
+  hex values are actually applied) at both desktop and mobile widths;
+  deployed to Solar too but not independently re-verified there (no real
+  affiliate account exists on Solar yet to preview against) since it's the
+  same file already visually confirmed on staging.
 
 **Lead capture & partner matching**
 - `[gas_lead_form]` submission → lead row, always starts unmatched.

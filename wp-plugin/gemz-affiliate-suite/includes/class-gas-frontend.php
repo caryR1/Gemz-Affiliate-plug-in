@@ -983,6 +983,7 @@ class GAS_Frontend {
 		$my_code = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$codes_table} WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1", $user_id ) );
 		$campaigns = $my_code ? GAS_Campaigns::get_active_for_approved_partners() : array();
 
+		echo '<div class="gas-panel">';
 		echo '<h2>Your links</h2>';
 		if ( ! $my_code || ! $campaigns ) {
 			echo '<p>No referral links yet' . ( $my_code ? ' — check back once a partner campaign is active' : '' ) . '.</p>';
@@ -1043,6 +1044,7 @@ class GAS_Frontend {
 				echo '<p class="gas-fineprint">Of which $' . esc_html( number_format( $totals['override_unpaid'] + $totals['override_paid'], 2 ) ) . ' is from people you\'ve recruited.</p>';
 			}
 		}
+		echo '</div>';
 
 		if ( $my_code ) {
 			self::render_pending_and_finalized_section( $user_id );
@@ -1068,9 +1070,10 @@ class GAS_Frontend {
 			return;
 		}
 
+		echo '<div class="gas-panel">';
 		echo '<h2>Marketing materials</h2>';
 		echo '<p class="gas-fineprint">Ready-to-use images for promoting your link.</p>';
-		echo '<div class="gas-stat-row" style="flex-wrap:wrap;">';
+		echo '<div class="gas-stat-row">';
 		foreach ( $assets as $a ) {
 			$url   = wp_get_attachment_url( $a->attachment_id );
 			$thumb = wp_get_attachment_image( $a->attachment_id, 'medium' );
@@ -1079,6 +1082,7 @@ class GAS_Frontend {
 			}
 			echo '<div style="text-align:center;">' . $thumb . '<br><a href="' . esc_url( $url ) . '" download class="gas-fineprint">' . esc_html( $a->title ) . ' &darr;</a></div>';
 		}
+		echo '</div>';
 		echo '</div>';
 	}
 
@@ -1093,10 +1097,11 @@ class GAS_Frontend {
 		$pending   = GAS_Payouts::pending_tier_counts( $user_id );
 		$finalized = GAS_Payouts::finalized_tier_totals( $user_id );
 
+		echo '<div class="gas-panel">';
 		echo '<h2>Earnings by tier</h2>';
 		echo '<p class="gas-fineprint">This month is still open, so it shows an estimated range rather than an exact amount. Once the month closes, it moves into your finalized total below with the exact dollar amount you earned.</p>';
 
-		echo '<table class="widefat striped"><thead><tr><th>Tier</th><th>This month (pending)</th><th>Finalized (prior months)</th></tr></thead><tbody>';
+		echo '<div class="gas-table-wrap"><table class="gas-table"><thead><tr><th>Tier</th><th>This month (pending)</th><th>Finalized (prior months)</th></tr></thead><tbody>';
 		foreach ( array( 1, 2, 3 ) as $tier ) {
 			$count = $pending[ $tier ];
 			$range = GAS_Payouts::tier_dollar_range( $tier );
@@ -1111,7 +1116,8 @@ class GAS_Frontend {
 			}
 			echo '</td><td>$' . esc_html( number_format( $finalized[ $tier ], 2 ) ) . '</td></tr>';
 		}
-		echo '</tbody></table>';
+		echo '</tbody></table></div>';
+		echo '</div>';
 	}
 
 	/**
@@ -1146,6 +1152,7 @@ class GAS_Frontend {
 			) );
 		}
 
+		echo '<div class="gas-panel">';
 		echo '<h2>Your team</h2>';
 		echo '<p class="gas-fineprint">People you\'ve personally recruited, and the people they\'ve recruited in turn — your own tree only.</p>';
 		echo '<div class="gas-stat-row">';
@@ -1154,15 +1161,16 @@ class GAS_Frontend {
 		echo '</div>';
 
 		if ( $direct ) {
-			echo '<table class="widefat striped"><thead><tr><th>Name</th><th>Contact</th><th>Level</th></tr></thead><tbody>';
+			echo '<div class="gas-table-wrap"><table class="gas-table"><thead><tr><th>Name</th><th>Contact</th><th>Level</th></tr></thead><tbody>';
 			foreach ( $direct as $d ) {
 				self::render_downline_row( $d, 'Direct' );
 			}
 			foreach ( $indirect as $i ) {
 				self::render_downline_row( $i, 'Their recruit' );
 			}
-			echo '</tbody></table>';
+			echo '</tbody></table></div>';
 		}
+		echo '</div>';
 	}
 
 	/**
@@ -1213,9 +1221,11 @@ class GAS_Frontend {
 	}
 
 	private static function render_password_section( $is_previewing = false ) {
+		echo '<div class="gas-panel">';
 		echo '<h2>Change password</h2>';
 		if ( $is_previewing ) {
 			echo '<p class="gas-fineprint">Disabled while previewing &mdash; this would change your own admin password, not this affiliate\'s.</p>';
+			echo '</div>';
 			return;
 		}
 		?>
@@ -1237,6 +1247,7 @@ class GAS_Frontend {
 			<p><button type="submit" class="gas-button">Update password</button></p>
 		</form>
 		<?php
+		echo '</div>';
 	}
 
 	public static function handle_change_password() {
@@ -1278,9 +1289,11 @@ class GAS_Frontend {
 	 * ---------------------------------------------------------------- */
 
 	private static function render_payment_section( $user_id, $is_previewing = false ) {
+		echo '<div class="gas-panel">';
 		echo '<h2>Payment information</h2>';
 		if ( $is_previewing ) {
 			echo '<p class="gas-fineprint">Hidden while previewing &mdash; payout details are only ever visible to the affiliate themselves, never to an admin, even in preview mode.</p>';
+			echo '</div>';
 			return;
 		}
 		$d = GAS_Payouts::get_details( $user_id );
@@ -1357,6 +1370,7 @@ class GAS_Frontend {
 			})();
 		</script>
 		<?php
+		echo '</div>';
 	}
 
 	public static function handle_save_payment_info() {
@@ -1380,9 +1394,11 @@ class GAS_Frontend {
 	 * ---------------------------------------------------------------- */
 
 	private static function render_tax_section( $user_id, $is_previewing = false ) {
+		echo '<div class="gas-panel">';
 		echo '<h2>Tax information</h2>';
 		if ( $is_previewing ) {
 			echo '<p class="gas-fineprint">Hidden while previewing &mdash; same as payment info, this is only ever visible to the affiliate themselves.</p>';
+			echo '</div>';
 			return;
 		}
 		$t = GAS_Payouts::get_tax_info( $user_id );
@@ -1431,6 +1447,7 @@ class GAS_Frontend {
 			})();
 		</script>
 		<?php
+		echo '</div>';
 	}
 
 	public static function handle_save_tax_info() {

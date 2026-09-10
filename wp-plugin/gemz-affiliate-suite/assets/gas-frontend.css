@@ -9,9 +9,33 @@
 .gas-notice-error{background:#fbeaea;color:#7a1f1f;}
 .gas-dashboard h2{margin-top:1.6em;}
 .gas-code-card{border:1.5px solid #CFE3D2;border-radius:6px;padding:1em 1.2em;margin-bottom:1em;}
-.gas-stat-row{display:flex;gap:1.5em;margin-top:.6em;}
-.gas-stat-num{display:block;font-weight:700;font-size:1.4em;}
+.gas-stat-row{display:flex;gap:1.5em;margin-top:.6em;flex-wrap:wrap;}
+.gas-stat-num{display:block;font-weight:700;font-size:1.4em;color:var(--gas-accent,#3F8353);}
 .gas-stat-label{display:block;font-size:.8em;opacity:.75;}
+
+/* Section panels + real data-table styling — added 2026-09-10, replacing
+   dashboard tables that were rendering as bare/unstyled because they used
+   `widefat striped`, a WP-admin-only class with zero CSS on the front
+   end. Visual language deliberately adapted (not copy-pasted, since these
+   are real multi-column <table> markup rather than Home's 2-column grid
+   rows) from Home's own proven .thb-panel/.thb-spec-table/.thb-stat-row
+   patterns (homes.gemzonline.com/content/style.css) — reusing the
+   existing --gas-accent/--gas-accent-tint variables throughout so this
+   stays theme-agnostic rather than hardcoding either site's palette. */
+.gas-panel{background:var(--gas-accent-tint,#F7FBF7);border-radius:10px;padding:1.4em 1.6em;margin:1.6em 0;}
+.gas-panel h2{margin-top:0;padding-bottom:.5em;border-bottom:2px solid var(--gas-accent,#3F8353);}
+.gas-panel:first-child{margin-top:0;}
+.gas-table-wrap{border:1.5px solid var(--gas-accent,#3F8353);border-radius:8px;overflow:hidden;margin:1em 0;background:#fff;}
+.gas-table{width:100%;border-collapse:collapse;font-size:.95em;}
+.gas-table th{background:var(--gas-accent,#3F8353);color:#fff;text-align:left;padding:.8em 1em;font-weight:700;}
+.gas-table td{padding:.8em 1em;border-bottom:1px solid var(--gas-accent-tint,#F7FBF7);}
+.gas-table tbody tr:last-child td{border-bottom:0;}
+.gas-table tbody tr:nth-child(odd){background:var(--gas-accent-tint,#F7FBF7);}
+@media (max-width:600px){
+	.gas-panel{padding:1.1em 1.2em;}
+	.gas-table{font-size:.85em;}
+	.gas-table th,.gas-table td{padding:.6em .7em;}
+}
 
 /* Signup/refer toggle (merged page) — --gas-accent lets each site theme
    this to its own palette (e.g. via that page's Elementor custom CSS)

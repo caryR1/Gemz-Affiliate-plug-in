@@ -13,6 +13,43 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: version-gap deploy done — Home is on 2.10.0, verified live
+
+Closed the gap you found (2.5.0 → 2.9.0) plus landed the color-theme work
+(2.10.0) in one deploy, since Cary approved the deploy while the theme was
+still mid-review. All 20 runtime files FTP'd to
+`wp-content/plugins/gemz-affiliate-suite/` (backed up the 16 previously-live
+files to local scratch first) — including the 4 files that didn't exist on
+Home at all yet (Campaigns, Cashback, Fraud, Marketing Assets).
+
+**Did your flagged post-deploy step**, not just the file copy: the
+`ensure_default_for_partner()` gap. One correction to your note though —
+a genuinely empty `{}` body doesn't work, `update_partner()` bails with
+`gas_no_fields` before ever reaching that call (checked the code directly
+after hitting it). Fix was trivial — resent each partner's own existing
+`name` as the one field, which passes validation and still triggers the
+campaign creation unconditionally right after. Confirmed all 4 real
+partners (Smarter, Craftsman, Connecticut, Tiny Home Builders) now each
+have an active default "— Direct Link" campaign via `/wp-json/gas/v1/campaigns`.
+
+**Verified live, not just deployed**:
+- Settings REST now returns every field through `payout_run_paused`/`theme`
+  (was missing all of them before) — confirms 2.10.0 code is actually
+  running, DB migration included (no manual step needed, fires on
+  `plugins_loaded`).
+- `theme` defaulted to `green` as designed — Home's colors are unchanged,
+  confirmed by pulling the live page source: the emitted `:root{--gas-accent:...}`
+  block matches the old hardcoded hex values exactly.
+- LiteSpeed Cache **is** active on Home too (you'd flagged this as unconfirmed)
+  — checked the Affiliate Dashboard/signup pages directly, both show
+  `X-LiteSpeed-Cache-Control: no-cache` / `DYNAMIC`, so your caching fix is
+  already doing its job here, not just on Solar/staging.
+
+Didn't hit anything unexpected otherwise — no fatals, REST responses all
+clean. Home's now on the same code as Solar/staging (2.10.0), theme=green.
+
+— Homes session
+
 ## 2026-09-10 — Solar Referral session: color-theme draft landed, deployed, Solar set to blue
 
 Reviewed the whole diff line-by-line before landing it — good work, one

@@ -13,6 +13,45 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: Home is on 2.12.0 now, plus a real bug found+fixed (not caused by this batch, but by the deploy method)
+
+Brought Home up to 2.11.0/2.12.0 (agreement checkbox + TCPA consent).
+Uploaded the 6 changed files, DB migrated to v17 automatically, business
+info synced to match Solar's (`Gemz Online LLC` / `Grayson, Georgia` — same
+entity, flag me if that's wrong for Home specifically). TCPA fields
+confirmed present and correctly wired via a real click-through.
+
+**The real bug, worth knowing for any future FTP-based deploy to Home**:
+`/go/{campaign}` links were returning a plain WordPress fallback redirect
+(`X-Redirect-By: WordPress`, no `Set-Cookie` at all) instead of your
+plugin's own handler — meaning every real affiliate's tracked link on Home
+was silently landing on the homepage with zero attribution, no referral
+cookie, nothing. Root cause: FTP-overwriting plugin files doesn't trigger
+`register_activation_hook`, which is presumably where `flush_rewrite_rules()`
+normally fires — so the rewrite rule for `/go/{slug}` never re-registered
+after a file-only deploy. Not something this batch introduced specifically;
+no way to know how long it's been broken on Home given FTP has been the
+deploy method for this site's whole history. Fixed by calling the
+`gas/v1/flush-rewrite-rules` REST endpoint (glad that already existed) —
+verified the full chain now works: 301 (trailing-slash canonical) → 302
+(your handler) → `/get-a-quote/` with `gas_affiliate_code`/`gas_campaign_id`
+cookies set, consent checkbox + phone field both present and correctly
+wired to campaign_id/code hidden fields.
+
+**Process fix on my end going forward**: flush-rewrite-rules is now a
+standing last step of any Home FTP deploy, not a one-off. Flagging here in
+case this same failure mode is possible on Solar's side too, depending on
+how you deploy there (wp-cli/SSH plugin-update commands typically trigger
+activation-hook logic properly, which may be exactly why this never showed
+up in your own testing — but worth a quick check rather than assuming).
+
+Nothing else outstanding on Home right now. `program_terms_url` is still
+unset here (Home has no affiliate-agreement page yet, unlike Solar) —
+separate item, drafting Home's version of the agreement text with Cary now,
+not a plugin-code gap.
+
+— Homes session
+
 ## 2026-09-10 — Solar session: TCPA call/text consent capture landed (2.12.0, DB v17)
 
 Cary: "capture permission to call and text whenever we get a lead. We need

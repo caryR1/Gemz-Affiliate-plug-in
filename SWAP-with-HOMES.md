@@ -13,6 +13,73 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: URGENT — real fulfillment-partner names are leaking to affiliates, not just admin
+
+Cary caught this himself, called it "an important design feature I completely
+overlooked": affiliates should never be able to easily see which real
+fulfillment partner sits behind their tracked link (they could go around us
+and deal with the partner directly, or sign up for the partner's own
+affiliate program if one exists, cutting out the referral markup entirely).
+Real names stay fine in wp-admin (internal, that's normal) — this is purely
+about what an affiliate/the public sees. Scoped this directly with Cary:
+public editorial content (Home's spotlight pages) is explicitly OUT of
+scope — he wants the credibility of real, specific builder content and
+doesn't want a rework. This is narrowly about the affiliate-facing
+experience: dashboard, signup, and — this is the part I want to flag as
+urgent — **the shareable link itself**.
+
+Traced it in the actual code rather than guessing. Three real leak points,
+worst first:
+
+1. **The tracking link an affiliate is told to share contains the real
+   partner name, in plain text, right now.** `GAS_Campaigns::ensure_default_for_partner()`
+   builds `tracking_slug` via `generate_unique_slug($partner->name)` — so
+   Home's real campaigns are literally `craftsman-tiny-homes`,
+   `connecticut-tiny-homes-adu-builder`, `smarter-tiny-homes`,
+   `tiny-home-builders-house-plans`; Solar's is `go-solar-power`. Every
+   affiliate's actual shareable URL (`/go/{that-slug}?ref={code}`) hands the
+   real name to anyone who looks at the link, not just the affiliate. This
+   is the one that actually matters most — the other two are things an
+   affiliate has to look at their own dashboard to see; this one goes out to
+   their whole audience.
+2. `GAS_Frontend::render_stats_section()` (the "Your links" dashboard cards,
+   `class-gas-frontend.php` ~line 1084) prints `$c->partner_name` directly,
+   twice (card header + "About {name}" popover title).
+3. Same section, ~line 1100-1102: a `<a href="{partner_spotlight_url}">See
+   full spotlight →</a>` link — a one-click path straight to the real-named
+   public page. (Public page itself staying up per Cary's scope call above —
+   just shouldn't be handed directly to the affiliate from their dashboard.)
+
+**What I'd propose** (design only, deliberately not touching plugin code
+myself, your call on the real approach):
+- New `partner_alias` column on `wp_gas_partners` — admin-set, e.g. "Modular
+  Housing Partner 1" / "Solar Partner 1". Auto-populate something safe (never
+  blank, never the real name) on migration — maybe `{partner_label} #{id}`
+  from settings as a placeholder — so there's no gap where it silently falls
+  back to showing the real name before an admin fills it in.
+- Dashboard card: swap `partner_name` → `partner_alias`. Simplest fix, given
+  "don't rework everything": just drop the blurb popover and the spotlight
+  link from this specific card rather than trying to write an alias-safe
+  version of each — keeps the card to alias + coverage state + capability
+  icons + their link.
+- `ensure_default_for_partner()`: generate `tracking_slug` from the alias
+  (or a generic `partner-{id}` if no alias set yet) instead of `$partner->name`.
+- **The genuinely hard part, your call**: Home's and Solar's real campaigns
+  already have real-name slugs live, and real affiliates already have those
+  exact links (Home: Mary Jane/John Brown/Test Agent/Christina Henry/
+  cary-robinson's codes; Solar: at least the PayPal-sandbox test affiliate).
+  Simply renaming existing `tracking_slug` values would break every
+  already-shared link. Probably needs the old slug to keep 301-redirecting
+  to the same campaign (so nothing already out in the world breaks) while
+  new slugs going forward use the alias — but that's exactly the kind of
+  judgment call I don't want to make unilaterally on live routing.
+
+Flagging as urgent because this isn't a future risk — it's live on both
+sites' real affiliate accounts right now. Not blocking anything else, just
+didn't want to sit on it.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: Home's affiliate agreement is live, program_terms_url set
 
 Cary confirmed the Home-specific agreement text (`DRAFT-affiliate-agreement-homes.md`)

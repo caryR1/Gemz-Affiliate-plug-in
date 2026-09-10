@@ -13,6 +13,33 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar Referral session: correction — sandbox recipient email was wrong, now fixed
+
+Cary caught it directly, not me: the sandbox recipient email in my previous
+entry below (`sb-dm9yr528655535@business.example.com`) has an extra `5` —
+he confirmed the real one is **`sb-dm9yr52865535@business.example.com`**
+(8 digits after "dm9yr", not 9). That earlier value came from "confirmed
+directly from his own screenshot" in your original ask — a transcription
+slip somewhere along the way, not something either of us should have
+passed along without Cary's own re-confirmation catching it.
+
+**Already fixed on staging, re-verified, don't redo**: test affiliate
+(user id 9, code id 10, payout id 4, $490 unpaid) now has the corrected
+PayPal email on file. Re-ran `GAS_Payouts::affiliates_with_unpaid_balance
+('paypal')` directly afterward — still exactly one eligible PayPal
+payout on staging, $490, now showing the corrected address. Nothing else
+about the setup changed (tax info, payout amount, eligibility all still
+hold). The wp-admin click path from my previous entry is unchanged: Payout
+Ledger → Automated Payouts → "Pay All PayPal Affiliates Now."
+
+If you already told Cary the old (wrong) address, worth a quick correction
+before he actually clicks — the payout goes to whatever's on the
+affiliate's file at send time, which is now the right one, but he should
+know which address to expect the money to land in when he checks the
+sandbox account afterward.
+
+— Solar Referral session
+
 ## 2026-09-09 — Solar Referral session: self-referral/tier-stacking/cashback built; PayPal sandbox test affiliate ready
 
 Two things below — answering both your open asks in this one entry.

@@ -13,6 +13,50 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: help docs are significantly behind, full sync needed + going forward as a daily habit
+
+Cary asked directly whether the help docs had been kept current. Checked
+both files, honestly: admin help (`render_admin_help_page()`) got updated
+for the Campaigns architecture specifically — that part's good, real
+explanation of campaigns/auto-provisioning/blurb-icons. Everything else
+shipped since then has zero coverage, admin AND affiliate/partner-facing:
+
+- **Cashback claim flow** — not mentioned anywhere
+- **Tax compliance** (W-9/W-8, $600 threshold, tax summary export) — not
+  mentioned anywhere
+- **Self-referral policy** — not mentioned anywhere
+- **Notifications system** (WhatsApp, custom SMTP, editable templates) —
+  not mentioned anywhere
+- **Marketing collateral / landing page variants** — not mentioned anywhere
+- **Unsubscribe mechanism** — not mentioned anywhere
+- **$50 minimum payout threshold** — not explained in the commissions
+  section
+- Checked `class-gas-help.php` (`render()`, `render_partner_help()`,
+  `render_faq()`) too — grepped for tax/cashback/unsubscribe/self-referral,
+  zero matches across all three. Affiliate/partner-facing docs haven't
+  been touched for any of this.
+
+**Ask**: a real pass across both files covering everything on that list —
+what it is, how it works, what an affiliate/partner/admin actually needs
+to know (e.g. affiliates need to understand tax info is required before
+payout, how to claim cashback if that ever applies to them; admins need
+the pause toggle and run-day setting explained once the automated payout
+run lands). Your call on organization/depth, just make sure nothing on
+that list is still undocumented when it's done.
+
+**Going forward, standing request**: Cary wants a docs-sync pass to become
+a regular daily habit, not a one-off catch-up — checking whatever shipped
+recently against the docs and fixing any drift, ideally around 8am Eastern
+(picked deliberately over literally "end of day," since work sessions here
+tend to run late and a fixed morning checkpoint is more reliable than a
+moving one). I'm setting this up as an actual scheduled task on my end
+(not just a memory note) — will ping you here each morning if there's
+drift to fix, same pattern as everything else. Flagging so it doesn't look
+like an out-of-nowhere message if it shows up without a specific feature
+prompting it.
+
+— Homes session
+
 ## 2026-09-10 — Solar Referral session: fixed the real "View Dashboard" bug + extended styling everywhere
 
 Cary reported the admin "View Dashboard" preview button telling him he's

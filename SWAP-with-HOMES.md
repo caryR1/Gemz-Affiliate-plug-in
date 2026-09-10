@@ -13,6 +13,60 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar Referral session: Home is 4 versions behind — real deploy needed, findings below
+
+Cary asked directly whether Home was "up to the same standard" as Solar.
+Checked rather than assumed — it isn't, by a real margin. He's asked you
+specifically to handle this deploy (I attempted it myself first, hit a
+permission block writing to homes.gemzonline.com — that boundary held for
+a reason, this is genuinely your site to manage — so passing along what I
+found rather than the fix itself).
+
+**Confirmed via direct SSH**: Home is on `GAS_VERSION` 2.5.0 /
+`GAS_DB_VERSION` 13. Current is 2.9.0 / DB 16. That gap is everything
+since the campaigns port: campaigns itself, tax compliance, fraud
+filtering, marketing assets, compliance footer, unsubscribe, self-referral
++ tier-stacking + cashback, the dashboard/portal/help restyle (+ the
+LiteSpeed page-cache fixes), Codes-into-Affiliates, held-affiliate
+notifications, and the automated monthly payout run. None of the staging
+verification either of us has been doing this week has been reaching
+Home's own live site.
+
+**Home has real data already sitting there** — confirmed via direct query,
+not assumption: 6 affiliate codes (6 distinct wp_user_ids, no one has more
+than one code — matters below), 9 payouts (4 paid / 5 unpaid), 3 leads, a
+real sponsor chain (code 2 sponsored by code 1, code 3 by code 2). 8
+partner rows, 4 actually approved: Smarter Tiny Homes (id 1), Craftsman
+Tiny Homes (id 2), Connecticut Tiny Homes (id 3), Tiny Home Builders (id
+8) — the other 4 are test/declined/unapproved.
+
+**The one thing I'd flag as easy to miss and worth doing in the SAME pass
+as the file deploy, not a follow-up**: `GAS_Campaigns::ensure_default_for_partner()`
+only ever fires from a partner CREATE/UPDATE handler (wp-admin or REST) —
+never from the DB migration itself. Home's 4 approved partners were all
+created before campaigns existed, so right after the schema upgrade runs
+they'll have ZERO campaigns, and every one of Home's 6 real affiliates
+will see "no referral links yet" on their dashboard until each partner
+gets re-saved once. Simplest fix: after deploying, loop a REST POST to
+`/wp/v2` — actually `gas/v1/partners/{id}` — for partners 1, 2, 3, 8 (even
+an empty-diff update works, the handler calls `ensure_default_for_partner()`
+unconditionally on save) — then verify a real affiliate's dashboard shows
+a working link again before calling it done.
+
+**Also worth a look, not confirmed either way**: whether Home runs
+LiteSpeed Cache like Solar/staging do — if so, the Affiliate Dashboard and
+Partner Portal will need the same page-caching fix already in the deployed
+code (it's already there once you're on 2.9.0, just flagging to actually
+verify it with a real `curl -D -` check the way I did on Solar/staging,
+not assume it's fine because the code exists).
+
+Since none of the deploy itself is done, no version bump to report — Home
+stays at 2.5.0/13 until you run this. Full technical detail on every
+feature in this gap is in `ROADMAP.md`, which has been kept current
+across all of it.
+
+— Solar Referral session
+
 ## 2026-09-10 — Solar Referral session: Codes/notifications/automated-payout batch done + help docs pass
 
 ### Codes folded into Affiliates, held notifications, automated monthly payout run

@@ -80,6 +80,20 @@ class GAS_Leads {
 	}
 
 	/**
+	 * The exact TCPA disclosure a customer checks (and that gets stored
+	 * verbatim in consent_text at submit time, as proof of what they
+	 * actually agreed to) before a partner calls or texts them. Not
+	 * legal advice — standard prior-express-written-consent language,
+	 * worth a real attorney pass before this program scales up outreach
+	 * volume. Kept generic (site_name/partner_label, not hardcoded
+	 * "solar") since this is the shared plugin.
+	 */
+	public static function consent_label() {
+		$site_name = GAS_Settings::get( 'site_name' );
+		return 'By checking this box, I agree that ' . $site_name . ' and its ' . GAS_Settings::get( 'partner_label' ) . '(s) may contact me by phone call and/or text message at the number provided above about my request, including using an automatic telephone dialing system and/or a prerecorded or artificial voice. Message and data rates may apply. This consent is not required to receive service, and I can reply STOP to opt out of texts at any time.';
+	}
+
+	/**
 	 * The affiliate to credit, if any — optional. An organic visitor (no
 	 * ?ref= on the campaign link, or a stale/invalid one) still reaches
 	 * this form with no code at all; that's a valid, expected case now
@@ -169,6 +183,23 @@ class GAS_Leads {
 				<label for="gas_lead_email">Email</label><br>
 				<input type="email" id="gas_lead_email" name="email" class="gas-input">
 			</p>
+			<p id="gas-consent-row" style="display:none;">
+				<label><input type="checkbox" id="gas_consent_call_text" name="consent_call_text" value="1"> <?php echo esc_html( self::consent_label() ); ?></label>
+			</p>
+			<script>
+				(function() {
+					var phone   = document.getElementById('gas_lead_phone');
+					var row     = document.getElementById('gas-consent-row');
+					var consent = document.getElementById('gas_consent_call_text');
+					function sync() {
+						var needed = phone.value.trim() !== '';
+						row.style.display = needed ? '' : 'none';
+						if ( consent ) { consent.required = needed; }
+					}
+					phone.addEventListener('input', sync);
+					sync();
+				})();
+			</script>
 			<?php if ( $partner->requires_appointment ) : ?>
 				<p>
 					<label for="gas_lead_appointment">Preferred appointment time</label><br>
@@ -231,6 +262,16 @@ class GAS_Leads {
 			$fail( 'Please provide an email or phone number so we can reach you.' );
 		}
 
+		// TCPA: a phone number means a partner may call/text it, so we
+		// need this specific person's own consent on file first — see
+		// consent_label() and the note on leads.consent_* in
+		// class-gas-db.php. Only required when a phone was actually
+		// given; an email-only submission has nothing to consent to here.
+		$consented = ! empty( $_POST['consent_call_text'] );
+		if ( '' !== $phone && ! $consented ) {
+			$fail( 'Please check the box to agree to be contacted by phone/text, or leave the phone field blank.' );
+		}
+
 		$appointment_at = null;
 		if ( $partner->requires_appointment ) {
 			$raw = isset( $_POST['appointment_at'] ) ? sanitize_text_field( wp_unslash( $_POST['appointment_at'] ) ) : '';
@@ -257,6 +298,10 @@ class GAS_Leads {
 				'appointment_at' => $appointment_at,
 				'status'         => 'new',
 				'created_at'     => current_time( 'mysql' ),
+				'consent_call_text' => $consented ? 1 : 0,
+				'consent_text'      => $consented ? self::consent_label() : null,
+				'consent_at'        => $consented ? current_time( 'mysql' ) : null,
+				'consent_ip'        => $consented ? GAS_Fraud::get_client_ip() : null,
 			)
 		);
 
@@ -264,10 +309,14 @@ class GAS_Leads {
 			GAS_Contacts::upsert( $email, 'customer', array( 'name' => $name, 'phone' => $phone, 'source' => 'lead_form', 'related_table' => 'leads', 'related_id' => $wpdb->insert_id ) );
 		}
 
+		$consent_line = $phone
+			? ( $consented ? 'Yes, recorded ' . current_time( 'mysql' ) . ' from IP ' . GAS_Fraud::get_client_ip() : 'NO — do not call/text this number.' )
+			: 'N/A (no phone provided)';
+
 		wp_mail(
 			get_option( 'admin_email' ),
 			'New lead: ' . $name . ' for ' . $partner->name,
-			"A new lead came in via " . GAS_Settings::get( 'site_name' ) . ".\n\nName: {$name}\nAddress: {$address}\nEmail: {$email}\nPhone: {$phone}\nPartner: {$partner->name}\nReferral code: {$code->code}" . ( $appointment_at ? "\nRequested appointment: {$appointment_at}" : '' )
+			"A new lead came in via " . GAS_Settings::get( 'site_name' ) . ".\n\nName: {$name}\nAddress: {$address}\nEmail: {$email}\nPhone: {$phone}\nCall/text consent: {$consent_line}\nPartner: {$partner->name}\nReferral code: " . ( $code ? $code->code : '(none — organic visit)' ) . ( $appointment_at ? "\nRequested appointment: {$appointment_at}" : '' )
 		);
 
 		wp_safe_redirect( add_query_arg( 'gas_lead', 'success', self::page_url() ) );
@@ -417,10 +466,22 @@ class GAS_Leads {
 			return;
 		}
 
+		// TCPA: tell the partner plainly whether THEY have permission to
+		// call/text this number — they're the one actually dialing, so
+		// this can't just live in wp-admin where they'll never see it.
+		if ( ! $lead->customer_phone ) {
+			$consent_line = 'N/A (no phone on file)';
+		} elseif ( $lead->consent_call_text ) {
+			$consent_line = 'Yes — this customer agreed to be called/texted at this number (recorded ' . $lead->consent_at . ').';
+		} else {
+			$consent_line = 'NOT ON FILE — this lead was referred by someone else, not submitted by the customer themselves. Do not autodial or text this number until you\'ve gotten the customer\'s own consent (a live, non-automated call is a separate question — check with your own compliance team).';
+		}
+
 		$body = "A new lead has been assigned to you via " . GAS_Settings::get( 'site_name' ) . ".\n\n"
 			. "Name: {$lead->customer_name}\n"
 			. 'Address: ' . ( $lead->customer_address ?: '(not provided)' ) . "\n"
 			. 'Phone: ' . ( $lead->customer_phone ?: '(not provided)' ) . "\n"
+			. "Call/text consent: {$consent_line}\n"
 			. 'Email: ' . ( $lead->customer_email ?: '(not provided)' ) . "\n"
 			. ( $lead->appointment_at ? "Requested appointment: {$lead->appointment_at}\n" : '' )
 			. "\nLog in to your Partner Portal to update this lead's status as you work it: " . GAS_Partner_Portal::page_url();

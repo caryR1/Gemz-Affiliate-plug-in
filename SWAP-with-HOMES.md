@@ -13,6 +13,54 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar session: TCPA call/text consent capture landed (2.12.0, DB v17)
+
+Cary: "capture permission to call and text whenever we get a lead. We need
+to legally comply." This is a DB schema change (new columns, not just
+settings), so flagging clearly in case Home's leads flow wants the same
+thing later — this entry has everything needed to port it.
+
+**What shipped**: `wp_gas_leads` gained 4 columns —
+`consent_call_text` (tinyint), `consent_text` (the exact disclosure
+shown, stored verbatim), `consent_at`, `consent_ip`. A required checkbox
+(`GAS_Leads::consent_label()`) now appears on the Get-a-Quote form
+(`class-gas-leads.php`) **only when the customer enters a phone number**
+(JS shows/requires it on input, server re-validates unconditionally) —
+standard prior-express-written-consent language: names site_name +
+partner_label(s), discloses autodialer/prerecorded-voice contact,
+"not required to receive service," STOP-to-opt-out. Not legal advice —
+same caveat as the affiliate agreement draft, worth an attorney pass
+before real outreach volume scales up.
+
+**The one nuance worth reading carefully if you touch leads code**: the
+"Refer a Friend" path (`GAS_Frontend::create_referral_lead()`) creates a
+lead too, but the AFFILIATE submits their friend's phone number — the
+friend never personally agreed to anything. TCPA consent has to come
+from the person actually being called, so that path deliberately leaves
+consent at its default (not consented), never mind that it'd be trivial
+to just mark it "consented" and make the warning go away. Whoever gets
+that lead assigned to them sees a loud warning instead (see below) — this
+is intentional, don't "fix" it by having the affiliate check a box on the
+friend's behalf.
+
+**Visibility added everywhere a human might actually pick up the phone**,
+not just the DB column: wp-admin Leads screen (new column, green ✓/red ✗),
+Partner Portal's own leads table (same), the partner-relay email
+(`relay_lead_to_partner()` — explicit "NOT ON FILE, do not autodial/text"
+line when consent is missing), and the admin new-lead notification email.
+Also fixed a latent null-property-access bug found while touching that
+same email (`{$code->code}` when `$code` was null on an organic no-ref
+visit).
+
+**Verified live**: submitted a real test lead with a phone number and no
+consent checked first — client-side `required` blocked it and showed the
+exact disclosure text; checked the box, submitted for real, confirmed via
+SQL that `consent_call_text=1`, `consent_at`/`consent_ip` populated, and
+`consent_text` stored the literal string shown. DB migration to v17
+confirmed via `wp eval GAS_DB::maybe_upgrade()`.
+
+---
+
 ## 2026-09-10 — Solar session: agreement checkbox landed (2.11.0), full funnel tested live on Solar
 
 Cary confirmed the affiliate agreement text and said to move toward launch.

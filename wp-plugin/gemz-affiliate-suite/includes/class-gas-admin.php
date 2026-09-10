@@ -1034,12 +1034,21 @@ class GAS_Admin {
 
 		$partners = $wpdb->get_results( "SELECT id, name, requires_appointment FROM {$partners_table} WHERE outreach_status = 'approved' ORDER BY name ASC" );
 
-		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Address</th><th>State</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
+		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Call/text consent</th><th>Address</th><th>State</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
 		foreach ( $rows as $l ) {
 			echo '<tr>';
 			echo '<td>' . esc_html( $l->created_at ) . '</td>';
 			echo '<td>' . esc_html( $l->customer_name ) . '</td>';
 			echo '<td>' . esc_html( $l->customer_email ) . ( $l->customer_email && $l->customer_phone ? '<br>' : '' ) . esc_html( $l->customer_phone ) . '</td>';
+			echo '<td>';
+			if ( ! $l->customer_phone ) {
+				echo '&mdash;';
+			} elseif ( $l->consent_call_text ) {
+				echo '<span style="color:#1a7a3a;">&#10003; Yes</span><br><span style="font-size:.85em;opacity:.75;">' . esc_html( $l->consent_at ) . '</span>';
+			} else {
+				echo '<span style="color:#a11;font-weight:600;" title="' . esc_attr__( 'Not on file — do not autodial or text this number.', 'gas' ) . '">&#10007; No</span>';
+			}
+			echo '</td>';
 			echo '<td>' . ( $l->customer_address ? esc_html( $l->customer_address ) : '&mdash;' ) . '</td>';
 			echo '<td>' . ( $l->customer_state ? esc_html( $l->customer_state ) : '&mdash;' ) . '</td>';
 			if ( $l->partner_id ) {

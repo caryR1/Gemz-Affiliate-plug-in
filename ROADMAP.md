@@ -7,7 +7,21 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.11.0 / `GAS_DB_VERSION`: 16.
+`GAS_VERSION`: 2.12.0 / `GAS_DB_VERSION`: 17.
+
+**Same day, latest**: Cary asked for TCPA call/text consent capture on
+every lead ("we need to legally comply"). `wp_gas_leads` gained 4 columns
+(`consent_call_text`/`consent_text`/`consent_at`/`consent_ip`); the
+Get-a-Quote form now shows a required consent checkbox whenever a phone
+number is entered, storing the exact disclosure text shown. Consent
+status is now visible everywhere a human might place the call: wp-admin
+Leads screen, Partner Portal, and both the admin and partner-relay
+notification emails (with an explicit "do not autodial/text" warning when
+missing). One important nuance: the "Refer a Friend" path can't capture
+real consent, since the affiliate submits the FRIEND's number, not their
+own — that path deliberately stays unconsented rather than faking it, and
+the partner sees a warning instead. Full detail + the reasoning on the
+Refer-a-Friend nuance in `SWAP-with-HOMES.md`'s matching entry.
 
 **Same day, even later**: Cary confirmed the affiliate agreement text and
 moved toward launch on Solar — published `DRAFT-affiliate-agreement.md` as

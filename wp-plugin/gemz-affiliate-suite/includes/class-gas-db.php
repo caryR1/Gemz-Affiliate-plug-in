@@ -80,6 +80,18 @@ class GAS_DB {
 	 * admin having to build a campaign by hand first — GRC has no
 	 * equivalent auto-provisioning, since campaign creation there is
 	 * always a manual admin step.
+	 *
+	 * Note on leads.consent_* (2026-09-10): TCPA compliance — before a
+	 * partner calls or texts a lead, we need proof THAT lead personally
+	 * agreed to it. `consent_call_text`/`consent_text`/`consent_at`/
+	 * `consent_ip` are only ever set by GAS_Leads::handle_submit(), i.e.
+	 * a customer directly filling out the on-site Get a Quote form
+	 * themselves — see GAS_Leads::consent_label() for the exact
+	 * disclosure they check and consent_text stores. A lead created by
+	 * GAS_Frontend::create_referral_lead() (the "refer a friend" path)
+	 * deliberately leaves these at their defaults: the affiliate
+	 * submitting a friend's phone number is not that friend, and cannot
+	 * consent on their behalf — see the comment there.
 	 */
 	private static function create_tables() {
 		global $wpdb;
@@ -230,6 +242,10 @@ class GAS_DB {
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NULL,
+			consent_call_text TINYINT(1) NOT NULL DEFAULT 0,
+			consent_text TEXT NULL,
+			consent_at DATETIME NULL,
+			consent_ip VARCHAR(45) NULL,
 			PRIMARY KEY  (id),
 			KEY partner_id (partner_id),
 			KEY code_id (code_id),

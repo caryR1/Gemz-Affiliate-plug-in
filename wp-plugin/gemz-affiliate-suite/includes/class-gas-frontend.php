@@ -769,6 +769,13 @@ class GAS_Frontend {
 	 */
 	private static function create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address = '', $friend_state = '' ) {
 		global $wpdb;
+		// consent_call_text intentionally left at its default (0/not
+		// consented) here — the affiliate is submitting their FRIEND's
+		// phone number, not their own, and TCPA consent has to come from
+		// the person actually being called/texted. See the note on
+		// leads.consent_* in class-gas-db.php and
+		// GAS_Leads::relay_lead_to_partner(), which warns whoever gets
+		// this lead assigned to them not to autodial/text it.
 		$wpdb->insert(
 			GAS_DB::table( 'leads' ),
 			array(

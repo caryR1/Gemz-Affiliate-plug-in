@@ -11,8 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GAS_VERSION', '2.11.0' );
-define( 'GAS_DB_VERSION', '16' );
+define( 'GAS_VERSION', '2.12.0' );
+define( 'GAS_DB_VERSION', '17' );
 define( 'GAS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GAS_PLUGIN_FILE', __FILE__ );
 

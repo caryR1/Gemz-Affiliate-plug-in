@@ -113,11 +113,20 @@ class GAS_Partner_Portal {
 		if ( ! $leads ) {
 			echo '<p>No leads yet &mdash; they\'ll show up here as they come in.</p>';
 		} else {
-			echo '<div class="gas-table-wrap"><table class="gas-table"><thead><tr><th>Customer</th><th>Contact</th><th>Address</th><th>Appointment</th><th>Status</th><th>Received</th></tr></thead><tbody>';
+			echo '<div class="gas-table-wrap"><table class="gas-table"><thead><tr><th>Customer</th><th>Contact</th><th>Call/text consent</th><th>Address</th><th>Appointment</th><th>Status</th><th>Received</th></tr></thead><tbody>';
 			foreach ( $leads as $l ) {
 				echo '<tr>';
 				echo '<td>' . esc_html( $l->customer_name ) . '</td>';
 				echo '<td>' . esc_html( $l->customer_email ) . ( $l->customer_email && $l->customer_phone ? '<br>' : '' ) . esc_html( $l->customer_phone ) . '</td>';
+				echo '<td>';
+				if ( ! $l->customer_phone ) {
+					echo '&mdash;';
+				} elseif ( $l->consent_call_text ) {
+					echo '<strong style="color:#1a7a3a;">Yes</strong>';
+				} else {
+					echo '<strong style="color:#a11;">No &mdash; do not autodial/text</strong>';
+				}
+				echo '</td>';
 				echo '<td>' . ( $l->customer_address ? esc_html( $l->customer_address ) : '&mdash;' ) . '</td>';
 				echo '<td>' . ( $l->appointment_at ? esc_html( $l->appointment_at ) : '&mdash;' ) . '</td>';
 				echo '<td>';

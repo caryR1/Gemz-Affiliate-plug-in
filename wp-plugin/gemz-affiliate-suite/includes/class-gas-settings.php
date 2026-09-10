@@ -114,6 +114,24 @@ class GAS_Settings {
 			'tint'   => '#F0EFFB',
 			'border' => '#D6D5F2',
 		),
+		// 2 more presets (2026-09-10, Cary's request) — no new mechanism
+		// needed, both the admin Settings picker and the affiliate
+		// dashboard's own picker already loop over this array, so adding
+		// entries here is the entire change.
+		'pink'        => array(
+			'label'  => 'Pink',
+			'accent' => '#D6336C',
+			'dark'   => '#8A1F49',
+			'tint'   => '#FBEEF2',
+			'border' => '#F2C6D9',
+		),
+		'pink_purple' => array(
+			'label'  => 'Pink & Purple',
+			'accent' => '#B83280',
+			'dark'   => '#6B1D4C',
+			'tint'   => '#FAEEF6',
+			'border' => '#EFC6E4',
+		),
 	);
 
 	/**
@@ -125,7 +143,19 @@ class GAS_Settings {
 	 * themeable element with no color at all.
 	 */
 	public static function theme_css_vars() {
-		$key     = self::get( 'theme' );
+		return self::theme_css_vars_for( self::get( 'theme' ) );
+	}
+
+	/**
+	 * Same as theme_css_vars() but for an explicit theme key rather than
+	 * this site's configured default — added 2026-09-10 so a logged-in
+	 * affiliate's own personal dashboard-theme preference (see
+	 * GAS_Frontend::render_theme_preference_section(), stored as the
+	 * `gas_dashboard_theme` user meta key) can override the site theme on
+	 * their own dashboard view only, without touching the site-wide
+	 * setting every other page still uses.
+	 */
+	public static function theme_css_vars_for( $key ) {
 		$palette = isset( self::THEMES[ $key ] ) ? self::THEMES[ $key ] : self::THEMES['green'];
 
 		return sprintf(

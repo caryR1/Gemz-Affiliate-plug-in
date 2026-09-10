@@ -22,6 +22,7 @@ class GAS_Frontend {
 		add_action( 'admin_post_gas_change_password', array( __CLASS__, 'handle_change_password' ) );
 		add_action( 'admin_post_gas_save_payment_info', array( __CLASS__, 'handle_save_payment_info' ) );
 		add_action( 'admin_post_gas_save_tax_info', array( __CLASS__, 'handle_save_tax_info' ) );
+		add_action( 'admin_post_gas_save_dashboard_theme', array( __CLASS__, 'handle_save_dashboard_theme' ) );
 	}
 
 	/**
@@ -77,7 +78,34 @@ class GAS_Frontend {
 					// themeable color in gas-frontend.css keys off these
 					// --gas-accent* custom properties, so overriding them
 					// here is the entire mechanism, no per-page CSS needed.
-					wp_add_inline_style( 'gas-frontend', GAS_Settings::theme_css_vars() );
+					// An affiliate's own dashboard is the one exception: if
+					// they've picked a personal theme (see
+					// render_theme_preference_section()), it overrides the
+					// site default on their dashboard view only — every
+					// other page (signup, help, partner portal, etc.) always
+					// uses the site-wide theme regardless of who's logged in.
+					// Resolves the SAME effective user render_dashboard()
+					// does (real affiliate id even under admin preview, via
+					// GAS_Roles::get_admin_preview()) so an admin previewing
+					// an affiliate sees that affiliate's own chosen theme,
+					// not their own admin account's (which has none set).
+					$css_vars   = GAS_Settings::theme_css_vars();
+					$view_as_id = 0;
+					if ( 'gas_affiliate_dashboard' === $tag ) {
+						$preview = GAS_Roles::get_admin_preview();
+						if ( $preview && 'agent' === $preview['type'] ) {
+							$view_as_id = (int) $preview['id'];
+						} elseif ( is_user_logged_in() ) {
+							$view_as_id = get_current_user_id();
+						}
+					}
+					if ( $view_as_id ) {
+						$user_theme = get_user_meta( $view_as_id, 'gas_dashboard_theme', true );
+						if ( $user_theme && isset( GAS_Settings::THEMES[ $user_theme ] ) ) {
+							$css_vars = GAS_Settings::theme_css_vars_for( $user_theme );
+						}
+					}
+					wp_add_inline_style( 'gas-frontend', $css_vars );
 					break;
 				}
 			}
@@ -964,9 +992,10 @@ class GAS_Frontend {
 
 		if ( isset( $_GET['gas_notice'] ) ) {
 			$notices = array(
-				'password_updated'  => 'Password updated.',
-				'payment_updated'   => 'Payment information saved.',
-				'tax_info_updated'  => 'Tax information submitted — thank you.',
+				'password_updated'       => 'Password updated.',
+				'payment_updated'        => 'Payment information saved.',
+				'tax_info_updated'       => 'Tax information submitted — thank you.',
+				'dashboard_theme_updated' => 'Dashboard color updated.',
 			);
 			$key = sanitize_text_field( wp_unslash( $_GET['gas_notice'] ) );
 			if ( isset( $notices[ $key ] ) ) {
@@ -994,6 +1023,7 @@ class GAS_Frontend {
 		self::render_stats_section( $user_id );
 		self::render_marketing_assets_section( $user_id );
 		self::render_downline_section( $user_id );
+		self::render_theme_preference_section( $user_id, $is_previewing );
 		self::render_password_section( $is_previewing );
 		self::render_payment_section( $user_id, $is_previewing );
 		self::render_tax_section( $user_id, $is_previewing );
@@ -1081,11 +1111,15 @@ class GAS_Frontend {
 				$click_count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$clicks_table} WHERE campaign_id = %d AND code_id = %d", $c->id, $my_code->id ) );
 
 				echo '<div class="gas-code-card">';
-				echo '<p><strong>' . esc_html( $c->partner_name ) . '</strong>';
-				if ( $c->partner_blurb ) {
-					echo ' ' . self::render_popover_icon( 'dashicons-info-outline', 'About ' . $c->partner_name, $c->partner_blurb, 'gas-info-toggle' );
-				}
-				echo '</p>';
+				// Alias only, never $c->partner_name — an affiliate is
+				// deliberately never shown which real fulfillment partner
+				// sits behind their link (they could go around us and
+				// deal with the partner directly). Same reason the blurb
+				// popover and "See full spotlight" link that used to be
+				// here are gone: both are real-name-identifying admin
+				// copy that can't be made alias-safe automatically. See
+				// the note on partners.partner_alias in class-gas-db.php.
+				echo '<p><strong>' . esc_html( $c->partner_alias ) . '</strong></p>';
 
 				if ( $c->partner_state ) {
 					$states = implode( ', ', array_map( 'trim', explode( ',', $c->partner_state ) ) );
@@ -1095,10 +1129,6 @@ class GAS_Frontend {
 				$icons = self::render_capability_icons( $c->partner_capability_tags, $c->partner_requires_appointment );
 				if ( $icons ) {
 					echo '<p class="gas-capability-icons">' . $icons . '</p>';
-				}
-
-				if ( $c->partner_spotlight_url ) {
-					echo '<p><a href="' . esc_url( $c->partner_spotlight_url ) . '">See full spotlight &rarr;</a></p>';
 				}
 
 				echo '<p>Your link: <code>' . esc_html( $link ) . '</code></p>';
@@ -1303,6 +1333,60 @@ class GAS_Frontend {
 		echo '<td>' . ( $user ? esc_html( $user->user_email ) : '' ) . ( $phone ? '<br>' . esc_html( $phone ) : '' ) . '</td>';
 		echo '<td>' . esc_html( $level ) . '</td>';
 		echo '</tr>';
+	}
+
+	/**
+	 * Lets an affiliate pick their own dashboard color, independent of
+	 * this site's configured theme (GAS_Settings::get('theme')) — added
+	 * 2026-09-10 per Cary's direct request. Purely cosmetic/personal: it
+	 * only changes how THIS affiliate's own dashboard renders for them
+	 * (see the enqueue_assets() override), never the public-facing site
+	 * theme every other visitor/page still uses. Stored as the
+	 * `gas_dashboard_theme` user meta key; empty means "use the site
+	 * theme," not "green" specifically, so it stays correct automatically
+	 * if the site's own theme is ever changed later.
+	 */
+	private static function render_theme_preference_section( $user_id, $is_previewing = false ) {
+		echo '<div class="gas-panel">';
+		echo '<h2>Dashboard color</h2>';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">Disabled while previewing &mdash; this affiliate\'s own choice is already applied above, changing it here would affect their account, not yours.</p>';
+			echo '</div>';
+			return;
+		}
+		$current = get_user_meta( $user_id, 'gas_dashboard_theme', true ) ?: GAS_Settings::get( 'theme' );
+		echo '<p class="gas-fineprint">Only changes how your own dashboard looks to you &mdash; the rest of the site stays as-is.</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'gas_save_dashboard_theme' );
+		echo '<input type="hidden" name="action" value="gas_save_dashboard_theme">';
+		echo '<div style="display:flex;gap:1em;flex-wrap:wrap;margin:.6em 0 1em;">';
+		foreach ( GAS_Settings::THEMES as $key => $palette ) {
+			$checked = checked( $current, $key, false );
+			echo '<label style="display:flex;align-items:center;gap:.5em;border:1.5px solid ' . ( $current === $key ? esc_attr( $palette['accent'] ) : '#dcdcde' ) . ';border-radius:8px;padding:.6em 1em;cursor:pointer;">';
+			echo '<input type="radio" name="theme" value="' . esc_attr( $key ) . '"' . $checked . '> ';
+			echo '<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:' . esc_attr( $palette['accent'] ) . ';border:1px solid rgba(0,0,0,.15);"></span> ';
+			echo esc_html( $palette['label'] );
+			echo '</label>';
+		}
+		echo '</div>';
+		echo '<p><button type="submit" class="gas-button">Save color</button></p>';
+		echo '</form>';
+		echo '</div>';
+	}
+
+	public static function handle_save_dashboard_theme() {
+		if ( ! is_user_logged_in() ) {
+			wp_die( 'Please log in first.' );
+		}
+		check_admin_referer( 'gas_save_dashboard_theme' );
+
+		$theme = isset( $_POST['theme'] ) ? sanitize_text_field( wp_unslash( $_POST['theme'] ) ) : '';
+		if ( array_key_exists( $theme, GAS_Settings::THEMES ) ) {
+			update_user_meta( get_current_user_id(), 'gas_dashboard_theme', $theme );
+		}
+
+		wp_safe_redirect( add_query_arg( 'gas_notice', 'dashboard_theme_updated', self::dashboard_url() ) );
+		exit;
 	}
 
 	private static function render_password_section( $is_previewing = false ) {

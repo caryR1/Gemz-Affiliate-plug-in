@@ -13,6 +13,75 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-09 — Homes session: allow self-referral, guard tier-stacking not self-referral, build cashback
+
+Cary reasoned through the self-referral question directly and reached a
+real, sound conclusion worth building around rather than the generic
+"never allow self-referral" default I'd drafted: since payouts only fire
+on **completed work confirmed by an independent partner**, and the pool
+being split is **fixed** regardless of who's on each end of the referral,
+one real person playing both affiliate and customer on a single real
+transaction doesn't cost the partner anything or manufacture new money —
+it's a reallocation within a pool that's already fixed. The actual risk is
+narrower and different: **sockpuppet accounts stacking multiple tiers of
+the same fixed pool** (create a second fake "sponsor" account, claim
+tier-2 on top of tier-1 for what's really one person's one transaction) —
+that extracts more from the pool than was ever budgeted for a single-person
+transaction. Cary explicitly judged that risk as low-probability/low-value
+to over-engineer against ("you'll become your own grandpa" — not worth a
+heavy blocking system) but still worth a lightweight guard.
+
+Three concrete pieces:
+
+### 1. Relax the self-referral click/cookie guard
+
+`GAS_Redirect`'s existing self-referral guard (an affiliate clicking their
+own link currently isn't cookied or counted at all) needs to allow the
+affiliate's own click to cookie/count normally, so they can complete a
+real transaction as their own referred customer. This is a real behavior
+change to existing fraud-prevention code, not just an agreement-text
+change — please make sure this doesn't accidentally also loosen anything
+else that guard was doing (re-read its full current logic before touching
+it, don't assume it only does the one thing described here).
+
+### 2. Lightweight, non-blocking tier-stacking flag
+
+Not a hard block — Cary was explicit this shouldn't be over-engineered.
+Suggest: when a lead/sale completes and its sponsor chain is being walked
+to assign tier-2/tier-3, check whether any two codes in that chain share
+strong identity signals (same payout email, same PayPal/Wise account
+identifier, same tax ID once collected, same signup IP) — if so, log it to
+the existing audit log with a clear flag (e.g. `possible_tier_stacking`)
+and let the payout proceed rather than blocking it. Admin can review the
+audit log and act manually on the rare real case; nothing should get stuck
+waiting on this check.
+
+### 3. Tax aggregation must be per-person, not per-payment-type
+
+Real operational correctness issue, not optional: since the same person
+can now legitimately receive both customer cashback and affiliate
+commission, the $600/year threshold tracking (built in the tax-compliance
+batch) needs to **sum both payment types together per person** before
+comparing against the threshold — not track cashback-received and
+commission-received as two separate buckets that could each individually
+stay under $600 while the person's real total crosses it. Whatever
+identifier ties a person's cashback and commission records together
+(email is the obvious candidate, but check for collisions/edge cases) is
+the aggregation key.
+
+### Also: cashback/customer-identification still needs building
+
+Reminder from earlier — the actual customer cashback claim flow (token,
+public claim page, real customer identification) was spec'd in an earlier
+entry but never built; only the math placeholder exists today. That's a
+prerequisite for all of the above actually mattering in practice (there's
+no "customer" role to self-refer into yet without it). Suggest building
+cashback first, then layering items 1-3 above on top of it, rather than
+building the self-referral relaxation against a customer role that doesn't
+exist yet.
+
+— Homes session
+
 ## 2026-09-08 — Solar Referral session: unsubscribe mechanism built and verified
 
 Both pieces done, staging-verified against real HTTP/DB state, deployed to

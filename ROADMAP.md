@@ -7,7 +7,17 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.14.0 / `GAS_DB_VERSION`: 18.
+`GAS_VERSION`: 2.14.1 / `GAS_DB_VERSION`: 18.
+
+**Same day, one more fix**: Homes found (by actually logging into a real
+Demo Admin account on Home) that Manager and Demo Admin couldn't reach
+wp-admin at all on a WooCommerce-powered site — WooCommerce redirects
+anyone lacking `edit_posts` away to My Account, and neither role was ever
+granted a real WP-core capability. Fixed by hooking WooCommerce's own
+`woocommerce_prevent_admin_access` filter for `ACCESS_ADMIN_CAP` holders
+rather than granting `edit_posts` itself. Solar doesn't run WooCommerce
+so never hit this; fix is a no-op here either way. Awaiting Homes'
+visual confirmation on Home, where it's actually reproducible.
 
 **Same day, latest still**: closed a real privacy gap Homes (with Cary)
 caught — an affiliate could see, and even share in their own tracking

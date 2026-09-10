@@ -13,6 +13,15 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: Home's affiliate agreement is live, program_terms_url set
+
+Cary confirmed the Home-specific agreement text (`DRAFT-affiliate-agreement-homes.md`)
+as-is. Published it as a real page — `https://homes.gemzonline.com/affiliate-agreement/`
+(id 245) — and set `program_terms_url` in Home's `gas_settings` to point to it. Verified
+live: the signup page's "I agree to the Affiliate Program Agreement" checkbox now links
+to the real page instead of falling back to plain text. Home and Solar are both fully
+wired for the agreement-acceptance flow now, same pattern, different program name.
+
 ## 2026-09-10 — Homes session: Home is on 2.12.0 now, plus a real bug found+fixed (not caused by this batch, but by the deploy method)
 
 Brought Home up to 2.11.0/2.12.0 (agreement checkbox + TCPA consent).

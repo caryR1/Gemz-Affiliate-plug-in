@@ -14,8 +14,9 @@ filled in.
 
 This Agreement governs your participation as an affiliate/referral partner
 ("you," "Affiliate") in the [PROGRAM NAME] referral program operated by
-[LEGAL BUSINESS NAME] ("we," "us," "Company"). By signing up, checking the
-acceptance box, and receiving a referral link, you agree to these terms.
+Gemz Online LLC, a Georgia limited liability company ("we," "us,"
+"Company"). By signing up, checking the acceptance box, and receiving a
+referral link, you agree to these terms.
 
 ## 2. How It Works
 
@@ -122,22 +123,39 @@ file.
 
 ## 13. Governing Law
 
-This Agreement is governed by the laws of [STATE], without regard to
-conflict-of-law principles. **[Needs a real value — likely wherever the
-business is legally registered.]**
+This Agreement is governed by the laws of the State of Georgia, without
+regard to conflict-of-law principles.
+
+## 14. Arbitration
+
+Any dispute arising out of or relating to this Agreement will be resolved
+through binding arbitration administered in [CITY], Georgia, under the
+American Arbitration Association's Commercial Arbitration Rules then in
+effect, rather than in court — except that either party may bring an
+individual claim in small claims court instead. **You and the Company each
+waive any right to a jury trial and to participate in a class action.**
+This section survives termination of this Agreement.
 
 ---
 
 ## Things I'm flagging as needing your judgment specifically, not guessed at:
 
-- **[PROGRAM NAME]**, **[LEGAL BUSINESS NAME]**, and **[STATE]** are
-  placeholders — need your actual business entity name and state.
-- I did **not** include an arbitration/class-action-waiver clause, since
-  that's a meaningful legal choice with real tradeoffs, not boilerplate —
-  worth discussing with a lawyer if you want one.
-- I kept the $50 minimum payout threshold consistent with what you just set
-  in the plugin itself, so the agreement and the actual system behavior
-  match.
-- This assumes a single unified agreement works across Home, Solar, and any
-  future project on this shared plugin (only the program name/commission
-  specifics would differ) — flag if you want per-site variations instead.
+- **Legal name filled in as "Gemz Online LLC"** — you wrote "Gems Online,"
+  which reads like the same dictation slip that's shown up elsewhere this
+  project (GRC/CRC, mail/meal) given every other reference across both
+  sites is spelled "Gemz." Correct me if you actually meant a literal
+  different entity name.
+- **State and arbitration added** — Georgia governing law, arbitration in
+  Georgia under AAA Commercial Rules, jury trial and class action waived.
+  **[CITY]** is still a placeholder — which Georgia city should arbitration
+  be administered in (Atlanta is the typical default if you don't have a
+  preference)?
+- **[PROGRAM NAME]** still open — a single generic name across Home/Solar,
+  or a distinct name per site?
+- **Section 4's self-referral prohibition is UNCHANGED, deliberately** —
+  you just asked to allow some form of self-referral, which directly
+  conflicts with that clause as written. Holding it until we've worked out
+  exactly what you want to allow (see chat) rather than editing it on a
+  guess.
+- I kept the $50 minimum payout threshold consistent with the plugin's
+  actual configured behavior, so the agreement and the system match.

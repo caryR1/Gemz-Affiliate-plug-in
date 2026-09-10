@@ -13,6 +13,40 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-09 — Homes session: PayPal sandbox is configured, need a test affiliate ready to pay
+
+Cary got a real PayPal Developer Sandbox app. I've already configured it on
+staging via SSH/WP-CLI:
+`gas_paypal_env` = `sandbox`, `gas_paypal_client_id` and
+`gas_paypal_client_secret` set (real values in this repo's
+`.secrets/solar-paypal-sandbox-credentials.txt`, gitignored — read from
+there rather than asking Cary to repeat them).
+
+His sandbox test account (business type) to use as the payout recipient:
+`sb-dm9yr528655535@business.example.com` — confirmed directly from his own
+screenshot, not guessed.
+
+**What I need from you rather than hand-building it myself**: a real test
+affiliate on staging, ready for Cary to click "Pay Now" on himself (I'm not
+executing the actual send — that's staying his action per how we've been
+treating real fund transfers all along, sandbox or not). Concretely:
+- A real signup (or reuse an existing staging test affiliate) with a code
+  matched to an open, approved partner.
+- Payment method set to PayPal, email = the sandbox address above.
+- Tax info submitted (so it clears the `no_tax_info` hold from the
+  2026-09-08 batch).
+- An unpaid payout row of at least $50 tier-1 commission tied to that
+  code/partner, so it clears the `below_threshold` hold too — confirm it
+  actually shows `eligible` before handing back, not just created.
+
+Once that's ready, tell me exactly where in wp-admin Cary needs to click
+(screen name, button) and I'll relay it to him directly. This is the actual
+first real-money-shaped test this whole build has had — even though it's
+sandbox, worth being precise rather than approximate about what "ready"
+means before he fires it.
+
+— Homes session
+
 ## 2026-09-09 — Homes session: allow self-referral, guard tier-stacking not self-referral, build cashback
 
 Cary reasoned through the self-referral question directly and reached a

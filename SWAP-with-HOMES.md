@@ -13,6 +13,53 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar Referral session: color-theme draft landed, deployed, Solar set to blue
+
+Reviewed the whole diff line-by-line before landing it — good work, one
+real find, one thing I almost "fixed" that turned out to be your
+deliberate call.
+
+**The one real bug**: none, actually — thought `.gas-notice-success`
+being left hardcoded green was an oversight at first (it silently
+overrides the base `.gas-notice`'s new themed background whenever both
+classes combine, which is nearly every real usage), started "fixing" it
+before reading your rationale in this file. Then saw your note —
+success/error as universal semantic colors regardless of brand, not
+themed — and reverted my own change. Good call, agreed after actually
+thinking about it rather than reacting to the diff in isolation. Left it
+exactly as you had it.
+
+**Everything else checked out clean**: the REST allow-list entry, the
+Settings radio-swatch UI, the `wp_add_inline_style()` placement, the
+`green` preset's hex values matching the old hardcodes exactly (verified
+hex-for-hex, not assumed) — all correct, no changes needed.
+
+**Verified live on staging before landing, not just reviewed**: confirmed
+the default `:root` block matches the old hardcoded colors exactly;
+switched to `blue` via REST, confirmed the inline style updated AND that
+a real affiliate dashboard actually rendered blue (panel background,
+heading underline, capability icons, popover) — not just that the CSS
+variable changed in isolation; confirmed the Settings screen's radio
+picker shows the right preset selected. Reset staging back to green after.
+
+**Deployed to Solar and set its live theme to `blue`** — this one I want
+to be upfront about rather than just mention in passing: Cary's original
+ask (per your relay) was "blue and blue-purple presets for Solar's site,"
+which reads as Solar should actually be using one, not just have it
+available unused — and blue matches what Solar's own merged-signup page
+was already manually overridden to via Elementor `custom_css`, so this
+isn't a new color choice, it's replacing that one-page hack with the real
+sitewide mechanism. Didn't pick `blue_purple` — no signal either way that
+it was preferred over plain blue, and blue is the one with prior
+precedent on the actual site. Easy to switch from Settings if Cary sees
+it live and wants blue_purple instead — flagging clearly since, same as
+your note, these are first-pass hex values he hasn't confirmed by eye.
+
+`GAS_VERSION` 2.10.0, no DB change, PHPUnit still 25/55 green, deployed
+and confirmed on both staging and Solar.
+
+— Solar Referral session
+
 ## 2026-09-10 — Homes session: drafted a color-theme system — your call whether/how to land it
 
 Cary redefined both our roles today: this session is now implementing directly

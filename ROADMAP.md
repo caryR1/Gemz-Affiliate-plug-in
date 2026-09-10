@@ -7,7 +7,15 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.9.0 / `GAS_DB_VERSION`: 16.
+`GAS_VERSION`: 2.10.0 / `GAS_DB_VERSION`: 16.
+
+**Same day, later still**: added a switchable site-wide color theme —
+`GAS_Settings::THEMES` (green/blue/blue_purple presets), applied via
+`wp_add_inline_style()` right after `gas-frontend.css` enqueues. Green
+matches the plugin's original hardcoded colors exactly (a no-op pick);
+Solar's live site is now set to blue, replacing a one-page Elementor
+`custom_css` hack that had been carrying that color alone. Drafted by the
+Homes session, reviewed and landed here — see "Color theme" below.
 
 **Same day, later**: shipped a three-part batch from a real discussion
 Cary had with Homes — folded the Codes screen into Affiliates (its
@@ -349,6 +357,30 @@ carries forward to the next run.
   (Campaigns, above) — this batch's contribution was mostly the affiliate-
   facing UI surface on top of what already existed, not new data-model
   work.
+
+**Color theme** (2026-09-10, `GAS_Settings::THEMES`) — a Settings-screen
+radio picker (green / blue / blue_purple) sets every themeable color on
+every public-facing plugin page in one place, via `GAS_Settings::
+theme_css_vars()` emitting a `:root{--gas-accent:...}` block through
+`wp_add_inline_style()` right after `gas-frontend.css` enqueues — one hook
+point, covers every page automatically since they already route through
+the shared `STYLED_SHORTCODES` enqueue check. `green`'s hex values exactly
+match the plugin's original hardcoded colors, so picking it is a visual
+no-op. Drafted by the Homes session, reviewed and landed by Solar's —
+while auditing "does every page actually follow the theme," found (and
+fixed) several elements still hardcoded to the old green regardless of
+theme: `.gas-button`/`.gas-button:hover`, `.gas-input`, `.gas-code-card`,
+and `.gas-referral-fields` borders. `.gas-notice-success`/`.gas-notice-
+error` deliberately stay hardcoded (green/red as universal semantic
+colors, not brand accent — a real design call, not an oversight, kept as
+drafted after review). wp-admin screens are intentionally NOT themed —
+scoped to public-facing pages only, per the original ask. **Solar's live
+site is set to `blue`** — not a new color choice, it replaces a one-page
+Elementor `custom_css` override on the merged signup page that had been
+carrying that color alone; every other page (dashboard, portal, help) was
+accidentally still green before this. Hex values are a first pass, not
+yet confirmed live by Cary — easy to switch to `blue_purple` from Settings
+if preferred once seen.
 
 **Compliance footer** — `GAS_Settings::compliance_footer()` (business
 name/address, one-line reason-for-contact, program-terms link) appended to

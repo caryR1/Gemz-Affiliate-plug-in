@@ -23,6 +23,7 @@ class GAS_Frontend {
 		add_action( 'admin_post_gas_save_payment_info', array( __CLASS__, 'handle_save_payment_info' ) );
 		add_action( 'admin_post_gas_save_tax_info', array( __CLASS__, 'handle_save_tax_info' ) );
 		add_action( 'admin_post_gas_save_dashboard_theme', array( __CLASS__, 'handle_save_dashboard_theme' ) );
+		add_action( 'admin_post_gas_dashboard_add_referral', array( __CLASS__, 'handle_dashboard_add_referral' ) );
 	}
 
 	/**
@@ -996,6 +997,7 @@ class GAS_Frontend {
 				'payment_updated'        => 'Payment information saved.',
 				'tax_info_updated'       => 'Tax information submitted — thank you.',
 				'dashboard_theme_updated' => 'Dashboard color updated.',
+				'referral_added'          => 'Referral added — thanks for the introduction!',
 			);
 			$key = sanitize_text_field( wp_unslash( $_GET['gas_notice'] ) );
 			if ( isset( $notices[ $key ] ) ) {
@@ -1023,6 +1025,7 @@ class GAS_Frontend {
 		self::render_stats_section( $user_id );
 		self::render_marketing_assets_section( $user_id );
 		self::render_downline_section( $user_id );
+		self::render_add_referral_section( $user_id, $is_previewing );
 		self::render_theme_preference_section( $user_id, $is_previewing );
 		self::render_password_section( $is_previewing );
 		self::render_payment_section( $user_id, $is_previewing );
@@ -1286,6 +1289,107 @@ class GAS_Frontend {
 			echo '</tbody></table></div>';
 		}
 		echo '</div>';
+	}
+
+	/**
+	 * Lets an affiliate add a referral for a friend directly from their own
+	 * dashboard, instead of having to leave it and re-enter their own
+	 * name/email on the public /refer-a-friend page (the only way to do
+	 * this before). Reuses create_referral_lead() — same lead row, same
+	 * emails — just skips the "find me by email" step since we already
+	 * know who's logged in (or, under admin preview, who's being
+	 * previewed; unlike the password/theme sections this one stays live
+	 * during preview so an admin can add a referral on an affiliate's
+	 * behalf, e.g. one called in over the phone).
+	 */
+	private static function render_add_referral_section( $user_id, $is_previewing = false ) {
+		global $wpdb;
+		$my_code = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'codes' ) . ' WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1', $user_id ) );
+		if ( ! $my_code ) {
+			return;
+		}
+
+		echo '<div class="gas-panel">';
+		echo '<h2>Add a referral</h2>';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">You\'re adding this to <strong>' . esc_html( get_userdata( $user_id )->display_name ) . '\'s</strong> account, not your own.</p>';
+		} else {
+			echo '<p class="gas-fineprint">Know someone who\'d be a good fit? Add them here and we\'ll take it from there.</p>';
+		}
+		?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">
+			<?php wp_nonce_field( 'gas_dashboard_add_referral' ); ?>
+			<input type="hidden" name="action" value="gas_dashboard_add_referral">
+			<p>
+				<label for="gas_ref_name">Their name</label><br>
+				<input type="text" id="gas_ref_name" name="friend_name" required class="gas-input">
+			</p>
+			<p>
+				<label for="gas_ref_email">Their email</label><br>
+				<input type="email" id="gas_ref_email" name="friend_email" class="gas-input">
+			</p>
+			<p>
+				<label for="gas_ref_phone">Their phone</label><br>
+				<input type="tel" id="gas_ref_phone" name="friend_phone" class="gas-input">
+			</p>
+			<p class="gas-fineprint">At least one of email or phone is required.</p>
+			<p>
+				<label for="gas_ref_address">Their address (optional)</label><br>
+				<input type="text" id="gas_ref_address" name="friend_address" class="gas-input">
+			</p>
+			<p>
+				<label for="gas_ref_state">Their state</label><br>
+				<input type="text" id="gas_ref_state" name="friend_state" maxlength="2" placeholder="e.g. FL" style="text-transform:uppercase;" class="gas-input">
+				<span class="gas-fineprint">Lets us match them to a partner that actually covers their area.</span>
+			</p>
+			<p>
+				<button type="submit" class="gas-button">Add referral</button>
+			</p>
+		</form>
+		<?php
+		echo '</div>';
+	}
+
+	public static function handle_dashboard_add_referral() {
+		if ( ! is_user_logged_in() ) {
+			wp_die( 'Please log in first.' );
+		}
+		check_admin_referer( 'gas_dashboard_add_referral' );
+
+		$preview       = GAS_Roles::get_admin_preview();
+		$is_previewing = $preview && 'agent' === $preview['type'];
+
+		if ( ! $is_previewing && ! GAS_Roles::is_affiliate() ) {
+			wp_die( 'This is for affiliates only.' );
+		}
+		$user_id = $is_previewing ? (int) $preview['id'] : get_current_user_id();
+
+		$redirect_back = add_query_arg( 'gas_notice', 'referral_added', self::dashboard_url() );
+		$fail          = function( $msg ) use ( $redirect_back ) {
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), remove_query_arg( 'gas_notice', $redirect_back ) ) );
+			exit;
+		};
+
+		global $wpdb;
+		$code = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'codes' ) . ' WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1', $user_id ) );
+		if ( ! $code ) {
+			$fail( 'No referral code found on this account yet.' );
+		}
+
+		$friend_name    = isset( $_POST['friend_name'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_name'] ) ) : '';
+		$friend_email   = isset( $_POST['friend_email'] ) ? sanitize_email( wp_unslash( $_POST['friend_email'] ) ) : '';
+		$friend_phone   = isset( $_POST['friend_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_phone'] ) ) : '';
+		$friend_address = isset( $_POST['friend_address'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_address'] ) ) : '';
+		$friend_state   = isset( $_POST['friend_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['friend_state'] ) ) ) : '';
+
+		if ( '' === $friend_name || ( '' === $friend_email && '' === $friend_phone ) ) {
+			$fail( 'Please enter a name and at least an email or phone number.' );
+		}
+
+		self::create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address, $friend_state );
+
+		wp_safe_redirect( $redirect_back );
+		exit;
 	}
 
 	/**

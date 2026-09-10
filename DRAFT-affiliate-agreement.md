@@ -44,8 +44,10 @@ You agree not to:
   messages.
 - Bid on the Company's trademarked terms in paid search advertising, or use
   the Company's name/trademarks in a domain name, without written permission.
-- Refer yourself, or create accounts to generate commissions on your own
-  purchases or actions.
+- Create or use more than one Affiliate account, or coordinate with another
+  person's account, to claim more than one tier of commission on the same
+  referral chain. Referring yourself as a genuine customer on a single real,
+  completed transaction, under your own single account, is permitted.
 - Misrepresent your relationship with the Company, or fail to disclose that
   a link is a paid referral link where required by law (see Section 5).
 - Engage in any fraudulent, deceptive, or abusive practice, including but not

@@ -8,6 +8,21 @@ class GAS_Roles {
 	const ROLE         = 'gas_affiliate'; // kept as-is for backward compatibility with existing installs.
 	const PARTNER_ROLE = 'gas_partner';
 	const MANAGER_ROLE = 'gas_manager';
+	const DEMO_ROLE    = 'gas_demo_admin';
+
+	/**
+	 * The only two admin_post `gas_` actions a Demo Admin may ever submit
+	 * — both are the admin-preview toggle, which is genuinely safe to
+	 * allow: it only ever sets/clears a short-lived per-admin transient
+	 * (see get_admin_preview() below), never touches a real row, so it
+	 * can't pollute demo data even though it's technically a write. This
+	 * is deliberately an ALLOWLIST, not a denylist of "the dangerous
+	 * ones" — every `gas_`-prefixed admin_post action this plugin adds in
+	 * the future is blocked for Demo Admin by default unless explicitly
+	 * added here, so a new save/delete/export handler can never silently
+	 * reopen read-only mode by omission.
+	 */
+	const DEMO_SAFE_ACTIONS = array( 'gas_start_admin_preview', 'gas_stop_admin_preview' );
 
 	/**
 	 * Umbrella capability granted only to Administrator and GAS Manager,
@@ -92,16 +107,83 @@ class GAS_Roles {
 			// Belt-and-suspenders: explicitly deny anything dangerous, even
 			// if some other plugin or a future WP core change tries to
 			// grant it by default.
-			$explicitly_denied = array(
-				'install_plugins', 'activate_plugins', 'edit_plugins', 'update_plugins', 'delete_plugins',
-				'switch_themes', 'edit_themes', 'install_themes', 'update_themes', 'delete_themes', 'edit_theme_options',
-				'list_users', 'create_users', 'edit_users', 'delete_users', 'promote_users', 'remove_users',
-				'manage_options', 'update_core',
-			);
-			foreach ( $explicitly_denied as $cap ) {
+			foreach ( self::dangerous_wp_caps() as $cap ) {
 				$manager->remove_cap( $cap );
 			}
 		}
+
+		// Demo Admin (2026-09-10): sees every GAS admin screen exactly like
+		// Manager above (same caps, same site-wide-capability denial — a
+		// demo account has no business in Users/Plugins/Themes either), but
+		// can never save/delete/export/pay anything. That second half isn't
+		// a capability at all — capabilities gate the SAME check a screen
+		// uses to decide "can this role even see this page," so stripping
+		// caps to make it read-only would just make the screens disappear
+		// instead. The actual block is the admin_post guard registered
+		// below, keyed off DEMO_SAFE_ACTIONS — an allowlist, not this
+		// role's capabilities.
+		if ( ! get_role( self::DEMO_ROLE ) ) {
+			add_role( self::DEMO_ROLE, 'Demo Admin', array( 'read' => true ) );
+		}
+		$demo = get_role( self::DEMO_ROLE );
+		if ( $demo ) {
+			$demo->add_cap( self::ACCESS_ADMIN_CAP );
+			foreach ( self::management_caps() as $cap ) {
+				$demo->add_cap( $cap );
+			}
+			foreach ( self::dangerous_wp_caps() as $cap ) {
+				$demo->remove_cap( $cap );
+			}
+		}
+
+		// Registered every request (add_role() itself runs on every
+		// 'plugins_loaded', see the main plugin file) rather than only at
+		// activation, same reasoning as the roles above. Hooked on
+		// 'admin_init' specifically because wp-admin/admin-post.php fires
+		// that before dispatching to the specific admin_post_{$action}
+		// handler — this runs first every time, not a generic 'admin_post'
+		// action (WP core doesn't actually fire one unconditionally).
+		add_action( 'admin_init', array( __CLASS__, 'block_demo_admin_writes' ), 1 );
+	}
+
+	/**
+	 * Shared between Manager and Demo Admin — both are non-Administrator
+	 * staff-facing roles with full run of the affiliate program's own
+	 * screens but no business touching the rest of the WordPress install.
+	 */
+	private static function dangerous_wp_caps() {
+		return array(
+			'install_plugins', 'activate_plugins', 'edit_plugins', 'update_plugins', 'delete_plugins',
+			'switch_themes', 'edit_themes', 'install_themes', 'update_themes', 'delete_themes', 'edit_theme_options',
+			'list_users', 'create_users', 'edit_users', 'delete_users', 'promote_users', 'remove_users',
+			'manage_options', 'update_core',
+		);
+	}
+
+	public static function is_demo_admin( $user = null ) {
+		$user = $user ? $user : wp_get_current_user();
+		return $user && in_array( self::DEMO_ROLE, (array) $user->roles, true );
+	}
+
+	/**
+	 * The single chokepoint making Demo Admin actually read-only. Every
+	 * `admin_post_gas_*`/`admin_post_nopriv_gas_*` handler in this plugin
+	 * is a real write (save, delete, export, trigger a payout, etc.)
+	 * except the two in DEMO_SAFE_ACTIONS — so a Demo Admin hitting any
+	 * of them gets stopped here, before the actual handler ever runs,
+	 * rather than relying on every individual handler remembering to
+	 * check. Not a capability check on purpose — see the note on
+	 * add_role() above for why capabilities can't do this job here.
+	 */
+	public static function block_demo_admin_writes() {
+		if ( ! self::is_demo_admin() ) {
+			return;
+		}
+		$action = isset( $_REQUEST['action'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['action'] ) ) : '';
+		if ( 0 !== strpos( $action, 'gas_' ) || in_array( $action, self::DEMO_SAFE_ACTIONS, true ) ) {
+			return;
+		}
+		wp_die( 'This is a read-only demo account — changes are not saved. <a href="javascript:history.back()">Go back</a>', 'Demo account', array( 'response' => 403 ) );
 	}
 
 	public static function remove_role() {

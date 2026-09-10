@@ -460,6 +460,7 @@ class GAS_REST {
 		$sale_amount       = isset( $body['sale_amount'] ) ? (float) $body['sale_amount'] : 0;
 		$installment_index = isset( $body['installment_index'] ) ? absint( $body['installment_index'] ) : null;
 		$notes             = isset( $body['notes'] ) ? sanitize_textarea_field( $body['notes'] ) : '';
+		$customer_email    = isset( $body['customer_email'] ) ? sanitize_email( $body['customer_email'] ) : '';
 		$entered_at        = ! empty( $body['entered_at'] ) ? sanitize_text_field( $body['entered_at'] ) : current_time( 'mysql' );
 
 		// Optional, and only meaningful for backdated/seeded rows — a real
@@ -486,6 +487,7 @@ class GAS_REST {
 				'agent_pool_amount' => $calc['agent_pool'],
 				'subaffiliate_cut'  => $calc['tier1_amount'],
 				'cashback_amount'   => $calc['cashback'],
+				'customer_email'    => $customer_email,
 				'tier2_code_id'     => $calc['tier2_code'] ? $calc['tier2_code']->id : null,
 				'tier2_amount'      => $calc['tier2_amount'],
 				'tier3_code_id'     => $calc['tier3_code'] ? $calc['tier3_code']->id : null,
@@ -500,9 +502,20 @@ class GAS_REST {
 			)
 		);
 
-		GAS_Admin::audit_log( 'payout', $wpdb->insert_id, 'entered_via_rest', array( 'code' => $code->code, 'gross' => $calc['gross'], 'net' => $calc['net'] ) );
+		$payout_id = $wpdb->insert_id;
+		GAS_Admin::audit_log( 'payout', $payout_id, 'entered_via_rest', array( 'code' => $code->code, 'gross' => $calc['gross'], 'net' => $calc['net'] ) );
 
-		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . GAS_DB::table( 'payouts' ) . " WHERE id = %d", $wpdb->insert_id ), ARRAY_A );
+		// Same non-blocking tier-stacking flag as the wp-admin Calculator —
+		// see GAS_Payouts::tier_stacking_signals(). Never blocks the payout.
+		if ( ! empty( $calc['tier_stacking'] ) ) {
+			GAS_Admin::audit_log( 'payout', $payout_id, 'possible_tier_stacking', $calc['tier_stacking'] );
+		}
+
+		if ( $calc['cashback'] > 0 && $customer_email ) {
+			GAS_Cashback::send_claim_email( $payout_id );
+		}
+
+		$created = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM " . GAS_DB::table( 'payouts' ) . " WHERE id = %d", $payout_id ), ARRAY_A );
 		return new WP_REST_Response( $created, 201 );
 	}
 

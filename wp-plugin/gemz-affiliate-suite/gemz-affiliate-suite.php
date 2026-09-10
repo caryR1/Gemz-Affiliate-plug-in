@@ -11,8 +11,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GAS_VERSION', '2.7.1' );
-define( 'GAS_DB_VERSION', '15' );
+define( 'GAS_VERSION', '2.8.0' );
+define( 'GAS_DB_VERSION', '16' );
 define( 'GAS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GAS_PLUGIN_FILE', __FILE__ );
 
@@ -21,6 +21,7 @@ require_once GAS_PLUGIN_DIR . 'includes/class-gas-roles.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-db.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-fraud.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-payouts.php';
+require_once GAS_PLUGIN_DIR . 'includes/class-gas-cashback.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-paypal-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-wise-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-campaigns.php';
@@ -59,6 +60,7 @@ register_deactivation_hook( __FILE__, function() {
 } );
 
 GAS_Campaigns::init();
+GAS_Cashback::init();
 GAS_Marketing_Assets::init();
 GAS_Redirect::init();
 GAS_Leads::init();

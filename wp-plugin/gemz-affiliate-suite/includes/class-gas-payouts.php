@@ -39,6 +39,12 @@ class GAS_Payouts {
 	const META_TAX_COUNTRY       = 'gas_tax_country';
 	const META_TAX_SUBMITTED_AT  = 'gas_tax_submitted_at';
 
+	// Recorded at signup (2026-09-09) purely as an identity signal for the
+	// tier-stacking check below — never shown to anyone, never used for
+	// rate-limiting itself (GAS_Fraud's transient-based signup limiter
+	// already covers that).
+	const META_SIGNUP_IP = 'gas_signup_ip';
+
 	public static function get_details( $user_id ) {
 		return array(
 			'method'          => get_user_meta( $user_id, self::META_METHOD, true ) ?: '',
@@ -150,11 +156,23 @@ class GAS_Payouts {
 	}
 
 	/**
-	 * Sum of everything actually PAID to this affiliate (their own direct
-	 * cut plus any tier-2/3 overrides they're owed) within the current
-	 * calendar year — the figure that matters for 1099 purposes, which is
-	 * based on amounts paid during the tax year, not amounts earned/entered.
-	 * Uses paid_at (when the money actually moved), not entered_at.
+	 * Sum of everything actually PAID to this PERSON (their own direct
+	 * affiliate cut, any tier-2/3 overrides they're owed, AND any buyer
+	 * cash back paid to their email) within the current calendar year —
+	 * the figure that matters for 1099 purposes, which is based on amounts
+	 * paid during the tax year, not amounts earned/entered. Uses paid_at
+	 * (when the money actually moved), not entered_at.
+	 *
+	 * Cashback aggregation added 2026-09-09 alongside allowing
+	 * self-referral (see SWAP-with-HOMES.md): the same person can now
+	 * legitimately receive both customer cashback and affiliate
+	 * commission, so the $600/year threshold has to be tracked as ONE
+	 * combined total per person — two separate buckets that could each
+	 * individually stay under $600 while the real total crosses it would
+	 * be a real (not theoretical) tax-reporting gap. Matched by email,
+	 * case-insensitively, since a customer receiving cashback has no WP
+	 * user id to join on — email is the only identifier the affiliate
+	 * account and the cashback payout row are guaranteed to share.
 	 */
 	public static function paid_this_calendar_year( $user_id, $year = null ) {
 		global $wpdb;
@@ -183,10 +201,24 @@ class GAS_Payouts {
 			$user_id, $year_start, $year_end
 		) );
 
-		return $direct + $tier2 + $tier3;
+		$cashback = 0.0;
+		$user     = get_userdata( $user_id );
+		if ( $user && $user->user_email ) {
+			$cashback = (float) $wpdb->get_var( $wpdb->prepare(
+				"SELECT COALESCE(SUM(cashback_amount),0) FROM {$payouts_table}
+				 WHERE LOWER(customer_email) = %s AND cashback_paid = 1 AND cashback_paid_at >= %s AND cashback_paid_at < %s",
+				strtolower( $user->user_email ), $year_start, $year_end
+			) );
+		}
+
+		return $direct + $tier2 + $tier3 + $cashback;
 	}
 
-	private static function mask_email( $email ) {
+	/**
+	 * Public (not private) since GAS_Cashback also masks a customer's
+	 * cashback payment email using the exact same convention.
+	 */
+	public static function mask_email( $email ) {
 		$parts = explode( '@', $email );
 		if ( 2 !== count( $parts ) ) {
 			return '***';
@@ -347,7 +379,79 @@ class GAS_Payouts {
 			'tier3_pct'         => $tier3_pct,
 			'tier3_code'        => $tier3_code,
 			'net'               => $net,
+			'tier_stacking'     => self::tier_stacking_signals( $code, $tier2_code, $tier3_code ),
 		);
+	}
+
+	/**
+	 * Lightweight, non-blocking fraud signal added 2026-09-09 alongside
+	 * allowing self-referral (Cary's call — see SWAP-with-HOMES.md): since
+	 * one real person being both affiliate and customer on their own sale
+	 * is now fine (fixed pool, no cost to the partner), the actual risk
+	 * worth watching for is narrower — a SOCKPUPPET second account
+	 * stacking an extra tier-2/3 on top of what's really one person's one
+	 * transaction. Cary explicitly judged this low-probability and asked
+	 * for a flag an admin can review, not a block that could stall a real
+	 * payout over a coincidence (e.g. two genuinely different people who
+	 * happen to share a household PayPal account).
+	 *
+	 * Compares each PRESENT pair among tier1/tier2/tier3 codes that belong
+	 * to two DIFFERENT wp_user_id's, looking for any shared identity
+	 * signal: payout email (WP account email), PayPal email, Wise account
+	 * number, tax ID, or signup IP. Returns an array of matches (empty if
+	 * none) — never blocks anything itself, the caller decides whether to
+	 * audit-log it.
+	 */
+	private static function tier_stacking_signals( $code, $tier2_code, $tier3_code ) {
+		$candidates = array(
+			'tier1' => $code,
+			'tier2' => $tier2_code,
+			'tier3' => $tier3_code,
+		);
+
+		$fingerprints = array();
+		foreach ( $candidates as $label => $c ) {
+			if ( ! $c || empty( $c->wp_user_id ) ) {
+				continue;
+			}
+			$user_id = (int) $c->wp_user_id;
+			$user    = get_userdata( $user_id );
+			$details = self::get_details( $user_id );
+			$tax     = self::get_tax_info( $user_id );
+
+			$fingerprints[ $label ] = array(
+				'user_id'      => $user_id,
+				'email'        => $user ? strtolower( $user->user_email ) : '',
+				'paypal_email' => $details['paypal_email'] ? strtolower( $details['paypal_email'] ) : '',
+				'wise_account' => $details['wise_account'] ? preg_replace( '/\s+/', '', $details['wise_account'] ) : '',
+				'tax_id'       => $tax['tax_id'] ?: '',
+				'signup_ip'    => get_user_meta( $user_id, self::META_SIGNUP_IP, true ),
+			);
+		}
+
+		$signals = array( 'email', 'paypal_email', 'wise_account', 'tax_id', 'signup_ip' );
+		$labels  = array_keys( $fingerprints );
+		$matches = array();
+
+		for ( $i = 0; $i < count( $labels ); $i++ ) {
+			for ( $j = $i + 1; $j < count( $labels ); $j++ ) {
+				$a = $fingerprints[ $labels[ $i ] ];
+				$b = $fingerprints[ $labels[ $j ] ];
+				if ( $a['user_id'] === $b['user_id'] ) {
+					continue; // same account isn't "stacking" — nothing to flag
+				}
+				foreach ( $signals as $signal ) {
+					if ( '' !== $a[ $signal ] && $a[ $signal ] === $b[ $signal ] ) {
+						$matches[] = array(
+							'between' => array( $labels[ $i ], $labels[ $j ] ),
+							'signal'  => $signal,
+						);
+					}
+				}
+			}
+		}
+
+		return $matches;
 	}
 
 	/**

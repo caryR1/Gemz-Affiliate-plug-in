@@ -192,6 +192,9 @@ class GAS_DB {
 			cashback_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 			cashback_paid TINYINT(1) NOT NULL DEFAULT 0,
 			cashback_paid_at DATETIME NULL,
+			customer_email VARCHAR(191) NULL,
+			cashback_claimed_at DATETIME NULL,
+			cashback_payment_details TEXT NULL,
 			tier2_code_id BIGINT UNSIGNED NULL,
 			tier2_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
 			tier2_paid TINYINT(1) NOT NULL DEFAULT 0,
@@ -208,7 +211,8 @@ class GAS_DB {
 			KEY code_id (code_id),
 			KEY status (status),
 			KEY tier2_code_id (tier2_code_id),
-			KEY tier3_code_id (tier3_code_id)
+			KEY tier3_code_id (tier3_code_id),
+			KEY customer_email (customer_email)
 		) {$charset_collate};
 
 		CREATE TABLE {$leads} (

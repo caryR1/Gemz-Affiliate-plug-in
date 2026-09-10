@@ -38,6 +38,7 @@ class GAS_Admin {
 		add_action( 'admin_post_gas_wise_payout_now', array( __CLASS__, 'handle_wise_payout_now' ) );
 		add_action( 'admin_post_gas_reassign_contact', array( __CLASS__, 'handle_reassign_contact' ) );
 		add_action( 'admin_post_gas_export_contacts_csv', array( __CLASS__, 'handle_export_contacts_csv' ) );
+		add_action( 'admin_post_gas_mark_cashback_paid', array( __CLASS__, 'handle_mark_cashback_paid' ) );
 		add_action( 'admin_post_gas_save_lead_magnet', array( __CLASS__, 'handle_save_lead_magnet' ) );
 		add_action( 'admin_post_gas_toggle_lead_magnet', array( __CLASS__, 'handle_toggle_lead_magnet' ) );
 		add_action( 'admin_post_gas_start_admin_preview', array( __CLASS__, 'handle_start_admin_preview' ) );
@@ -1206,6 +1207,8 @@ class GAS_Admin {
 
 		echo '<tr><th>Sale amount ($)</th><td><input type="number" step="0.01" min="0" name="sale_amount" required></td></tr>';
 
+		echo '<tr><th>Customer email</th><td><input type="email" name="customer_email" class="regular-text"> <p class="description">Optional &mdash; only needed if this partner pays buyer cash back. Set this and we\'ll email the customer a link to claim it (tell us how to pay them). Also lets a self-referring affiliate\'s own cashback aggregate correctly against the $600/year tax threshold.</p></td></tr>';
+
 		echo '<tr><th>Installment</th><td><select name="installment_index" id="installment_index"><option value="">Full amount / single payment</option></select> <p class="description">Only matters for partners paid in stages. Choose which payment this is.</p></td></tr>';
 
 		echo '<tr><th>Notes</th><td><textarea name="notes" class="large-text" rows="2" placeholder="optional"></textarea></td></tr>';
@@ -1270,6 +1273,7 @@ class GAS_Admin {
 		$sale_amount       = isset( $_POST['sale_amount'] ) ? (float) $_POST['sale_amount'] : 0;
 		$installment_index = isset( $_POST['installment_index'] ) && '' !== $_POST['installment_index'] ? absint( $_POST['installment_index'] ) : null;
 		$notes             = isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '';
+		$customer_email    = isset( $_POST['customer_email'] ) ? sanitize_email( wp_unslash( $_POST['customer_email'] ) ) : '';
 		$save              = ! empty( $_POST['save'] );
 
 		$code = self::get_code( $code_id );
@@ -1320,6 +1324,7 @@ class GAS_Admin {
 					'agent_pool_amount' => $calc['agent_pool'],
 					'subaffiliate_cut'  => $calc['tier1_amount'],
 					'cashback_amount'   => $calc['cashback'],
+					'customer_email'    => $customer_email,
 					'tier2_code_id'     => $calc['tier2_code'] ? $calc['tier2_code']->id : null,
 					'tier2_amount'      => $calc['tier2_amount'],
 					'tier3_code_id'     => $calc['tier3_code'] ? $calc['tier3_code']->id : null,
@@ -1329,9 +1334,21 @@ class GAS_Admin {
 					'notes'             => $notes,
 				)
 			);
-			$result['saved'] = true;
-			self::audit_log( 'payout', $wpdb->insert_id, 'entered', array( 'code' => $code->code, 'gross' => $calc['gross'], 'net' => $calc['net'] ) );
+			$payout_id        = $wpdb->insert_id;
+			$result['saved']  = true;
+			self::audit_log( 'payout', $payout_id, 'entered', array( 'code' => $code->code, 'gross' => $calc['gross'], 'net' => $calc['net'] ) );
 			self::maybe_notify_partner_renegotiation_milestone( $partner );
+
+			// Non-blocking tier-stacking flag (2026-09-09) — see
+			// GAS_Payouts::tier_stacking_signals() for what this is and,
+			// more importantly, isn't (never blocks the payout itself).
+			if ( ! empty( $calc['tier_stacking'] ) ) {
+				self::audit_log( 'payout', $payout_id, 'possible_tier_stacking', $calc['tier_stacking'] );
+			}
+
+			if ( $calc['cashback'] > 0 && $customer_email ) {
+				GAS_Cashback::send_claim_email( $payout_id );
+			}
 		}
 
 		set_transient( 'gas_calc_result_' . get_current_user_id(), $result, 60 );
@@ -1446,7 +1463,7 @@ class GAS_Admin {
 				echo '<td>' . esc_html( $r->installment_label ?: '&mdash;' ) . '</td>';
 				echo '<td>$' . esc_html( number_format( (float) $r->gross_commission, 2 ) ) . '</td>';
 				echo '<td>$' . esc_html( number_format( (float) $r->subaffiliate_cut, 2 ) ) . '</td>';
-				echo '<td>$' . esc_html( number_format( (float) $r->cashback_amount, 2 ) ) . '</td>';
+				echo '<td>' . self::cashback_cell( $r ) . '</td>';
 				echo '<td>' . ( $overrides ? esc_html( implode( ', ', $overrides ) ) : '&mdash;' ) . '</td>';
 				echo '<td>$' . esc_html( number_format( (float) $r->net_to_cary, 2 ) ) . '</td>';
 				echo '<td>' . ( 'paid' === $r->status ? '<span style="color:#1a7a3c;">Paid</span>' : 'Unpaid' ) . '</td>';
@@ -1467,6 +1484,56 @@ class GAS_Admin {
 		self::render_automated_payouts_section();
 
 		self::wrap_end();
+	}
+
+	/**
+	 * One Ledger row's "Buyer cash back" cell: the dollar amount plus
+	 * whatever's known about its claim/payment state — no customer email
+	 * on file (can't be claimed at all yet), a claim link to copy/resend,
+	 * claimed-with-a-masked-payment-summary, or already paid. Admin never
+	 * sees the customer's raw PayPal email/account number, same masking
+	 * spirit as an affiliate's own banking info.
+	 */
+	private static function cashback_cell( $r ) {
+		$amount = '$' . number_format( (float) $r->cashback_amount, 2 );
+		if ( (float) $r->cashback_amount <= 0 ) {
+			return $amount;
+		}
+		if ( $r->cashback_paid ) {
+			return $amount . '<br><span style="color:#1a7a3c;">Paid ' . esc_html( $r->cashback_paid_at ) . '</span>';
+		}
+		if ( ! $r->customer_email ) {
+			return $amount . '<br><span class="description">No customer email on file</span>';
+		}
+		$out = $amount . '<br>' . esc_html( $r->customer_email );
+		if ( $r->cashback_claimed_at ) {
+			$summary = GAS_Cashback::masked_payment_summary( $r->id );
+			$out    .= '<br><span style="color:#1a7a3c;">Claimed' . ( $summary ? ': ' . esc_html( $summary ) : '' ) . '</span>';
+			$mark_url = wp_nonce_url( admin_url( 'admin-post.php?action=gas_mark_cashback_paid&id=' . $r->id ), 'gas_mark_cashback_paid_' . $r->id );
+			$out     .= '<br><a href="' . esc_url( $mark_url ) . '" onclick="return confirm(\'Mark this cash back as paid? Only do this after actually sending the money.\');">Mark paid</a>';
+		} else {
+			$out .= '<br><span class="description">Not yet claimed</span>';
+		}
+		return $out;
+	}
+
+	public static function handle_mark_cashback_paid() {
+		if ( ! current_user_can( self::CAP_COMMISSIONS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		$id = isset( $_GET['id'] ) ? absint( $_GET['id'] ) : 0;
+		check_admin_referer( 'gas_mark_cashback_paid_' . $id );
+
+		global $wpdb;
+		$wpdb->update(
+			GAS_DB::table( 'payouts' ),
+			array( 'cashback_paid' => 1, 'cashback_paid_at' => current_time( 'mysql' ) ),
+			array( 'id' => $id )
+		);
+		self::audit_log( 'payout', $id, 'cashback_marked_paid' );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-ledger' ) );
+		exit;
 	}
 
 	private static function render_payout_result_notice() {

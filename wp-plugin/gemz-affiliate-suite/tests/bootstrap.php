@@ -50,6 +50,23 @@ function get_bloginfo( $show = '' ) {
 }
 
 /**
+ * Added 2026-09-09 — GAS_Payouts::compute() now also runs a tier-stacking
+ * identity check (get_details()/get_tax_info() call get_user_meta(); the
+ * check itself calls get_userdata()) for every sale, not just tests that
+ * exercise that check directly. No real WP user store exists in this
+ * harness, so both simply return "nothing on file" — every fingerprint
+ * comes back empty, tier_stacking_signals() finds nothing to match, and
+ * every existing compute() assertion is unaffected.
+ */
+function get_userdata( $user_id ) {
+	return null;
+}
+
+function get_user_meta( $user_id, $key = '', $single = false ) {
+	return '';
+}
+
+/**
  * Minimal stand-in for $wpdb, covering only what the methods under test
  * actually call: get_results() (a flat list, e.g. approved partners),
  * get_row()/get_var() keyed by an id embedded in prepare()'s output, and

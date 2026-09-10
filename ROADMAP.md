@@ -6,8 +6,8 @@ solar.gemzonline.com and homes.gemzonline.com). Unlike `SWAP-with-HOMES.md`
 current — update it in place as features land or plans change, rather than
 appending entries.
 
-Last written: 2026-09-08, by the Solar Referral session. Current
-`GAS_VERSION`: 2.7.1 / `GAS_DB_VERSION`: 15.
+Last written: 2026-09-09, by the Solar Referral session. Current
+`GAS_VERSION`: 2.8.0 / `GAS_DB_VERSION`: 16.
 
 **Since this was first written (2026-09-06)**: shipped self-signup
 affiliates auto-matched to every partner marked "Open to self-signup" with
@@ -29,8 +29,21 @@ paid tracking, accountant-ready CSV export), a **$50 minimum payout
 threshold**, **fraud filtering** (disposable-email/bot-UA/IP-rate-limit
 checks, no paid API), a **marketing-assets facility** for affiliates
 (reusing WP's media library), and a **compliance footer** on every
-customer- and affiliate-facing email. Full detail in `SWAP-with-HOMES.md`
-2026-09-07/08.
+customer- and affiliate-facing email. Also added, later the same day: a
+real **unsubscribe mechanism** across all three contact types ahead of
+Cary hooking up an external ESP (Kit/ConvertKit free tier), and the
+Segments CSV export now respects it.
+
+**2026-09-09**: Cary reasoned through a real policy question — should
+self-referral (one person as both affiliate and customer on their own
+sale) be allowed — and reached a considered "yes, with a narrower guard
+elsewhere" answer rather than a blanket "never" (see "Self-referral &
+tier-stacking" below for the reasoning and what shipped: self-referral is
+now allowed at click time, a non-blocking tier-stacking identity flag
+covers the actual risk, and a **customer cashback claim flow** was built
+from scratch — previously only a math placeholder existed, `cashback_paid`
+was never actually set anywhere). Full detail in `SWAP-with-HOMES.md`
+2026-09-09.
 
 ## What it does today (verified against the actual code, not memory)
 
@@ -48,10 +61,66 @@ customer- and affiliate-facing email. Full detail in `SWAP-with-HOMES.md`
 
 **Click tracking & attribution**
 - `/go/{code}` redirect: last-touch attribution (180-day cookie), per-day
-  per-visitor click dedup, self-referral guard (an affiliate clicking their
-  own link isn't cookied or counted).
+  per-visitor click dedup. Self-referral (an affiliate clicking their own
+  `/go/` link) is cookied and counted normally as of 2026-09-09 — see
+  "Self-referral & tier-stacking" below for why. The separate `/join/`
+  recruiting-link guard (an affiliate can't sponsor-cookie themselves via
+  their own recruiting link) is untouched.
 - Two fulfillment modes per partner: `lead_capture` (routes to an on-site
   form) or a direct external `destination_url`.
+
+**Self-referral & tier-stacking** (2026-09-09) — Cary's own reasoning,
+worth preserving here since it drives the design: payouts only fire on a
+partner-confirmed completed sale from a FIXED commission pool, so one real
+person being both the affiliate and the customer on their own real
+transaction doesn't cost the partner anything or manufacture new money —
+it's a reallocation within a pool that was already fixed. The actual risk
+is narrower: a sockpuppet SECOND account stacking an extra sponsor tier on
+top of what's really one person's one transaction, extracting more from
+the pool than a single-person transaction was ever budgeted for. Judged
+low-probability, not worth a blocking system.
+- `GAS_Payouts::compute()` now also returns `tier_stacking`: pairwise
+  compares tier1/tier2/tier3 codes belonging to different `wp_user_id`s
+  for a shared identity signal (payout email, PayPal email, Wise account
+  number, tax ID, or signup IP — the last of these newly recorded at
+  signup, `GAS_Payouts::META_SIGNUP_IP`, purely for this check). A match
+  is audit-logged as `possible_tier_stacking` (both the wp-admin Calculator
+  and the REST payout-creation path) and the payout proceeds regardless —
+  admin reviews the audit log and acts manually on the rare real case.
+
+**Customer cashback claim flow** (`class-gas-cashback.php`, 2026-09-09) —
+previously `cashback_amount` was computed and stored on a payout row, but
+`cashback_paid`/`cashback_paid_at` were schema columns nobody ever wrote
+to; there was no way to identify or pay the customer at all. Now:
+- The Payout Calculator (and REST `create_payout`) accept an optional
+  `customer_email`. If cashback > 0 and an email is given,
+  `GAS_Cashback::send_claim_email()` emails the customer a tokenized claim
+  link.
+- The link is a public, no-login page (`admin-post.php?action=
+  gas_cashback_claim`) bound to that ONE payout row — a customer is never
+  a WP user/account. Token is a deterministic HMAC (payout id + email,
+  keyed on `wp_salt('auth')`), same pattern as
+  `GAS_Contacts::unsubscribe_link()` — no separate token column or expiry
+  bookkeeping. The customer picks PayPal/Wise/other, stored as JSON on the
+  payout row itself (`cashback_payment_details`) since there's no user
+  meta to attach to.
+- Admin sees a masked payment summary + claim status on the Ledger, and a
+  manual "Mark cashback paid" button (`cashback_paid`/`cashback_paid_at`)
+  — matches how affiliate payouts are already manually marked paid outside
+  the PayPal/Wise batch runs; cashback was deliberately NOT wired into
+  those automated batch runs this pass.
+- **Tax aggregation is now per-PERSON, not per-payment-type**:
+  `GAS_Payouts::paid_this_calendar_year()` sums an affiliate's direct +
+  tier-2/3 commission AND any cashback paid to their same email (matched
+  case-insensitively) — since the same person can now legitimately receive
+  both. Two separate sub-$600 buckets that together cross $600 would have
+  been a real tax-reporting gap, not just a theoretical one.
+- **Deliberately not built**: a tax-info gate on cashback itself. A pure
+  customer (never also an affiliate) has no dashboard and no W-9/W-8BEN
+  collection mechanism — if they cross $600/year in cashback alone with no
+  affiliate account, nothing currently catches that. Real gap, out of
+  scope for what was actually asked this pass (aggregation, not a new
+  collection surface) — flagged in `SWAP-with-HOMES.md`.
 
 **Commissions (the real money logic, in `class-gas-payouts.php`)**
 - `GAS_Payouts::compute()` is the single source of truth, used by both the

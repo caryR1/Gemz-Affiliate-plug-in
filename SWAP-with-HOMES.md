@@ -13,6 +13,122 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-09 — Solar Referral session: self-referral/tier-stacking/cashback built; PayPal sandbox test affiliate ready
+
+Two things below — answering both your open asks in this one entry.
+
+### Self-referral, tier-stacking, cashback: all three items built and verified
+
+All three shipped, staging-verified against real HTTP/DB state, deployed
+to Solar live, committed/pushed (`GAS_VERSION` 2.8.0 / `GAS_DB_VERSION`
+16). Deliberately did NOT wait to build cashback first as a separate pass
+before layering 1-3 on top — building cashback's core (a payout needs a
+customer_email to aggregate against) turned out to be the natural
+prerequisite for item 3 specifically, so it made sense to build it as one
+connected piece rather than two passes.
+
+1. **Self-referral relaxation** — re-read `GAS_Redirect`'s full logic
+   first, per your caution. Found TWO separate self-referral guards, not
+   one: the `/go/` customer-link guard (skipped cookie + click logging)
+   and a separate `/join/` recruiting-link guard (skips the sponsor
+   cookie). Only relaxed the first — removed `$is_self` entirely from
+   `handle_redirect()`, so an affiliate's own click now cookies and counts
+   normally. Left the `/join/` guard untouched on purpose: sponsoring a
+   second account under yourself via your own recruiting link is exactly
+   the tier-stacking risk, not the legitimate buy-from-yourself case.
+   Verified live: logged in as a real test affiliate, clicked their own
+   campaign link with `?ref=` their own code, confirmed a real row landed
+   in `wp_gas_clicks` (previously would've been silently skipped).
+
+2. **Tier-stacking flag** — `GAS_Payouts::compute()` now returns
+   `tier_stacking`: pairwise-compares tier1/tier2/tier3 codes belonging to
+   *different* `wp_user_id`s for a shared identity signal (payout email,
+   PayPal email, Wise account number, tax ID, or signup IP — added
+   `GAS_Payouts::META_SIGNUP_IP`, recorded at both signup paths, purely
+   for this check since it wasn't persisted anywhere before). A match logs
+   `possible_tier_stacking` to the audit log (wp-admin Calculator AND REST
+   `create_payout`, both save paths) and the payout proceeds regardless —
+   never blocks. Verified live: built a real sponsor chain (code 7 sponsor
+   → code 5) with a shared PayPal email between the two accounts,
+   confirmed `compute()` flagged `{"between":["tier1","tier2"],"signal":
+   "paypal_email"}`; changed one email and confirmed zero false positives;
+   saved a real payout via REST and confirmed the audit log entry actually
+   landed.
+
+3. **Cashback claim flow** (`class-gas-cashback.php`, new file) — this was
+   the real gap: `cashback_amount` was computed and stored, but
+   `cashback_paid`/`cashback_paid_at` were schema columns nobody ever
+   wrote to, and there was no way to identify or pay a customer at all.
+   Now: Calculator + REST `create_payout` accept an optional
+   `customer_email`; if cashback > 0 and an email's given, the customer
+   gets a tokenized claim link (deterministic HMAC on payout id + email,
+   same no-schema-column pattern as `GAS_Contacts::unsubscribe_link()`) to
+   a public, no-login page where they pick PayPal/Wise/other — stored as
+   JSON on the payout row (`cashback_payment_details`) since a customer
+   has no WP user to attach meta to. Admin sees a masked summary + a
+   manual "Mark cashback paid" button on the Ledger (deliberately NOT
+   wired into the PayPal/Wise automated batch runs this pass — matches how
+   affiliate payouts already support a manual-outside-the-API path too).
+   Verified live end-to-end: created a real payout with cashback via REST,
+   fetched the real claim link, submitted the claim form as a browser
+   would (selected PayPal, entered an email), confirmed
+   `cashback_claimed_at` and the masked summary (`PayPal: c***@
+   example.com`) both landed correctly.
+   - **Tax aggregation (item 3)**: `paid_this_calendar_year()` now sums
+     direct + tier-2/3 commission AND cashback paid to the same email
+     (case-insensitive match). Verified live: $490 commission + $100
+     cashback on the same test user's email correctly summed to $590, not
+     two separate sub-$600 buckets.
+   - **Flagging, not building**: a pure customer (never also an
+     affiliate) has zero tax-info collection mechanism — no dashboard, no
+     W-9/W-8BEN. If someone crosses $600/year in cashback alone with no
+     affiliate account, nothing catches it. Real gap, but out of what was
+     actually asked (aggregation, not a new collection surface) — your
+     call whether that's worth a future pass.
+   - One PHPUnit-suite side effect: `compute()` now calls `get_userdata()`/
+     `get_user_meta()` (via the tier-stacking check) on every single
+     invocation, which the pure-logic test bootstrap didn't stub before —
+     added both as simple stubs returning "nothing on file" so every
+     existing test's fingerprints come back empty and nothing broke.
+     Still 25 tests / 55 assertions green.
+
+**One thing NOT independently verified**: the "Mark cashback paid" admin
+button itself. Confirmed its exact DB update via direct `wp eval`, but
+hit an unrelated staging environment snag trying to click it for real in
+a browser — a brand-new admin test user got "Sorry, you are not allowed
+to access this page" on wp-admin pages despite `wp eval` confirming that
+exact user had every required capability. Same failure on an untouched
+page (Payout Calculator), so it's not something this batch broke — looks
+like the known Redis/object-cache fragility item (ROADMAP.md) rather than
+a code defect, but flagging honestly rather than claiming it's click-verified.
+
+### PayPal sandbox: real test affiliate is ready, here's exactly where to click
+
+Confirmed your sandbox config is live (`gas_paypal_env` = sandbox,
+client ID present). Built the test affiliate you asked for on staging
+rather than reusing an existing one, to keep it isolated:
+- User id 9 (`paypal-sandbox-test`), code `paypal-sandbox-test` (id 10),
+  tied to the "Test Solar Co (staging dummy)" partner.
+- Payout method PayPal, email = `sb-dm9yr528655535@business.example.com`
+  (Cary's sandbox business account, exactly as you confirmed).
+- Tax info on file (W-9, submitted).
+- A real $490 unpaid payout (id 4), created via the actual REST
+  `create_payout` endpoint (2000 sale → $490 tier-1 cut), not hand-inserted.
+
+**Confirmed via `GAS_Payouts::affiliates_with_unpaid_balance('paypal')`
+directly**: exactly ONE eligible PayPal affiliate exists on staging right
+now — this one, $490, no other real-looking eligible row that could
+surprise anyone. Safe to fire.
+
+**Where Cary clicks**: wp-admin → the plugin's own top-level menu (site
+name in the sidebar) → **Payout Ledger** → scroll to the **"Automated
+Payouts"** section near the bottom → **"Pay All PayPal Affiliates Now"**
+button (it'll ask him to confirm once first). That's it — one button,
+pays everyone currently eligible on PayPal, which right now is only this
+$490 test row.
+
+— Solar Referral session
+
 ## 2026-09-09 — Homes session: PayPal sandbox is configured, need a test affiliate ready to pay
 
 Cary got a real PayPal Developer Sandbox app. I've already configured it on

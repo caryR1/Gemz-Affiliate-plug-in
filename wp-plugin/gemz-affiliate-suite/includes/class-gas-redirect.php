@@ -128,11 +128,21 @@ class GAS_Redirect {
 			) );
 		}
 
-		// Self-referral guard: an affiliate clicking their own link while
-		// logged in as themselves doesn't get a cookie or a logged click —
-		// otherwise they could trivially inflate their own click count or
-		// (if a sale were later attributed automatically) their own payout.
-		$is_self = $code && $code->wp_user_id && is_user_logged_in() && get_current_user_id() === (int) $code->wp_user_id;
+		// Self-referral is allowed as of 2026-09-08 (Cary's call): payouts
+		// only fire on a partner-confirmed completed sale from a fixed
+		// commission pool, so one real person being both the affiliate and
+		// the customer on a single real transaction doesn't cost the
+		// partner anything or manufacture new money — it's a reallocation
+		// within a pool that was already fixed, not free money. The actual
+		// risk (sockpuppet accounts stacking multiple sponsor tiers of that
+		// same fixed pool) is guarded separately at payout time — see
+		// GAS_Payouts' tier-stacking audit flag — not here at click time.
+		// This class still has a SEPARATE self-referral guard in
+		// handle_join_redirect() for the /join/ recruiting link, which is
+		// intentionally untouched: that one guards against an affiliate
+		// creating a second account under their own sponsorship, which is
+		// exactly the tier-stacking concern, not the legitimate
+		// buy-from-yourself case this guard used to block.
 
 		// The campaign cookie is set independent of whether ref resolved,
 		// so an organic (no-ref) click through a campaign link still
@@ -149,7 +159,7 @@ class GAS_Redirect {
 			)
 		);
 
-		if ( $code && ! $is_self ) {
+		if ( $code ) {
 			// Last-touch attribution: overwrite any existing cookie unconditionally,
 			// so whichever code was clicked most recently is the one that counts,
 			// for up to COOKIE_DAYS. Simple overwrite is what makes this last-touch
@@ -167,9 +177,7 @@ class GAS_Redirect {
 			);
 		}
 
-		if ( ! $is_self ) {
-			self::maybe_log_click( $campaign, $code, $partner );
-		}
+		self::maybe_log_click( $campaign, $code, $partner );
 
 		// A campaign can override where it lands (a custom on-site page);
 		// otherwise it falls through to the partner's own normal

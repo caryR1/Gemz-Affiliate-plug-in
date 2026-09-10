@@ -236,6 +236,7 @@ class GAS_Frontend {
 		GAS_Fraud::record_signup_attempt( $signup_ip );
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
+		update_user_meta( $user_id, GAS_Payouts::META_SIGNUP_IP, $signup_ip );
 		if ( '' !== $phone ) {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}
@@ -647,6 +648,7 @@ class GAS_Frontend {
 		GAS_Fraud::record_signup_attempt( $signup_ip );
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
+		update_user_meta( $user_id, GAS_Payouts::META_SIGNUP_IP, $signup_ip );
 		if ( '' !== $phone ) {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}

@@ -13,6 +13,70 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: automated monthly payout run + held-affiliate notifications + Codes simplification
+
+Three related decisions from a real discussion with Cary, all now settled.
+
+### 1. Codes screen: fold into Affiliates, drop as a top-level menu item
+
+Its original main job (manually matching a new affiliate's code to a
+partner) is gone now that campaigns auto-provision that. What's left —
+manually adding an offline-referral code, auditing/deactivating a code —
+fits better as a section on the Affiliates screen than its own menu entry.
+Not moving it into Settings specifically (Settings holds config values,
+not per-row data — would be a structural mismatch); Affiliates is the
+better home since codes are really affiliate sub-records now.
+
+### 2. Held-affiliate notifications — encouraging, no specific dollar figures
+
+Real gap, confirmed by checking directly: `affiliates_with_unpaid_balance()`
+tracks `no_tax_info`/`below_threshold` holds and reports them to the
+*admin* in the batch-run summary, but nothing ever tells the affected
+affiliate. Fix: a notification on each hold reason.
+- **Explicitly no specific earnings numbers** (Cary's call, after I raised
+  an FTC/income-claim caution around citing a top-earner figure) — generic
+  encouraging language only ("you missed a payment this cycle" + a nudge
+  toward what would help: recruiting/activating their team, making another
+  referral). Fits the existing editable-template system as new event keys,
+  e.g. `payout_held_no_tax_info` / `payout_held_below_threshold`.
+
+### 3. Automated monthly payout run — real design, three real requirements
+
+Currently "Pay All PayPal/Wise Affiliates Now" is manual-click-only.
+Cary wants this to become a scheduled, automatic monthly run — but was
+explicit **all three of the following are required, not optional**:
+
+- **Fires automatically, no admin click** — but with an admin-facing
+  **pause toggle** (Settings or Payout Ledger) that skips the scheduled
+  run if flipped on, for when something needs manual intervention first.
+  Doesn't need to be more complex than a simple on/off — Cary's own
+  framing was "in case we run into a problem," not a per-cycle workflow.
+- **Real server-level cron, not WP-Cron.** WP-Cron only fires on site
+  traffic and can silently slip — fine for the existing stale-lead check,
+  not acceptable for firing real money transfers on a schedule. Needs an
+  actual Hostinger cron job hitting an authenticated endpoint (a token-
+  protected REST route or similar), not `wp_schedule_event()`.
+- **Must only pay out CLOSED prior months, not just "any unpaid balance
+  right now."** Checked `affiliates_with_unpaid_balance()` directly — it
+  has zero date awareness today, so a payout entered on the 3rd of the new
+  month would currently get swept into a run firing on the 5th, even
+  though that's this month's still-open earnings. This needs a real fix —
+  a month-boundary filter (only payouts from before the 1st of the current
+  month), and it should apply consistently whether the batch is triggered
+  by the new automatic run OR the existing manual "Pay All" button, not
+  just the new path, so behavior stays consistent either way. Ties
+  directly into the dashboard's existing pending-vs-finalized concept
+  (`render_pending_and_finalized_section()`) — these were two disconnected
+  code paths before, worth aligning them now.
+
+**Schedule specifics**: configurable day-of-month in Settings, default the
+5th. Cary's reasoning: the previous month closes on the 1st, the first
+4 days of the new month are the admin's window to verify/fix anything
+(tax info, holds, etc.) before the run fires, and running on the 5th means
+affiliates see their money within the first week.
+
+— Homes session
+
 ## 2026-09-10 — Solar Referral session: dashboard restyled; Test Solar Co now has a linked account
 
 Two things, both done and verified on staging.

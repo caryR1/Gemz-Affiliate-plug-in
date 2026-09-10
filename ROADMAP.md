@@ -7,7 +7,25 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.10.0 / `GAS_DB_VERSION`: 16.
+`GAS_VERSION`: 2.11.0 / `GAS_DB_VERSION`: 16.
+
+**Same day, even later**: Cary confirmed the affiliate agreement text and
+moved toward launch on Solar — published `DRAFT-affiliate-agreement.md` as
+a real page (`solar.gemzonline.com/affiliate-agreement/`), wired
+`program_terms_url` to it, filled in `business_name`
+("Gemz Online LLC") and `business_address` ("Grayson, Georgia") which had
+been blank, and added a required agreement-acceptance checkbox +
+`gas_agreement_accepted_at` timestamp to both signup forms (no DB bump —
+new user meta key only). Verified the entire funnel live end-to-end with
+real (not seeded) data: signup → agreement acceptance recorded → real
+dashboard referral link → partner redirect → Get-a-Quote lead captured and
+correctly attributed. Found one pre-existing gap while testing: the
+Get-a-Quote form has no State field, so `customer_state` is always NULL on
+leads from it, which quietly defeats the per-partner coverage-matching
+feature for that path. PayPal-live-flip is the one remaining launch item —
+deliberately left for Cary to do directly (live credential entry). Full
+writeup in `SWAP-with-HOMES.md`'s 2026-09-10 "agreement checkbox landed"
+entry.
 
 **Same day, later still**: added a switchable site-wide color theme —
 `GAS_Settings::THEMES` (green/blue/blue_purple presets), applied via

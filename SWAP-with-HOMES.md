@@ -13,6 +13,70 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar session: agreement checkbox landed (2.11.0), full funnel tested live on Solar
+
+Cary confirmed the affiliate agreement text and said to move toward launch.
+Landed the piece that was deliberately held until that confirmation, plus
+did the business-info fill-in and a real click-through — this entry is
+Solar-specific, nothing here touches Home's plugin files, just documenting
+in case the same pattern (agreement checkbox, business info) comes up for
+Home later.
+
+**What shipped** (`GAS_VERSION` 2.11.0, no DB bump — new user meta key
+only, no schema change):
+- Published `DRAFT-affiliate-agreement.md`'s text as a real page,
+  `https://solar.gemzonline.com/affiliate-agreement/` (post ID 188), and
+  set `gas_settings.program_terms_url` to it.
+- Set `business_name` = "Gemz Online LLC" and `business_address` =
+  "Grayson, Georgia" in `gas_settings` (both were blank before). Cary's
+  dictation said "Gems" without the z; went with "Gemz" since that's what
+  the confirmed agreement text and the rest of the site already use — the
+  doc itself already flagged this exact same slip once before.
+- Added a required "I agree to the Affiliate Program Agreement" checkbox
+  (linking to `program_terms_url`, or plain text if a site hasn't set one)
+  to both signup forms — `render_signup()`/`handle_signup()` and
+  `render_signup_or_refer()`/`handle_signup_or_refer()` in
+  `class-gas-frontend.php`. Server-side validated (`agree_terms` POST
+  field) on both new-account-creation code paths; NOT required on the
+  "attach referral to an existing affiliate" branch since that path
+  doesn't create an account. Acceptance timestamp stored as
+  `gas_agreement_accepted_at` user meta (`current_time('mysql')`) at the
+  moment the account is created.
+
+**Verified live, not just deployed** — did a real click-through as a cold
+user would, not seeded test data:
+1. Signed up a real new affiliate through `/become-an-affiliate/` (tested
+   the unchecked-box case first — browser's native `required` blocked
+   submit and scrolled to the checkbox, confirming the field is wired).
+   Confirmed server-side via SSH: `gas_agreement_accepted_at` recorded,
+   active referral code generated.
+2. Used that new affiliate's own real dashboard link (
+   `/go/go-solar-power?ref=cary-test-affiliate`, i.e. the actual
+   `campaign-tracking-slug?ref=affiliate-code` format `build_link()`
+   produces — not a guessed `/go/{affiliate-code}` URL, which doesn't
+   resolve to anything since campaign slug and affiliate code are
+   different things) and confirmed it redirects correctly to the lead
+   partner's Get-a-Quote flow.
+3. Submitted a real Get-a-Quote lead as a cold customer would. Confirmed
+   in `wp_gas_leads`: correctly attributed to the affiliate's code, right
+   partner, all fields captured.
+
+**One thing noticed, not fixed** (pre-existing, not introduced by this
+batch): the on-site Get-a-Quote form only has a free-text Address field,
+no separate State field, so `customer_state` lands NULL on every lead —
+the per-partner coverage-matching feature (FL/TX/GA/CA for Go Solar Power)
+can't actually use it for leads coming through this specific form. Whoever
+picks this up next: either add a State field to Get-a-Quote, or parse it
+out of the address text.
+
+PayPal-live-flip is still open — that's a live financial credential entry,
+which Solar's session doesn't do itself even with Cary's authorization
+(same category as never typing a password into a login form). Left for
+Cary to do directly in wp-admin (Ledger screen's Automated Payouts
+section) or wp-cli, once he's ready.
+
+---
+
 ## 2026-09-10 — Homes session: version-gap deploy done — Home is on 2.10.0, verified live
 
 Closed the gap you found (2.5.0 → 2.9.0) plus landed the color-theme work

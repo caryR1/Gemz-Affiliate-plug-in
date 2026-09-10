@@ -201,12 +201,29 @@ class GAS_Frontend {
 				<input type="password" id="gas_password2" name="password2" required minlength="8" class="gas-input">
 			</p>
 			<p>
+				<label><input type="checkbox" name="agree_terms" value="1" required> <?php echo self::agreement_checkbox_label(); ?></label>
+			</p>
+			<p>
 				<button type="submit" class="gas-button">Sign up</button>
 			</p>
 			<p class="gas-fineprint">Already have an account? <a href="<?php echo esc_url( self::dashboard_url() ); ?>">Log in on your dashboard</a>.</p>
 		</form>
 		<?php
 		return ob_get_clean();
+	}
+
+	/**
+	 * Shared markup for the agreement-acceptance checkbox label, used by
+	 * both signup forms. Links to program_terms_url when set; falls back
+	 * to plain text (no link) if a site hasn't published its terms page
+	 * yet, rather than linking to a blank/broken URL.
+	 */
+	private static function agreement_checkbox_label() {
+		$terms = GAS_Settings::get( 'program_terms_url' );
+		if ( $terms ) {
+			return 'I agree to the <a href="' . esc_url( $terms ) . '" target="_blank" rel="noopener">Affiliate Program Agreement</a>.';
+		}
+		return 'I agree to the Affiliate Program Agreement.';
 	}
 
 	public static function handle_signup() {
@@ -239,6 +256,9 @@ class GAS_Frontend {
 		if ( $password !== $password2 ) {
 			$fail( 'Passwords do not match.' );
 		}
+		if ( empty( $_POST['agree_terms'] ) ) {
+			$fail( 'Please check the box to agree to the Affiliate Program Agreement.' );
+		}
 		if ( email_exists( $email ) ) {
 			$fail( 'That email is already registered. Try logging in instead.' );
 		}
@@ -268,6 +288,7 @@ class GAS_Frontend {
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
 		update_user_meta( $user_id, GAS_Payouts::META_SIGNUP_IP, $signup_ip );
+		update_user_meta( $user_id, 'gas_agreement_accepted_at', current_time( 'mysql' ) );
 		if ( '' !== $phone ) {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}
@@ -543,6 +564,9 @@ class GAS_Frontend {
 			</div>
 
 			<p>
+				<label><input type="checkbox" name="agree_terms" value="1" required> <?php echo self::agreement_checkbox_label(); ?></label>
+			</p>
+			<p>
 				<button type="submit" class="gas-button" id="gas-submit-btn">Sign up</button>
 			</p>
 			<p class="gas-fineprint">Already have an account? <a href="<?php echo esc_url( self::dashboard_url() ); ?>">Log in on your dashboard</a>.</p>
@@ -655,6 +679,9 @@ class GAS_Frontend {
 		if ( $password !== $password2 ) {
 			$fail( 'Passwords do not match.' );
 		}
+		if ( empty( $_POST['agree_terms'] ) ) {
+			$fail( 'Please check the box to agree to the Affiliate Program Agreement.' );
+		}
 		if ( GAS_Fraud::is_disposable_email( $email ) ) {
 			$fail( 'Please use a permanent email address — temporary/disposable email services aren\'t accepted for affiliate signup.' );
 		}
@@ -680,6 +707,7 @@ class GAS_Frontend {
 
 		update_user_meta( $user_id, 'gas_status', 'active' );
 		update_user_meta( $user_id, GAS_Payouts::META_SIGNUP_IP, $signup_ip );
+		update_user_meta( $user_id, 'gas_agreement_accepted_at', current_time( 'mysql' ) );
 		if ( '' !== $phone ) {
 			update_user_meta( $user_id, 'gas_phone', $phone );
 		}

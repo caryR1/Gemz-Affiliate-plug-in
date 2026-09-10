@@ -13,6 +13,72 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: full affiliate-dashboard restructure — 1 page split into 4, please review carefully before this goes anywhere live
+
+Cary got real user-testing feedback (a friend reviewed it) that the
+dashboard's information architecture was genuinely bad — money buried
+inside a "Your links" panel, "Change password" given the same visual
+weight as the unpaid balance, a downline table that couldn't show who was
+recruited by whom. Walked him through the specific problems (with a real
+screenshot from Solar's live dashboard, not just code-reading), agreed a
+plan with him, built it. **This is a big diff** (~400 lines in
+class-gas-frontend.php) — flagging clearly for a real review, not a skim.
+
+**What changed, structurally:**
+- Split into 4 pages: `gas_affiliate_dashboard` (kept — now "Overview,"
+  the hero/landing page: balance, paid-to-date, link count, team size, the
+  one link's full share widget if there's only one partner) +
+  3 new shortcodes/pages — `gas_affiliate_links` ("My Links & Earnings" —
+  the per-partner cards + tier-earnings table, merged since they're one
+  story), `gas_affiliate_team` ("My Team" — downline + both recruiting
+  actions, which used to live in two disconnected spots), `gas_affiliate_account`
+  ("Account" — password/payment/tax/dashboard-color, separated from
+  performance content). New page-id options follow the existing
+  `create_or_adopt_page()` pattern exactly, added to `PAGE_ID_OPTIONS` in
+  class-gas-rest.php too. `dashboard_url()` deliberately kept pointing at
+  the SAME page/shortcode as before (Overview) — it's baked into login
+  redirects, signup-confirmation emails, and "go to your dashboard" copy
+  throughout the plugin, so repointing it would've meant hunting all of
+  that down; the other 3 pages are net-new instead.
+- A shared subnav (`render_dashboard_subnav()`) ties all 4 together,
+  shown at the top of each. Factored the duplicated login/preview/
+  suspension/notice boilerplate that used to be inline in
+  `render_dashboard()` into `dashboard_page_open()`/`dashboard_page_close()`
+  so the other 3 pages don't reimplement it.
+- Fixed every save-handler's redirect (password/payment/tax/theme/
+  add-referral) to bounce back to the page it actually lives on now
+  (Account or Team) instead of always Overview — was a real gap I'd have
+  introduced otherwise, a saved password would've dropped you somewhere
+  with no password form on it.
+- Downline table is now a real tree, not a flat list — indirect recruits
+  are grouped and indented under their actual direct-recruit parent
+  (`sponsor_code_id`-matched), instead of a text "Direct"/"Their recruit"
+  column with no way to tell who belongs to whom.
+- 5 share buttons on every link (`render_share_buttons()`): Copy Link,
+  WhatsApp, Facebook, Text Message, Email — all real share-by-URL intents
+  — plus Instagram, which does NOT get a real one (Instagram has no
+  public share-with-prefilled-message endpoint, by design — they don't
+  allow clickable links in ordinary posts either) — it copies text to the
+  clipboard and opens Instagram instead, rather than faking a dead button.
+  Icons render in `var(--gas-accent)`, the site's own theme color, not
+  each platform's brand color — Cary's explicit call, so the row reads as
+  "this site's share buttons."
+- Capability icons now labeled "Services:" instead of bare unlabeled
+  icons — Cary's direct ask, "label liberally," applied more broadly too
+  (coverage area, link stats, etc. all got explicit `<strong>` labels
+  they didn't have before).
+
+**What I have NOT done — genuinely important**: this has not been
+deployed anywhere, not staging, not Solar, not Home. I checked it
+carefully by reading (method list, brace balance, redirect targets, the
+`DASHBOARD_FAMILY`/`dashboard_page_open()` plumbing end to end) but there's
+no PHP available in my shell to lint it, and I have no live rendering to
+point to — unlike the WooCommerce bug earlier today, I did NOT click
+through this one myself. Please actually load all 4 pages (and the
+admin-preview flow) on staging before this reaches a real affiliate.
+
+— Homes session
+
 ## 2026-09-10 — Solar session: WooCommerce admin-access bug fixed (2.14.1) — needs your visual verification on Home
 
 Landed your proposed fix as-is — it was the right call: hooked

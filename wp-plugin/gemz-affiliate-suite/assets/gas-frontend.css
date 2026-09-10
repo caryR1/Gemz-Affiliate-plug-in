@@ -1,14 +1,14 @@
 .gas-form{max-width:480px;font-size:16px;}
 .gas-form label{font-weight:600;}
-.gas-input{width:100%;padding:.6em .7em;margin-top:.3em;border:1.5px solid #CFE3D2;border-radius:4px;font-size:1em;box-sizing:border-box;}
-.gas-button{background:#3F8353;color:#fff;border:none;padding:.7em 1.4em;border-radius:4px;font-size:1em;cursor:pointer;}
-.gas-button:hover{background:#193421;}
+.gas-input{width:100%;padding:.6em .7em;margin-top:.3em;border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:4px;font-size:1em;box-sizing:border-box;}
+.gas-button{background:var(--gas-accent,#3F8353);color:#fff;border:none;padding:.7em 1.4em;border-radius:4px;font-size:1em;cursor:pointer;}
+.gas-button:hover{background:var(--gas-accent-dark,#193421);}
 .gas-fineprint{font-size:.85em;opacity:.75;}
-.gas-notice{background:#E4F6E2;border-radius:6px;padding:1em 1.2em;margin-bottom:1.2em;}
+.gas-notice{background:var(--gas-accent-tint,#F7FBF7);border-radius:6px;padding:1em 1.2em;margin-bottom:1.2em;}
 .gas-notice-success{background:#E4F6E2;}
 .gas-notice-error{background:#fbeaea;color:#7a1f1f;}
 .gas-dashboard h2{margin-top:1.6em;}
-.gas-code-card{border:1.5px solid #CFE3D2;border-radius:6px;padding:1em 1.2em;margin-bottom:1em;}
+.gas-code-card{border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:6px;padding:1em 1.2em;margin-bottom:1em;}
 .gas-stat-row{display:flex;gap:1.5em;margin-top:.6em;flex-wrap:wrap;}
 .gas-stat-num{display:block;font-weight:700;font-size:1.4em;color:var(--gas-accent,#3F8353);}
 .gas-stat-label{display:block;font-size:.8em;opacity:.75;}
@@ -45,7 +45,7 @@
 .gas-toggle-btn:hover{opacity:.85;}
 .gas-toggle-btn.gas-toggle-active{background:var(--gas-accent,#3F8353);color:#fff;}
 .gas-payout-range{background:var(--gas-accent-tint,#F7FBF7);border-radius:10px;padding:1em 1.3em;margin-bottom:1.3em;font-size:1.05em;}
-.gas-referral-fields{border-top:1.5px dashed #CFE3D2;margin-top:1em;padding-top:1em;}
+.gas-referral-fields{border-top:1.5px dashed var(--gas-accent-border,#CFE3D2);margin-top:1em;padding-top:1em;}
 .gas-referral-fields h3{margin-top:0;}
 
 /* Blurb/capability tap-to-reveal icons on each per-link dashboard card —

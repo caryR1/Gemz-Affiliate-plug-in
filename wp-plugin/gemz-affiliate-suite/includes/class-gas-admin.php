@@ -2342,6 +2342,20 @@ class GAS_Admin {
 
 		echo '<tr><th><label for="menu_icon">Admin menu icon</label></th><td><input type="text" id="menu_icon" name="menu_icon" class="regular-text" value="' . esc_attr( $settings['menu_icon'] ) . '"> <p class="description">A <a href="https://developer.wordpress.org/resource/dashicons/" target="_blank" rel="noopener">dashicon</a> slug, e.g. dashicons-groups.</p></td></tr>';
 
+		echo '<tr><th>Color theme</th><td>';
+		echo '<p class="description">Sets this site\'s color on every public-facing page (signup, dashboard, partner portal, help). Doesn\'t affect wp-admin screens.</p>';
+		echo '<div style="display:flex;gap:1em;flex-wrap:wrap;">';
+		foreach ( GAS_Settings::THEMES as $key => $palette ) {
+			$checked = checked( $settings['theme'], $key, false );
+			echo '<label style="display:flex;align-items:center;gap:.5em;border:1.5px solid ' . ( $settings['theme'] === $key ? esc_attr( $palette['accent'] ) : '#dcdcde' ) . ';border-radius:8px;padding:.6em 1em;cursor:pointer;">';
+			echo '<input type="radio" name="theme" value="' . esc_attr( $key ) . '"' . $checked . '> ';
+			echo '<span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:' . esc_attr( $palette['accent'] ) . ';border:1px solid rgba(0,0,0,.15);"></span> ';
+			echo esc_html( $palette['label'] );
+			echo '</label>';
+		}
+		echo '</div>';
+		echo '</td></tr>';
+
 		echo '<tr><th>Commission tier split</th><td>';
 		echo '<p class="description">The gross commission on a sale is a fixed pool, split across up to 3 tiers by these percentages &mdash; the same split for every affiliate, not individually negotiable. Total payout never grows with recruiting depth: if a tier has no one in it (e.g. the affiliate has no sponsor), that tier\'s share simply stays with you rather than going to anyone else.</p>';
 		echo 'Tier 1 (the affiliate): <input type="number" step="0.01" min="0" max="100" name="tier1_split_percent" value="' . esc_attr( $settings['tier1_split_percent'] ) . '" style="width:80px"> % &nbsp; ';
@@ -2394,6 +2408,7 @@ class GAS_Admin {
 			'partner_label'             => isset( $_POST['partner_label'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_label'] ) ) : 'partner',
 			'conversion_noun'           => isset( $_POST['conversion_noun'] ) ? sanitize_text_field( wp_unslash( $_POST['conversion_noun'] ) ) : 'installation',
 			'menu_icon'                 => isset( $_POST['menu_icon'] ) ? sanitize_text_field( wp_unslash( $_POST['menu_icon'] ) ) : 'dashicons-groups',
+			'theme'                     => ( isset( $_POST['theme'] ) && array_key_exists( $_POST['theme'], GAS_Settings::THEMES ) ) ? sanitize_text_field( wp_unslash( $_POST['theme'] ) ) : 'green',
 			'tier1_split_percent'       => isset( $_POST['tier1_split_percent'] ) ? (float) $_POST['tier1_split_percent'] : 70,
 			'tier2_split_percent'       => isset( $_POST['tier2_split_percent'] ) ? (float) $_POST['tier2_split_percent'] : 20,
 			'tier3_split_percent'       => isset( $_POST['tier3_split_percent'] ) ? (float) $_POST['tier3_split_percent'] : 10,

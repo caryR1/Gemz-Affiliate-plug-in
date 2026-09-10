@@ -73,6 +73,11 @@ class GAS_Frontend {
 			foreach ( self::STYLED_SHORTCODES as $tag ) {
 				if ( self::post_has_shortcode( $post, $tag ) ) {
 					wp_enqueue_style( 'gas-frontend', plugins_url( 'assets/gas-frontend.css', GAS_PLUGIN_FILE ), array(), GAS_VERSION );
+					// This site's chosen color theme (2026-09-10) — every
+					// themeable color in gas-frontend.css keys off these
+					// --gas-accent* custom properties, so overriding them
+					// here is the entire mechanism, no per-page CSS needed.
+					wp_add_inline_style( 'gas-frontend', GAS_Settings::theme_css_vars() );
 					break;
 				}
 			}

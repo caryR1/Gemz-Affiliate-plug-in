@@ -629,7 +629,7 @@ class GAS_REST {
 			}
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id', 'min_payout_threshold', 'business_name', 'business_address', 'program_terms_url', 'payout_run_day', 'payout_run_paused' );
+		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id', 'min_payout_threshold', 'business_name', 'business_address', 'program_terms_url', 'payout_run_day', 'payout_run_paused', 'theme' );
 		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_image_id', 'min_payout_threshold' );
 		$boolean  = array( 'payout_run_paused' );
 
@@ -648,6 +648,8 @@ class GAS_REST {
 				$values[ $field ] = sanitize_textarea_field( $body[ $field ] );
 			} elseif ( 'program_terms_url' === $field ) {
 				$values[ $field ] = esc_url_raw( $body[ $field ] );
+			} elseif ( 'theme' === $field ) {
+				$values[ $field ] = array_key_exists( $body[ $field ], GAS_Settings::THEMES ) ? $body[ $field ] : 'green';
 			} else {
 				$values[ $field ] = sanitize_text_field( $body[ $field ] );
 			}

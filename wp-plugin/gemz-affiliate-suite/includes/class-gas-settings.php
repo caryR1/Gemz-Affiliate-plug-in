@@ -73,6 +73,67 @@ class GAS_Settings {
 			// framing ("in case we run into a problem").
 			'payout_run_day'           => 5,
 			'payout_run_paused'        => false,
+			// Color theme (2026-09-10) — which project/site a given
+			// install is running determines its house color, not user
+			// preference: Homes stays 'green' (its site is green
+			// throughout), Solar picks 'blue' or 'blue_purple' (its site
+			// is blue). Only affects public-facing plugin pages —
+			// wp-admin screens are unthemed by design.
+			'theme'                    => 'green',
+		);
+	}
+
+	/**
+	 * The 3 initial presets (2026-09-10) — each a full set of the CSS
+	 * custom properties gas-frontend.css keys every themeable color off
+	 * of. 'green' matches the hex fallbacks already baked into
+	 * gas-frontend.css's var() calls, so picking it changes nothing
+	 * visually; it exists as an explicit choice rather than "just don't
+	 * set a theme" so the settings UI has one obviously-current option
+	 * instead of an implicit default.
+	 */
+	const THEMES = array(
+		'green'       => array(
+			'label'  => 'Green (default)',
+			'accent' => '#3F8353',
+			'dark'   => '#193421',
+			'tint'   => '#F7FBF7',
+			'border' => '#CFE3D2',
+		),
+		'blue'        => array(
+			'label'  => 'Blue',
+			'accent' => '#2E5FA3',
+			'dark'   => '#17325C',
+			'tint'   => '#EEF4FB',
+			'border' => '#CBDCEF',
+		),
+		'blue_purple' => array(
+			'label'  => 'Blue & Purple',
+			'accent' => '#4B4FBD',
+			'dark'   => '#2C2F72',
+			'tint'   => '#F0EFFB',
+			'border' => '#D6D5F2',
+		),
+	);
+
+	/**
+	 * The CSS custom-property declarations for this site's currently
+	 * selected theme, ready to hand to wp_add_inline_style() right after
+	 * gas-frontend.css is enqueued — see GAS_Frontend::enqueue_assets().
+	 * Falls back to 'green' for an unrecognized/removed theme key rather
+	 * than emitting nothing, so a bad stored value can't leave every
+	 * themeable element with no color at all.
+	 */
+	public static function theme_css_vars() {
+		$key     = self::get( 'theme' );
+		$palette = isset( self::THEMES[ $key ] ) ? self::THEMES[ $key ] : self::THEMES['green'];
+
+		return sprintf(
+			':root{--gas-accent:%1$s;--gas-accent-dark:%2$s;--gas-accent-tint:%3$s;--gas-accent-border:%4$s;}',
+			$palette['accent'],
+			$palette['dark'],
+			$palette['tint'],
+			$palette['border']
 		);
 	}
 

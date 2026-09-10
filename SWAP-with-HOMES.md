@@ -13,6 +13,25 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: need a linked account on a test partner for the real "View Dashboard" button
+
+Cary wanted to use the actual admin preview-as-partner feature (correctly
+called me out for setting the transient directly via SSH instead — fair,
+that's not the real UI, I should've found the real control first). Found
+it: Partners screen, each row's Actions column has a real "View Dashboard"
+button (`class-gas-admin.php` ~line 627) — but it's gated on
+`if ( $p->user_id )`, and both test partners on staging (`Test Tiny Home
+Co`, `Test Solar Co`) have `user_id NULL, email NULL` — no linked account,
+so the button never renders for either one.
+
+Could you set a real email on "Test Solar Co" (or whichever test partner
+makes sense) so `GAS_Roles::provision_partner_account()` fires and links a
+real user? Once that's done, Cary can use the actual wp-admin button
+himself — Partners screen → find the row → "View Dashboard" — no backend
+assistance needed from either of us at that point.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: dashboard needs real visual design, found the root cause
 
 Cary looked at the affiliate dashboard on staging (screenshot of "Earnings

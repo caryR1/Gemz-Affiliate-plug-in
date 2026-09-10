@@ -52,6 +52,7 @@ class GAS_DB {
 		if ( get_option( 'gas_db_version' ) !== GAS_DB_VERSION ) {
 			self::create_tables();
 			GAS_Roles::add_role();
+			GAS_Campaigns::migrate_partner_privacy();
 			update_option( 'gas_db_version', GAS_DB_VERSION );
 		}
 	}
@@ -92,6 +93,28 @@ class GAS_DB {
 	 * deliberately leaves these at their defaults: the affiliate
 	 * submitting a friend's phone number is not that friend, and cannot
 	 * consent on their behalf — see the comment there.
+	 *
+	 * Note on partners.partner_alias / campaigns.previous_slug
+	 * (2026-09-10): Homes caught (with Cary) that a real fulfillment
+	 * partner's name was leaking to affiliates — worst of all, baked
+	 * directly into the shareable tracking link itself
+	 * (ensure_default_for_partner() used to build tracking_slug from
+	 * $partner->name). partner_alias is the real name's stand-in shown
+	 * anywhere an affiliate can see it; it's NEVER blank (see
+	 * GAS_Campaigns::ensure_partner_alias(), which backfills a safe
+	 * "{partner_label} #{id}" placeholder the moment a partner exists, no
+	 * gap where the real name could show through). The harder problem —
+	 * real affiliates on both sites already have real-name-slug links
+	 * live — is why previous_slug exists: GAS_Campaigns::migrate_partner_privacy()
+	 * (run once per campaign, from maybe_upgrade()) moves each
+	 * name-derived tracking_slug into previous_slug and generates a fresh
+	 * alias-based one, and GAS_Campaigns::get_by_slug() checks both
+	 * columns — so a link already out in the world keeps working, while
+	 * every new link affiliates copy from their dashboard uses the
+	 * alias-based slug instead. Deliberately NOT a new campaign row per
+	 * partner (would have orphaned that campaign's click history and any
+	 * marketing-asset scoping tied to its campaign_id) — same row, same
+	 * id, just a different slug.
 	 */
 	private static function create_tables() {
 		global $wpdb;
@@ -144,6 +167,7 @@ class GAS_DB {
 			blurb VARCHAR(500) NULL,
 			spotlight_url VARCHAR(500) NULL,
 			capability_tags VARCHAR(500) NULL,
+			partner_alias VARCHAR(191) NULL,
 			notes TEXT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
@@ -299,6 +323,7 @@ class GAS_DB {
 			name VARCHAR(200) NOT NULL,
 			partner_id BIGINT UNSIGNED NOT NULL,
 			tracking_slug VARCHAR(60) NOT NULL,
+			previous_slug VARCHAR(60) NULL,
 			landing_page_id BIGINT UNSIGNED NULL,
 			status VARCHAR(20) NOT NULL DEFAULT 'active',
 			is_default TINYINT(1) NOT NULL DEFAULT 0,
@@ -306,7 +331,8 @@ class GAS_DB {
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY  (id),
 			UNIQUE KEY tracking_slug (tracking_slug),
-			KEY partner_id (partner_id)
+			KEY partner_id (partner_id),
+			KEY previous_slug (previous_slug)
 		) {$charset_collate};
 
 		CREATE TABLE {$campaign_variants} (

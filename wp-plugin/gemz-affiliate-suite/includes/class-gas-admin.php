@@ -441,7 +441,9 @@ class GAS_Admin {
 			echo '<input type="hidden" name="id" value="' . esc_attr( $editing->id ) . '">';
 			echo '<table class="form-table"><tbody>';
 
-			echo '<tr><th>Name</th><td><input type="text" name="name" class="regular-text" required value="' . esc_attr( $editing->name ) . '"></td></tr>';
+			echo '<tr><th>Name</th><td><input type="text" name="name" class="regular-text" required value="' . esc_attr( $editing->name ) . '"> <p class="description">Internal/admin only &mdash; never shown to an affiliate.</p></td></tr>';
+
+			echo '<tr><th>Partner alias</th><td><input type="text" name="partner_alias" class="regular-text" value="' . esc_attr( $editing->partner_alias ?? '' ) . '" placeholder="e.g. Solar Partner 1"> <p class="description">What affiliates see instead of the real name above &mdash; on their dashboard card, and baked into their actual shareable link (yoursite.com/go/{slug from this alias}). Deliberately separate from Name so an affiliate can never see, or share a link revealing, which real partner they\'re promoting. Never leave blank; a safe placeholder is auto-filled if you do.</p></td></tr>';
 
 			echo '<tr><th>Payout type</th><td><select name="payout_type" id="payout_type">';
 			echo '<option value="flat"' . selected( $editing->payout_type, 'flat', false ) . '>Flat amount per sale</option>';
@@ -610,7 +612,7 @@ class GAS_Admin {
 					$cashback = $p->cashback_type ? ( 'percent' === $p->cashback_type ? esc_html( $p->cashback_value ) . '%' : '$' . esc_html( number_format( (float) $p->cashback_value, 2 ) ) . ' flat' ) : '<em>none</em>';
 					$outreach_colors = array( 'new' => '#b32d2e', 'contacted' => '#8a6d00', 'approved' => '#1a7a3c', 'declined' => '#666' );
 					$outreach_color  = $outreach_colors[ $p->outreach_status ] ?? '#666';
-					echo '<td>' . esc_html( $p->name ) . '</td>';
+					echo '<td>' . esc_html( $p->name ) . ( $p->partner_alias ? '<br><span style="font-size:.85em;opacity:.75;">alias: ' . esc_html( $p->partner_alias ) . '</span>' : '' ) . '</td>';
 					echo '<td>' . ( $p->state ? esc_html( $p->state ) : '&mdash;' ) . '</td>';
 					echo '<td>' . ( ( $p->open_to_self_signup ?? 1 ) ? '<span style="color:#1a7a3c;">Yes</span>' : '<span style="color:#666;">No</span>' ) . '</td>';
 					echo '<td style="color:' . esc_attr( $outreach_color ) . ';">' . esc_html( ucfirst( $p->outreach_status ) ) . '</td>';
@@ -689,7 +691,11 @@ class GAS_Admin {
 		}
 		echo '</select></td></tr>';
 
-		echo '<tr><th>Tracking slug</th><td>' . esc_html( home_url( '/go/' ) ) . '<input type="text" name="tracking_slug" style="width:220px;" required value="' . esc_attr( $editing->tracking_slug ?? '' ) . '"> <p class="description">URL-safe, must be unique across every campaign.</p></td></tr>';
+		echo '<tr><th>Tracking slug</th><td>' . esc_html( home_url( '/go/' ) ) . '<input type="text" name="tracking_slug" style="width:220px;" required value="' . esc_attr( $editing->tracking_slug ?? '' ) . '"> <p class="description">URL-safe, must be unique across every campaign.</p>';
+		if ( ! empty( $editing->previous_slug ) ) {
+			echo '<p class="description">Old slug <code>' . esc_html( $editing->previous_slug ) . '</code> still redirects here too, so links already shared under it keep working.</p>';
+		}
+		echo '</td></tr>';
 
 		echo '<tr><th>Landing page</th><td><select name="landing_page_id"><option value="">-- default (use the partner\'s own fulfillment setup) --</option>';
 		foreach ( $pages as $pg ) {
@@ -989,6 +995,16 @@ class GAS_Admin {
 				: '',
 			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
 		);
+
+		// Never save a blank alias over an existing one — an admin
+		// clearing the field shouldn't be able to accidentally let the
+		// real name show through again. ensure_default_for_partner()
+		// below backfills a safe placeholder if this partner somehow has
+		// none at all yet.
+		$posted_alias = isset( $_POST['partner_alias'] ) ? sanitize_text_field( wp_unslash( $_POST['partner_alias'] ) ) : '';
+		if ( '' !== $posted_alias ) {
+			$data['partner_alias'] = $posted_alias;
+		}
 
 		$wpdb->update( GAS_DB::table( 'partners' ), $data, array( 'id' => $id ) );
 		GAS_Roles::provision_partner_account( $id );
@@ -2487,7 +2503,14 @@ class GAS_Admin {
 		<p>An affiliate is allowed to use their own referral link and become their own customer on a real sale — the commission pool is fixed either way, so this doesn't cost anything extra. What's actually flagged (a non-blocking note in the Audit Log, never a block) is a sponsor chain where two different accounts share the same payout email, PayPal/Wise details, tax ID, or signup IP — a signal worth a manual look, not proof of anything by itself.</p>
 
 		<h2>Roles</h2>
-		<p>Administrators have full access. The "Affiliate Program Manager" role can run every screen above but can never install plugins, manage other WordPress users, or touch general site settings — safe to hand to a trusted staff member.</p>
+		<p>Five WordPress roles show up on a site running this plugin — here's what each one actually is:</p>
+		<ul style="list-style:disc;margin-left:1.5em;">
+			<li><strong>Administrator</strong> — full access to everything above, plus the rest of WordPress (plugins, themes, other users, site settings) as usual.</li>
+			<li><strong>Affiliate Program Manager</strong> — a staff role with full run of every screen above, but can never install/activate plugins, edit themes, manage other WordPress users, or touch general site settings. Safe to hand to a trusted staff member who shouldn't have full WordPress access.</li>
+			<li><strong>Demo Admin</strong> — sees every screen above exactly like a Manager, but every save/delete/export/payout action is blocked — a genuinely read-only preview account. Built for showing the product to someone (a prospective buyer, a partner, whoever) without any risk to real data. There's no self-serve invite flow — create the account yourself from Users, same as any WordPress user.</li>
+			<li><strong>Affiliate</strong> — the role a self-signed-up affiliate gets automatically. Front-end only: their own dashboard, links, and account settings. No wp-admin access at all.</li>
+			<li><strong>Fulfillment Partner</strong> — the role a partner's account gets automatically once you add their email on the Partners screen. Logs into the Partner Portal to see and update only their own leads — no visibility into anyone else's data, no wp-admin access.</li>
+		</ul>
 
 		<h2>Front-end pages this plugin manages</h2>
 		<p>Become an Affiliate, Affiliate Dashboard, Affiliate Help, Partner Portal, Partner Help, Get a Quote (lead capture), and FAQ are all auto-created on first activation — safe to move in your nav menu, but avoid changing their slugs since the plugin links to them by page ID.</p>

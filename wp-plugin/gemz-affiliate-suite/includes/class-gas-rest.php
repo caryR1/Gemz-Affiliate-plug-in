@@ -499,12 +499,18 @@ class GAS_REST {
 				'capability_tags'      => ! empty( $body['capability_tags'] ) && is_array( $body['capability_tags'] )
 					? implode( ',', array_intersect( array_map( 'sanitize_key', $body['capability_tags'] ), array_keys( GAS_DB::capability_tags() ) ) )
 					: '',
+				'partner_alias'        => ! empty( $body['partner_alias'] ) ? sanitize_text_field( $body['partner_alias'] ) : null,
 				'notes'                => isset( $body['notes'] ) ? sanitize_text_field( $body['notes'] ) : '',
 				'created_at'           => current_time( 'mysql' ),
 			)
 		);
 
 		GAS_Roles::provision_partner_account( $wpdb->insert_id );
+		// Backfills a safe placeholder alias if the request above didn't
+		// supply one — see the note on partners.partner_alias in
+		// class-gas-db.php; must happen before ensure_default_for_partner()
+		// generates this partner's first tracking_slug.
+		GAS_Campaigns::ensure_partner_alias( $wpdb->insert_id );
 		GAS_Campaigns::ensure_default_for_partner( $wpdb->insert_id );
 		if ( ! empty( $body['email'] ) ) {
 			GAS_Contacts::upsert( $body['email'], 'partner', array( 'name' => $name, 'source' => 'partner_save', 'related_table' => 'partners', 'related_id' => $wpdb->insert_id ) );
@@ -679,7 +685,7 @@ class GAS_REST {
 
 		$data       = array();
 		$body       = $request->get_json_params();
-		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'agent_pool_type', 'agent_pool_value', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'state', 'city', 'zip', 'outreach_status', 'email', 'open_to_self_signup', 'blurb', 'spotlight_url', 'capability_tags', 'notes' );
+		$allowed    = array( 'name', 'payout_type', 'payout_amount', 'payout_percent', 'agent_pool_type', 'agent_pool_value', 'typical_sale_amount', 'cashback_type', 'cashback_value', 'fulfillment_mode', 'requires_appointment', 'destination_url', 'service_area_description', 'state', 'city', 'zip', 'outreach_status', 'email', 'open_to_self_signup', 'blurb', 'spotlight_url', 'capability_tags', 'partner_alias', 'notes' );
 		$formats    = array();
 		$format_map = array(
 			'name'                 => '%s',
@@ -704,6 +710,7 @@ class GAS_REST {
 			'blurb'                => '%s',
 			'spotlight_url'        => '%s',
 			'capability_tags'      => '%s',
+			'partner_alias'        => '%s',
 			'notes'                => '%s',
 		);
 
@@ -740,6 +747,15 @@ class GAS_REST {
 					$value = is_array( $value )
 						? implode( ',', array_intersect( array_map( 'sanitize_key', $value ), array_keys( GAS_DB::capability_tags() ) ) )
 						: '';
+				} elseif ( 'partner_alias' === $field ) {
+					$value = sanitize_text_field( $value );
+					// Never let this go blank via the API — same rule as
+					// the wp-admin form, see class-gas-db.php's note on
+					// partners.partner_alias. Skip the field entirely
+					// rather than writing an empty string over it.
+					if ( '' === $value ) {
+						continue;
+					}
 				} else {
 					$value = (float) $value;
 				}

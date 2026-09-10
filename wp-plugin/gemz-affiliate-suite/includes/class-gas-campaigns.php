@@ -33,9 +33,18 @@ class GAS_Campaigns {
 		return $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'campaigns' ) . ' WHERE id = %d', $id ) );
 	}
 
+	/**
+	 * Matches on tracking_slug OR previous_slug so a link already shared
+	 * under an old (real-name) slug keeps working forever after
+	 * migrate_partner_privacy() moves a campaign to its alias-based slug
+	 * — see the note on partners.partner_alias in class-gas-db.php.
+	 */
 	public static function get_by_slug( $slug ) {
 		global $wpdb;
-		return $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'campaigns' ) . " WHERE tracking_slug = %s AND status = 'active'", $slug ) );
+		return $wpdb->get_row( $wpdb->prepare(
+			'SELECT * FROM ' . GAS_DB::table( 'campaigns' ) . " WHERE (tracking_slug = %s OR previous_slug = %s) AND status = 'active'",
+			$slug, $slug
+		) );
 	}
 
 	/**
@@ -51,7 +60,7 @@ class GAS_Campaigns {
 		$campaigns_table = GAS_DB::table( 'campaigns' );
 		$partners_table  = GAS_DB::table( 'partners' );
 		return $wpdb->get_results(
-			"SELECT c.*, p.name AS partner_name, p.state AS partner_state, p.blurb AS partner_blurb,
+			"SELECT c.*, p.name AS partner_name, p.partner_alias AS partner_alias, p.state AS partner_state, p.blurb AS partner_blurb,
 				p.spotlight_url AS partner_spotlight_url, p.capability_tags AS partner_capability_tags,
 				p.requires_appointment AS partner_requires_appointment
 			 FROM {$campaigns_table} c
@@ -116,6 +125,11 @@ class GAS_Campaigns {
 		$partners_table  = GAS_DB::table( 'partners' );
 		$campaigns_table = GAS_DB::table( 'campaigns' );
 
+		// Guarantee an alias exists BEFORE reading the partner row, so
+		// $partner->partner_alias below is never blank/never the real
+		// name — see the note on partners.partner_alias in class-gas-db.php.
+		self::ensure_partner_alias( $partner_id );
+
 		$partner = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$partners_table} WHERE id = %d", $partner_id ) );
 		if ( ! $partner || 'approved' !== $partner->outreach_status || ! $partner->open_to_self_signup ) {
 			return;
@@ -132,7 +146,11 @@ class GAS_Campaigns {
 		$wpdb->insert( $campaigns_table, array(
 			'name'          => $partner->name . ' — Direct Link',
 			'partner_id'    => $partner_id,
-			'tracking_slug' => self::generate_unique_slug( $partner->name ),
+			// Deliberately built from the alias, NOT $partner->name — an
+			// affiliate's shareable link (/go/{tracking_slug}) must never
+			// contain the real partner name. See the note on
+			// partners.partner_alias in class-gas-db.php.
+			'tracking_slug' => self::generate_unique_slug( $partner->partner_alias ),
 			'status'        => 'active',
 			'is_default'    => 1,
 			'created_at'    => $now,
@@ -140,6 +158,75 @@ class GAS_Campaigns {
 		) );
 
 		GAS_Admin::audit_log( 'campaign', $wpdb->insert_id, 'auto_created_default', array( 'partner_id' => $partner_id ) );
+	}
+
+	/**
+	 * Guarantees a partner has a non-blank, non-real-name alias — called
+	 * before any tracking_slug is ever generated for that partner, and
+	 * from the one-time migrate_partner_privacy() pass for partners that
+	 * pre-date this feature. Never overwrites an alias an admin already
+	 * set. Placeholder format deliberately generic (uses the site's own
+	 * partner_label setting, e.g. "Partner #4") — an admin can replace it
+	 * with something more specific any time from the Partners screen.
+	 */
+	public static function ensure_partner_alias( $partner_id ) {
+		global $wpdb;
+		$table   = GAS_DB::table( 'partners' );
+		$current = $wpdb->get_var( $wpdb->prepare( "SELECT partner_alias FROM {$table} WHERE id = %d", $partner_id ) );
+		if ( $current ) {
+			return $current;
+		}
+		$alias = ucfirst( GAS_Settings::get( 'partner_label' ) ) . ' #' . $partner_id;
+		$wpdb->update( $table, array( 'partner_alias' => $alias ), array( 'id' => $partner_id ) );
+		return $alias;
+	}
+
+	/**
+	 * One-time (per campaign) privacy migration — see the long note on
+	 * partners.partner_alias / campaigns.previous_slug in class-gas-db.php
+	 * for the full story. Safe to call on every maybe_upgrade(): each
+	 * partner/campaign is only ever touched once (partner_alias set only
+	 * if blank; a campaign only re-slugged if its CURRENT tracking_slug
+	 * still looks like it was generated from the partner's real name).
+	 */
+	public static function migrate_partner_privacy() {
+		global $wpdb;
+		$partners_table  = GAS_DB::table( 'partners' );
+		$campaigns_table = GAS_DB::table( 'campaigns' );
+
+		$partner_ids = $wpdb->get_col( "SELECT id FROM {$partners_table}" );
+		foreach ( $partner_ids as $partner_id ) {
+			self::ensure_partner_alias( $partner_id );
+		}
+
+		$campaigns = $wpdb->get_results(
+			"SELECT c.id, c.tracking_slug, p.name AS partner_name, p.partner_alias AS partner_alias
+			 FROM {$campaigns_table} c
+			 INNER JOIN {$partners_table} p ON p.id = c.partner_id
+			 WHERE c.previous_slug IS NULL"
+		);
+		foreach ( $campaigns as $c ) {
+			$name_slug = sanitize_title( $c->partner_name );
+			// Only re-slug a campaign whose CURRENT slug is (still)
+			// derived from the real name — generate_unique_slug()'s own
+			// disambiguation suffix is "-{n}", so match that too. A slug
+			// an admin deliberately customized to something unrelated to
+			// the partner's name is left alone.
+			if ( ! $name_slug || ! preg_match( '/^' . preg_quote( $name_slug, '/' ) . '(-\d+)?$/', $c->tracking_slug ) ) {
+				continue;
+			}
+			$new_slug = self::generate_unique_slug( $c->partner_alias );
+			$wpdb->update(
+				$campaigns_table,
+				array(
+					'previous_slug' => $c->tracking_slug,
+					'tracking_slug' => $new_slug,
+					'updated_at'    => current_time( 'mysql' ),
+				),
+				array( 'id' => $c->id )
+			);
+			GAS_Admin::audit_log( 'campaign', $c->id, 'slug_privacy_migrated', array( 'old_slug' => $c->tracking_slug, 'new_slug' => $new_slug ) );
+		}
 	}
 
 	/* ---------------------------------------------------------------- *
@@ -184,6 +271,15 @@ class GAS_Campaigns {
 		}
 
 		if ( $campaign_id ) {
+			// If an admin is manually changing the slug here, preserve the
+			// old one in previous_slug so any link already shared under it
+			// keeps working — same protection migrate_partner_privacy()
+			// gives the auto-generated ones, applied here too since a
+			// manual edit can just as easily break a live link.
+			$old_slug = $wpdb->get_var( $wpdb->prepare( "SELECT tracking_slug FROM {$table} WHERE id = %d", $campaign_id ) );
+			if ( $old_slug && $old_slug !== $data['tracking_slug'] ) {
+				$data['previous_slug'] = $old_slug;
+			}
 			$wpdb->update( $table, $data, array( 'id' => $campaign_id ) );
 			GAS_Admin::audit_log( 'campaign', $campaign_id, 'updated', $data );
 		} else {

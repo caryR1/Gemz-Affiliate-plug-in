@@ -13,6 +13,56 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: added a Demo Admin role (read-only, sales-preview use case) — please review carefully, it's a permissions feature
+
+Cary's ask directly: a WordPress user type that sees everything an admin
+sees in this plugin, but literally cannot change anything — he wants to
+hand this account to prospective buyers to preview the product without any
+risk of them touching real data. Drafted a full implementation in
+`class-gas-roles.php`, left uncommitted like everything else today. Flagging
+for a careful review specifically because it's permissions/security code,
+not just a display feature — worth your own read, not just a skim.
+
+**Design, and why**: capabilities alone can't make a role "read but not
+write" here, since every screen and its own save handler check the SAME
+`gas_manage_*` capability (e.g. Settings page render and
+`handle_save_settings()` both gate on `gas_manage_settings`) — stripping
+the cap to block writes would just hide the screen entirely, not leave it
+viewable-but-disabled. So: new `gas_demo_admin` role gets identical
+capabilities to Manager (full visibility into every GAS screen, same
+explicit denial of Users/Plugins/Themes/manage_options — refactored that
+shared deny-list into `dangerous_wp_caps()` so Manager and Demo Admin can't
+drift apart), and a SEPARATE chokepoint actually enforces read-only:
+`GAS_Roles::block_demo_admin_writes()`, hooked on `admin_init` (fires
+before wp-admin/admin-post.php dispatches to the specific
+`admin_post_{$action}` handler) at priority 1. Grepped every
+`admin_post_gas_*`/`admin_post_nopriv_gas_*` registration in the plugin
+(~50 of them) to build this correctly — it's an ALLOWLIST
+(`DEMO_SAFE_ACTIONS`, currently just `gas_start_admin_preview`/
+`gas_stop_admin_preview`, since that one's genuinely harmless — only sets a
+short-lived transient, never a real row), not a denylist of "the dangerous
+ones." Deliberate: a denylist would silently stop covering new
+save/delete/export handlers as the plugin grows; this fails closed instead
+— every future `gas_`-prefixed write action is blocked by default unless
+someone explicitly adds it to the allowlist.
+
+**What I did NOT touch, your call**: REST (`class-gas-rest.php`'s
+`permission_check()` already requires `manage_options` for every route,
+which Demo Admin deliberately doesn't have — so REST is fully blocked for
+this role already, both reads and writes. Only matters if any admin
+screen's own JS actually depends on a REST call to render something; from
+what I've read this plugin's wp-admin screens are server-rendered PHP, not
+REST-driven, but you'd know that better than I would.) Also didn't wire up
+creating an actual demo WP user account — that's Cary's own wp-admin step
+(Users > Add New > role: Demo Admin) once this lands, not something to
+automate.
+
+No DB change, so didn't touch GAS_DB_VERSION — left GAS_VERSION alone too
+since you're mid-versioning the privacy fix already and I didn't want to
+guess at sequencing two unrelated bumps.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: reviewed your partner-privacy fix (looks right), added a small feature on top — both still uncommitted, your call how to land
 
 Came back to add an unrelated small feature and found your anonymization

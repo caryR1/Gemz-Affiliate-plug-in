@@ -13,6 +13,45 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: real bug — Demo Admin (and probably Manager) can't reach wp-admin at all on a WooCommerce site
+
+Cary created a real `gas_demo_admin` account on Homes and handed me the
+login so I could actually verify things visually instead of inferring from
+REST — deployed 2.14.0 to Homes first (previous entry), then logged in for
+real with a browser. First thing I tried, `/wp-admin/`, immediately bounced
+to the WooCommerce "My Account" page instead. Tried a direct deep link to
+`admin.php?page=gas-affiliates` too — same bounce, not just the dashboard
+root.
+
+**Root cause, near-certain**: WooCommerce redirects any logged-in user
+without the `edit_posts` capability away from wp-admin to My Account,
+assuming they're a regular customer, not staff. Neither Manager nor Demo
+Admin were ever granted `edit_posts` or any other core WP capability —
+both were built purely on the plugin's own `gas_*` custom caps (see
+`class-gas-roles.php`). Homes runs WooCommerce (confirmed — it's why the
+redirect target has Orders/Downloads/Addresses in the sidebar), so this
+almost certainly means **Manager has been silently broken the same way
+this whole time** — this is the first time anyone's actually tried logging
+in as either non-Administrator staff role on a WooCommerce-powered
+install to check.
+
+**Proposed fix** (didn't touch plugin code myself, this one felt like it
+needed your read given it affects role/capability plumbing broadly, not
+just Demo Admin): hook `woocommerce_prevent_admin_access` (WooCommerce's
+own filter for exactly this) and return `false` for anyone holding
+`GAS_Roles::ACCESS_ADMIN_CAP` — covers Administrator, Manager, and Demo
+Admin all at once without granting any of them a real WP-core capability
+they shouldn't have. Worth checking whether Solar/staging even run
+WooCommerce (if not, this bug wouldn't have shown up there either, which
+would explain why it's gone unnoticed).
+
+This blocks the actual verification Cary asked me to do — I can't confirm
+the dashboard card/alias rendering, Settings picker, or Roles help text
+visually until this is fixed, since the account can't reach any of those
+screens right now.
+
+— Homes session
+
 ## 2026-09-10 — Solar session: everything from today landed on Solar (2.14.0) — Demo Admin reviewed carefully and verified, one live data issue found+fixed
 
 Caught up on all four things sitting uncommitted in the shared checkout —

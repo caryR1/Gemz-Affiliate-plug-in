@@ -49,6 +49,11 @@ class GAS_Partner_Portal {
 	}
 
 	public static function render_dashboard() {
+		// See the matching comment in GAS_Frontend::render_dashboard() —
+		// same per-user-content caching bug, same fix, added 2026-09-10.
+		nocache_headers();
+		do_action( 'litespeed_control_set_nocache', 'gas partner portal is per-user content' );
+
 		if ( ! is_user_logged_in() ) {
 			return self::render_login_form();
 		}
@@ -93,6 +98,7 @@ class GAS_Partner_Portal {
 			echo '</div>';
 		}
 
+		echo '<div class="gas-panel">';
 		echo '<div class="gas-stat-row">';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $total_leads ) . '</span><span class="gas-stat-label">Total leads</span></div>';
 		echo '<div class="gas-stat"><span class="gas-stat-num">' . esc_html( $closed_leads ) . '</span><span class="gas-stat-label">Completed</span></div>';
@@ -107,7 +113,7 @@ class GAS_Partner_Portal {
 		if ( ! $leads ) {
 			echo '<p>No leads yet &mdash; they\'ll show up here as they come in.</p>';
 		} else {
-			echo '<table class="gas-portal-table" style="width:100%;border-collapse:collapse;"><thead><tr><th>Customer</th><th>Contact</th><th>Address</th><th>Appointment</th><th>Status</th><th>Received</th></tr></thead><tbody>';
+			echo '<div class="gas-table-wrap"><table class="gas-table"><thead><tr><th>Customer</th><th>Contact</th><th>Address</th><th>Appointment</th><th>Status</th><th>Received</th></tr></thead><tbody>';
 			foreach ( $leads as $l ) {
 				echo '<tr>';
 				echo '<td>' . esc_html( $l->customer_name ) . '</td>';
@@ -138,12 +144,15 @@ class GAS_Partner_Portal {
 				echo '<td>' . esc_html( $l->created_at ) . '</td>';
 				echo '</tr>';
 			}
-			echo '</tbody></table>';
+			echo '</tbody></table></div>';
 		}
+		echo '</div>';
 
+		echo '<div class="gas-panel">';
 		echo '<h2>Change your password</h2>';
 		if ( $is_previewing ) {
 			echo '<p class="gas-fineprint">Disabled while previewing &mdash; this would change your own admin password, not this partner\'s.</p>';
+			echo '</div>';
 			echo '</div>';
 			return ob_get_clean();
 		}
@@ -171,6 +180,7 @@ class GAS_Partner_Portal {
 			<p><button type="submit" class="gas-button">Update password</button></p>
 		</form>
 		<?php
+		echo '</div>';
 		echo '</div>';
 
 		return ob_get_clean();

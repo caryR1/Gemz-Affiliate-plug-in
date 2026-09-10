@@ -13,6 +13,77 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar Referral session: fixed the real "View Dashboard" bug + extended styling everywhere
+
+Cary reported the admin "View Dashboard" preview button telling him he's
+not an affiliate, and asked for the new dashboard styling to also cover
+the Partner Portal and Help pages. Both done, both real fixes underneath.
+(Saw your automated-payout/held-notifications/Codes-simplification entry
+above after finishing this — haven't started on that yet, will pick it up
+next unless Cary wants to weigh in on scope first; it's a real three-part
+feature, not a quick follow-on to this pass.)
+
+### The "not an affiliate" bug — root cause was page caching, not logic
+
+Reproduced directly first: `wp eval` confirmed the preview transient sets
+correctly, the capability check passes, and `render_dashboard()`'s own
+`is_previewing` bypass works exactly as written when called directly. So
+the bug wasn't in the preview logic at all — it was **LiteSpeed Cache
+full-page-caching the Affiliate Dashboard**, confirmed via `curl -D -`
+showing `X-LiteSpeed-Cache: hit` on a second identical request. Since that
+page's content is 100% per-viewer (a login form, one specific affiliate's
+data, or an admin's preview of someone else), the cache was serving back
+whatever got cached first to every subsequent visitor regardless of who
+they actually were.
+
+Plain `nocache_headers()` did NOT fix it on this host — confirmed by
+repeated `curl` checks still flipping to `hit`. The actual fix needed
+LiteSpeed Cache's own PHP API: `do_action('litespeed_control_set_nocache',
+$reason)`, added alongside `nocache_headers()` in both
+`GAS_Frontend::render_dashboard()` and `GAS_Partner_Portal::render_dashboard()`
+(same bug, same fix, both are per-user pages). Verified with 4 repeated
+`curl` requests to each page, all showing `X-LiteSpeed-Cache-Control:
+no-cache` / `x-hcdn-cache-status: DYNAMIC` consistently — no more
+flipping to `hit`. The action call no-ops safely if LiteSpeed Cache isn't
+active, so it's portable.
+
+**Flagging for both of us going forward**: nothing else in the plugin got
+this same treatment. A signup or lead-capture page being page-cached
+wouldn't show wrong content (that's public-facing either way) but WOULD
+eventually serve a stale, expired nonce to everyone until the cache
+clears — "Security check failed" with no obvious cause. Worth a
+deliberate pass across every shortcode page rather than assuming this is
+the last instance of this bug class.
+
+### Styling extended — and a second real, separate bug found doing it
+
+Applied the same `.gas-panel`/`.gas-table` treatment to the Partner Portal
+and both Help pages. While doing it, found `enqueue_assets()`'s shortcode
+check — the one that decides whether `gas-frontend.css` loads at all —
+only ever listed `gas_affiliate_signup`/`gas_affiliate_dashboard`/
+`gas_signup_or_refer`. `gas_partner_dashboard`, `gas_help`,
+`gas_partner_help`, and `gas_faq` were never in it. **The Partner Portal
+and every Help page had been rendering with zero plugin CSS at all since
+the day each was built** — not just missing today's new styling, missing
+`.gas-form`/`.gas-stat-num`/everything, this whole time. Refactored into
+`GAS_Frontend::STYLED_SHORTCODES`, a single array checked in a loop —
+this is the SECOND time a hardcoded shortcode/content check has silently
+broken CSS loading on a real page (first was the 2026-09-06 Elementor
+`post_content` gap), so the array exists specifically to make a third
+time harder to introduce by accident.
+
+Verified live on staging: Partner Portal and both Help pages went from
+completely bare (no styling of any kind, not even the pre-existing
+`.gas-form`/`.gas-button` classes) to fully styled — confirms this was a
+real "never loaded" bug, not a "looks plain" one.
+
+Bumped through `GAS_VERSION` 2.8.2 → 2.8.3 across this pass (CSS-only vs.
+real-fix bumps kept separate rather than batched, so a future bisect isn't
+stuck guessing which change did what). All deployed to both staging and
+Solar, PHPUnit still 25/55 green throughout.
+
+— Solar Referral session
+
 ## 2026-09-10 — Homes session: automated monthly payout run + held-affiliate notifications + Codes simplification
 
 Three related decisions from a real discussion with Cary, all now settled.

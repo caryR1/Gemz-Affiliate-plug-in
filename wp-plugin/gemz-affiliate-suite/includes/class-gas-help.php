@@ -83,23 +83,35 @@ class GAS_Help {
 		<div class="gas-dashboard gas-help-doc">
 			<p><a href="<?php echo esc_url( GAS_Frontend::signup_url() ); ?>">&larr; Back to your dashboard</a></p>
 
-			<h3>Your referral link(s)</h3>
-			<p>You have one personal referral code, and your dashboard shows a ready-to-share link built from it for each active <?php echo esc_html( $partner_label ); ?> campaign — sometimes more than one, if we're running more than one campaign right now. Anyone who clicks one of your links and later does business with that <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically. A new campaign shows up on your dashboard the moment it goes live — nothing you need to do to unlock it.</p>
+			<div class="gas-panel">
+				<h3>Your referral link(s)</h3>
+				<p>You have one personal referral code, and your dashboard shows a ready-to-share link built from it for each active <?php echo esc_html( $partner_label ); ?> campaign — sometimes more than one, if we're running more than one campaign right now. Anyone who clicks one of your links and later does business with that <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically. A new campaign shows up on your dashboard the moment it goes live — nothing you need to do to unlock it.</p>
+			</div>
 
-			<h3>Recruiting your own team</h3>
-			<p>Your dashboard also shows a second link for inviting other people to become affiliates themselves. Anyone who signs up through that link becomes part of your team, and you earn a bonus on their sales going forward — and again, a smaller bonus, on sales made by people <em>they</em> recruit. This works up to two levels deep below you.</p>
+			<div class="gas-panel">
+				<h3>Recruiting your own team</h3>
+				<p>Your dashboard also shows a second link for inviting other people to become affiliates themselves. Anyone who signs up through that link becomes part of your team, and you earn a bonus on their sales going forward — and again, a smaller bonus, on sales made by people <em>they</em> recruit. This works up to two levels deep below you.</p>
+			</div>
 
-			<h3>How earnings are figured</h3>
-			<p>Every sale generates a commission that's split a fixed way across up to three tiers: the affiliate who made the sale, that affiliate's recruiter, and the recruiter's own recruiter (if there is one). Your dashboard shows your estimated earnings range for each tier while the current month is still open, and switches to your exact final amount once the month closes.</p>
+			<div class="gas-panel">
+				<h3>How earnings are figured</h3>
+				<p>Every sale generates a commission that's split a fixed way across up to three tiers: the affiliate who made the sale, that affiliate's recruiter, and the recruiter's own recruiter (if there is one). Your dashboard shows your estimated earnings range for each tier while the current month is still open, and switches to your exact final amount once the month closes.</p>
+			</div>
 
-			<h3>Your team view</h3>
-			<p>The "Your team" section on your dashboard shows everyone you've personally recruited, and everyone they've recruited in turn, with enough contact info to reach out and help them get started.</p>
+			<div class="gas-panel">
+				<h3>Your team view</h3>
+				<p>The "Your team" section on your dashboard shows everyone you've personally recruited, and everyone they've recruited in turn, with enough contact info to reach out and help them get started.</p>
+			</div>
 
-			<h3>Payment info</h3>
-			<p>Enter how you'd like to be paid under Payment Info on your dashboard. This is only ever visible to you — <?php echo esc_html( $site_name ); ?> only ever sees a masked summary, never your full account details.</p>
+			<div class="gas-panel">
+				<h3>Payment info</h3>
+				<p>Enter how you'd like to be paid under Payment Info on your dashboard. This is only ever visible to you — <?php echo esc_html( $site_name ); ?> only ever sees a masked summary, never your full account details.</p>
+			</div>
 
-			<h3>Changing your password</h3>
-			<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+			<div class="gas-panel">
+				<h3>Changing your password</h3>
+				<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+			</div>
 		</div>
 		<?php
 		return ob_get_clean();
@@ -114,17 +126,25 @@ class GAS_Help {
 		<div class="gas-dashboard gas-help-doc">
 			<p><a href="<?php echo esc_url( GAS_Partner_Portal::page_url() ); ?>">&larr; Back to your dashboard</a></p>
 
-			<h3>Your deal pipeline</h3>
-			<p>Every lead sent to you shows up in your dashboard with its current status. Use the status dropdown next to each lead to move it along as the project progresses — Accepted &rarr; In Progress &rarr; Completed, or Lost if it doesn't work out. Keep this current; it's how <?php echo esc_html( $site_name ); ?> knows a sale actually happened.</p>
+			<div class="gas-panel">
+				<h3>Your deal pipeline</h3>
+				<p>Every lead sent to you shows up in your dashboard with its current status. Use the status dropdown next to each lead to move it along as the project progresses — Accepted &rarr; In Progress &rarr; Completed, or Lost if it doesn't work out. Keep this current; it's how <?php echo esc_html( $site_name ); ?> knows a sale actually happened.</p>
+			</div>
 
-			<h3>What "new" leads mean</h3>
-			<p>A lead shown without a status dropdown is already on your account, but is still waiting on a first look from an admin before it's yours to work. Once that happens, the dropdown appears and you can start moving it through the pipeline.</p>
+			<div class="gas-panel">
+				<h3>What "new" leads mean</h3>
+				<p>A lead shown without a status dropdown is already on your account, but is still waiting on a first look from an admin before it's yours to work. Once that happens, the dropdown appears and you can start moving it through the pipeline.</p>
+			</div>
 
-			<h3>Changing your password</h3>
-			<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+			<div class="gas-panel">
+				<h3>Changing your password</h3>
+				<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+			</div>
 
-			<h3>Questions?</h3>
-			<p>Contact <?php echo esc_html( $site_name ); ?> directly if anything here doesn't match what you're seeing, or if you think you're missing a lead you should have.</p>
+			<div class="gas-panel">
+				<h3>Questions?</h3>
+				<p>Contact <?php echo esc_html( $site_name ); ?> directly if anything here doesn't match what you're seeing, or if you think you're missing a lead you should have.</p>
+			</div>
 		</div>
 		<?php
 		return ob_get_clean();

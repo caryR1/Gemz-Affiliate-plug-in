@@ -7,7 +7,7 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.8.1 / `GAS_DB_VERSION`: 16.
+`GAS_VERSION`: 2.8.3 / `GAS_DB_VERSION`: 16.
 
 **Since this was first written (2026-09-06)**: shipped self-signup
 affiliates auto-matched to every partner marked "Open to self-signup" with
@@ -171,6 +171,50 @@ to; there was no way to identify or pay the customer at all. Now:
   deployed to Solar too but not independently re-verified there (no real
   affiliate account exists on Solar yet to preview against) since it's the
   same file already visually confirmed on staging.
+- **Same styling extended to the Partner Portal and Help pages**
+  (`GAS_VERSION` 2.8.3, same day) — found a real, separate, pre-existing
+  bug while doing this: `enqueue_assets()`'s shortcode check that decides
+  whether to load `gas-frontend.css` at all only ever listed
+  `gas_affiliate_signup`/`gas_affiliate_dashboard`/`gas_signup_or_refer` —
+  `gas_partner_dashboard`, `gas_help`, `gas_partner_help`, and `gas_faq`
+  were never in it, so the Partner Portal and every Help page had been
+  rendering with **zero plugin CSS at all** since the day each was built,
+  not just missing the new panel/table styling. Refactored into a single
+  `GAS_Frontend::STYLED_SHORTCODES` array checked in a loop, specifically
+  so a future new shortcode can't repeat this exact class of bug a third
+  time (see the code comment there — this was the second time a
+  stylesheet silently failed to load on a real page, the first being the
+  2026-09-06 Elementor `post_content` gap). Partner Portal's ad-hoc
+  `gas-portal-table` (inline `style=` attribute, no real styling) was
+  replaced with the same `.gas-table`/`.gas-table-wrap` classes; its "Your
+  leads" and "Change your password" sections now use `.gas-panel` too.
+  Help pages (`GAS_Help::render()`/`render_partner_help()`) wrap each
+  topic in its own `.gas-panel` (extended `.gas-panel`'s heading-underline
+  rule to also match `h3`, since Help content uses that level, not `h2`).
+  Verified live on staging (screenshot, both pages) — going from
+  completely unstyled to fully styled confirmed the CSS was never loading
+  there before this fix, not just looking plain.
+- **Real caching bug found and fixed in the same pass**: Cary reported
+  clicking the admin "View Dashboard" preview button and being told he
+  wasn't an affiliate — reproduced directly (`wp eval` confirmed the
+  preview transient, capability check, and `render_dashboard()`'s own
+  logic all worked correctly in isolation), then found the real cause via
+  `curl -D -`: `X-LiteSpeed-Cache: hit` on a second identical request —
+  Hostinger's LiteSpeed Cache plugin was full-page-caching the Affiliate
+  Dashboard and Partner Portal, both entirely per-user/per-session
+  content, and serving the same cached response to every visitor
+  regardless of login or preview state. Plain `nocache_headers()` alone
+  did NOT stop this on this specific host — confirmed via repeated `curl`
+  checks that the page kept flipping back to `hit`. The actual fix needed
+  LiteSpeed Cache's own explicit API: `do_action(
+  'litespeed_control_set_nocache', $reason )`, added alongside
+  `nocache_headers()` in both `GAS_Frontend::render_dashboard()` and
+  `GAS_Partner_Portal::render_dashboard()`. Verified with repeated `curl`
+  checks showing `X-LiteSpeed-Cache-Control: no-cache` /
+  `x-hcdn-cache-status: DYNAMIC` consistently across 4 back-to-back
+  requests to each page (previously flipped to `hit` by the second
+  request). The action call is a safe no-op if LiteSpeed Cache isn't
+  active, so this is portable to any future host.
 
 **Lead capture & partner matching**
 - `[gas_lead_form]` submission → lead row, always starts unmatched.
@@ -470,7 +514,17 @@ Ranked by what would hurt most if development speed goes up:
 6. **Object-cache/Redis drop-ins already caused one production bug**
    (LiteSpeed Cache's Redis object-cache.php masking page edits on Solar,
    fixed by deactivating the plugin) **and the same drop-in is confirmed
-   present, unfixed, on Home.** Same failure mode is latent there.
+   present, unfixed, on Home.** Same failure mode is latent there. A
+   second, distinct LiteSpeed-caused bug hit 2026-09-10: full PAGE caching
+   (not the object cache) served a stale, wrong-for-the-viewer response on
+   the Affiliate Dashboard and Partner Portal — fixed on those two pages
+   via `litespeed_control_set_nocache` (see "Dashboard styling" above),
+   but nothing systematically audits every OTHER per-user shortcode page
+   in the plugin (signup forms, lead-capture, cashback claim) for the same
+   risk — a signup/lead-capture page being cached would surface as a
+   silently-expired nonce ("Security check failed") rather than wrong
+   content, a subtler failure mode worth a deliberate pass rather than
+   assuming `nocache_headers()` alone is protecting them.
 7. **Tax info (SSN/EIN) is stored in plaintext user-meta, unencrypted** —
    deliberately consistent with the existing (also unencrypted) banking-info
    fields rather than a new inconsistency, but disclosed here as a real gap

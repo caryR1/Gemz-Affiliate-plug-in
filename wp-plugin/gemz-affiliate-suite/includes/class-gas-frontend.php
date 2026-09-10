@@ -44,11 +44,37 @@ class GAS_Frontend {
 		return $elementor_data && false !== strpos( $elementor_data, '[' . $tag );
 	}
 
+	/**
+	 * Every shortcode whose output actually uses gas-frontend.css classes
+	 * (.gas-form/.gas-panel/.gas-table/.gas-stat-row/etc.) — kept as one
+	 * list rather than a handful of hardcoded checks after finding TWO
+	 * separate real bugs from the old approach: first (2026-09-06) a check
+	 * that only looked at post_content and missed Elementor pages
+	 * entirely (see post_has_shortcode() above, which now handles both),
+	 * and second (2026-09-10) a hardcoded shortcode list that simply never
+	 * included gas_partner_dashboard/gas_help/gas_partner_help/gas_faq —
+	 * meaning the Partner Portal and every Help page never loaded this
+	 * stylesheet AT ALL, silently, since the day each was built. Add any
+	 * new shortcode that uses these classes here, not as a one-off check.
+	 */
+	const STYLED_SHORTCODES = array(
+		'gas_affiliate_signup',
+		'gas_affiliate_dashboard',
+		'gas_signup_or_refer',
+		'gas_partner_dashboard',
+		'gas_help',
+		'gas_partner_help',
+		'gas_faq',
+	);
+
 	public static function enqueue_assets() {
 		if ( is_singular() ) {
 			global $post;
-			if ( self::post_has_shortcode( $post, 'gas_affiliate_signup' ) || self::post_has_shortcode( $post, 'gas_affiliate_dashboard' ) || self::post_has_shortcode( $post, 'gas_signup_or_refer' ) ) {
-				wp_enqueue_style( 'gas-frontend', plugins_url( 'assets/gas-frontend.css', GAS_PLUGIN_FILE ), array(), GAS_VERSION );
+			foreach ( self::STYLED_SHORTCODES as $tag ) {
+				if ( self::post_has_shortcode( $post, $tag ) ) {
+					wp_enqueue_style( 'gas-frontend', plugins_url( 'assets/gas-frontend.css', GAS_PLUGIN_FILE ), array(), GAS_VERSION );
+					break;
+				}
 			}
 			// Dashicons is normally admin-only — the dashboard's per-link
 			// capability icons (see render_capability_icons()) reuse it on
@@ -852,6 +878,25 @@ class GAS_Frontend {
 	 * ---------------------------------------------------------------- */
 
 	public static function render_dashboard() {
+		// Never let a page-cache/CDN layer serve this response to anyone
+		// but the exact visitor who requested it — this page's content is
+		// entirely per-user (a logged-out visitor's login form, one
+		// specific affiliate's data, or an admin's read-only preview of a
+		// DIFFERENT affiliate). Added 2026-09-10 after a real bug: an
+		// admin's "View Dashboard" preview click correctly set the
+		// preview transient, but LiteSpeed/Hostinger's edge cache
+		// (confirmed via `X-LiteSpeed-Cache: hit` on a second identical
+		// request) was serving back a stale, previously-cached response —
+		// "This dashboard is for affiliates only" — from before the admin
+		// was ever previewing anything. Plain nocache_headers() alone
+		// turned out NOT to be enough on this host: LiteSpeed Cache (the
+		// actual WP plugin, confirmed active on both Solar and staging)
+		// kept caching the page regardless of the Cache-Control header —
+		// it needs its own explicit no-op-if-absent API to actually skip
+		// caching a page.
+		nocache_headers();
+		do_action( 'litespeed_control_set_nocache', 'gas dashboard is per-user content' );
+
 		if ( ! is_user_logged_in() ) {
 			return self::render_login_form();
 		}

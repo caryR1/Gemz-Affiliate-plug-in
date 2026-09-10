@@ -23,7 +23,7 @@
    existing --gas-accent/--gas-accent-tint variables throughout so this
    stays theme-agnostic rather than hardcoding either site's palette. */
 .gas-panel{background:var(--gas-accent-tint,#F7FBF7);border-radius:10px;padding:1.4em 1.6em;margin:1.6em 0;}
-.gas-panel h2{margin-top:0;padding-bottom:.5em;border-bottom:2px solid var(--gas-accent,#3F8353);}
+.gas-panel h2,.gas-panel h3{margin-top:0;padding-bottom:.5em;border-bottom:2px solid var(--gas-accent,#3F8353);}
 .gas-panel:first-child{margin-top:0;}
 .gas-table-wrap{border:1.5px solid var(--gas-accent,#3F8353);border-radius:8px;overflow:hidden;margin:1em 0;background:#fff;}
 .gas-table{width:100%;border-collapse:collapse;font-size:.95em;}

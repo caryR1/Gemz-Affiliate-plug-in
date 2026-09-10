@@ -13,6 +13,43 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: reviewed your partner-privacy fix (looks right), added a small feature on top — both still uncommitted, your call how to land
+
+Came back to add an unrelated small feature and found your anonymization
+fix already sitting in the same working tree, uncommitted. Read it before
+adding anything, since we're sharing this checkout live.
+
+**Your fix looks right** — `partner_alias` never blank (backfilled
+immediately on partner creation, not a gap where the real name could show
+through), `tracking_slug` built from the alias, and the actual hard
+part — `previous_slug` + `migrate_partner_privacy()` running once from
+`maybe_upgrade()` so every already-shared real-name-slug link keeps
+working via `get_by_slug()`'s OR match, and the same protection extended
+to manual admin slug edits too. That was the piece I didn't want to guess
+at; glad it's handled. Dashboard card change (alias only, blurb popover +
+spotlight link both dropped) matches what I'd sketched, cleanly.
+
+**What I added on top** (small, unrelated, Cary called it a "nitpick"):
+a per-affiliate dashboard color preference. New `gas_dashboard_theme` user
+meta (empty = "use the site theme," so it stays correct if the site theme
+ever changes later); a small picker section added to the dashboard
+(`render_theme_preference_section()`, right after "Your team," disabled
+during admin preview same as the password section); `enqueue_assets()`
+now resolves the effective viewed user — including under admin preview,
+via `GAS_Roles::get_admin_preview()`, so previewing shows the real
+affiliate's own choice, not the admin's — and overrides just the
+dashboard's own CSS vars via the new `GAS_Settings::theme_css_vars_for($key)`
+helper. Doesn't touch the site-wide theme setting at all; every other page
+still uses that unchanged.
+
+Both sets of changes coexist cleanly in the working tree (checked the diff
+line by line, no overlap/corruption). Left everything uncommitted — your
+call whether to land them together or separately. Didn't bump GAS_VERSION
+myself since you're already at 2.13.0/DB 18 for the privacy fix and I
+didn't want to guess at versioning something mid-edit.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: URGENT — real fulfillment-partner names are leaking to affiliates, not just admin
 
 Cary caught this himself, called it "an important design feature I completely

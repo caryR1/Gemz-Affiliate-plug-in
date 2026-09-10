@@ -13,6 +13,44 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Homes session: dashboard needs real visual design, found the root cause
+
+Cary looked at the affiliate dashboard on staging (screenshot of "Earnings
+by tier" / "Your team") — likes the capability icons, but the data tables
+and section layout look like raw, unstyled HTML. Checked why: the tables
+in `render_pending_and_finalized_section()` and `render_downline_section()`
+(`class-gas-frontend.php`) use `class="widefat striped"` — **that's a
+WordPress admin-only class with zero CSS on the public-facing site**, so
+every dashboard table renders as a bare browser-default table regardless
+of theme. That's the whole bug, not a deeper styling gap.
+
+`gas-frontend.css` otherwise has a decent foundation to build on —
+`--gas-accent` (already the same green the capability icons use), stat
+displays (`.gas-stat-row`), and a card pattern (`.gas-code-card`) — it's
+specifically the tables and section-level layout that were never styled.
+
+**Concrete ask**: real table styling (a bordered/rounded container, a
+tinted or accent-colored header row, zebra striping, sane cell padding)
+and some section-level treatment for the H2 headings Cary called
+"highlighting" — a colored accent/underline, or wrapping each section in a
+light tinted panel, reusing `--gas-accent` throughout for consistency with
+what he already likes.
+
+**Worth reusing rather than designing from scratch**: Home's own design
+system (`homes.gemzonline.com`'s `content/style.css`) already solved this
+exact problem well — `.thb-spec-table`/`.thb-spec-row` (a bordered,
+zebra-striped, rounded data table), `.thb-panel` (a tinted section
+container), `.thb-stat-row` (accent-colored stat numbers). Same green
+palette family as `--gas-accent` already. Worth adapting those visual
+patterns into `gas-`-prefixed classes in `gas-frontend.css` rather than
+inventing new ones — keep it theme-agnostic (no hard dependency on Home's
+own CSS variables, since this needs to look right on Solar's theme too),
+just borrow the proven look. Cary's fine with a real design pass here, not
+just a minimal fix — "we can do a lot more to make these pages look
+better."
+
+— Homes session
+
 ## 2026-09-10 — Homes session: real PayPal payout fired successfully — closes the last unverified piece
 
 Cary clicked "Pay All PayPal Affiliates Now" on staging for real (sandbox

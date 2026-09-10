@@ -39,6 +39,7 @@ class GAS_Admin {
 		add_action( 'admin_post_gas_reassign_contact', array( __CLASS__, 'handle_reassign_contact' ) );
 		add_action( 'admin_post_gas_export_contacts_csv', array( __CLASS__, 'handle_export_contacts_csv' ) );
 		add_action( 'admin_post_gas_mark_cashback_paid', array( __CLASS__, 'handle_mark_cashback_paid' ) );
+		add_action( 'admin_post_gas_regenerate_payout_token', array( __CLASS__, 'handle_regenerate_payout_token' ) );
 		add_action( 'admin_post_gas_save_lead_magnet', array( __CLASS__, 'handle_save_lead_magnet' ) );
 		add_action( 'admin_post_gas_toggle_lead_magnet', array( __CLASS__, 'handle_toggle_lead_magnet' ) );
 		add_action( 'admin_post_gas_start_admin_preview', array( __CLASS__, 'handle_start_admin_preview' ) );
@@ -63,7 +64,6 @@ class GAS_Admin {
 			58
 		);
 		add_submenu_page( 'gas-affiliates', 'Affiliates', 'Affiliates', self::CAP_CODES, 'gas-affiliates', array( __CLASS__, 'render_affiliates_page' ) );
-		add_submenu_page( 'gas-affiliates', 'Sub-Affiliate Codes', 'Codes', self::CAP_CODES, 'gas-codes', array( __CLASS__, 'render_codes_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Partners', 'Partners', self::CAP_PARTNERS, 'gas-partners', array( __CLASS__, 'render_partners_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Campaigns', 'Campaigns', self::CAP_CAMPAIGNS, 'gas-campaigns', array( __CLASS__, 'render_campaigns_page' ) );
 		add_submenu_page( 'gas-affiliates', 'Marketing Assets', 'Marketing Assets', self::CAP_CAMPAIGNS, 'gas-marketing-assets', array( __CLASS__, 'render_marketing_assets_page' ) );
@@ -153,6 +153,12 @@ class GAS_Admin {
 		if ( isset( $_GET['reactivated'] ) ) {
 			echo '<div class="notice notice-success"><p>Affiliate reactivated &mdash; their link is live again.</p></div>';
 		}
+		if ( isset( $_GET['code_saved'] ) ) {
+			echo '<div class="notice notice-success"><p>Code saved.</p></div>';
+		}
+		if ( isset( $_GET['code_deleted'] ) ) {
+			echo '<div class="notice notice-success"><p>Code deleted.</p></div>';
+		}
 
 		global $wpdb;
 		$codes_table    = GAS_DB::table( 'codes' );
@@ -167,6 +173,7 @@ class GAS_Admin {
 
 		if ( ! $rows ) {
 			echo '<p>No self-signup affiliates yet. New signups from the "Become an Affiliate" page show up here.</p>';
+			self::render_codes_section();
 			self::wrap_end();
 			return;
 		}
@@ -187,7 +194,7 @@ class GAS_Admin {
 			echo '<td>' . ( $payment ? esc_html( $payment ) : '<em>not set</em>' ) . '</td>';
 			echo '<td>' . ( $tax ? '<span style="color:#1a7a3c;">' . esc_html( $tax ) . '</span>' : '<span style="color:#b32d2e;">not on file</span>' ) . '</td>';
 			echo '<td>';
-			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $r->id ) ) . '">Edit</a> | ';
+			echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-affiliates&edit_code=' . $r->id . '#gas-codes-section' ) ) . '">Edit</a> | ';
 
 			if ( $r->wp_user_id ) {
 				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="display:inline;">';
@@ -211,6 +218,8 @@ class GAS_Admin {
 			echo '</tr>';
 		}
 		echo '</tbody></table>';
+
+		self::render_codes_section();
 
 		self::wrap_end();
 	}
@@ -274,27 +283,25 @@ class GAS_Admin {
 	}
 
 	/* ---------------------------------------------------------------- *
-	 * CODES (sub-affiliates)
+	 * CODES (sub-affiliates) — folded into the Affiliates screen
+	 * 2026-09-10 as a section rather than its own top-level menu item.
+	 * Its original main job (matching a new self-signup affiliate's code
+	 * to a partner) is gone now that campaigns auto-provision that; what's
+	 * left — manually adding an offline-referral code, auditing/
+	 * deactivating one — fits better as a section here than its own menu
+	 * entry. Not moved into Settings: Settings holds config values, not
+	 * per-row data, which would be a structural mismatch.
 	 * ---------------------------------------------------------------- */
 
-	public static function render_codes_page() {
-		if ( ! current_user_can( self::CAP_CODES ) ) {
-			return;
-		}
-		$edit_id  = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
+	private static function render_codes_section() {
+		$edit_id  = isset( $_GET['edit_code'] ) ? absint( $_GET['edit_code'] ) : 0;
 		$editing  = $edit_id ? self::get_code( $edit_id ) : null;
 		$partners = self::get_partners();
 
-		self::wrap_start( 'Sub-Affiliate Codes' );
+		echo '<h2 id="gas-codes-section">Codes</h2>';
+		echo '<p class="description">Self-signup affiliates get a code automatically above &mdash; this is only for manually adding an offline-referral code, or auditing/deactivating one.</p>';
 
-		if ( isset( $_GET['saved'] ) ) {
-			echo '<div class="notice notice-success"><p>Saved.</p></div>';
-		}
-		if ( isset( $_GET['deleted'] ) ) {
-			echo '<div class="notice notice-success"><p>Deleted.</p></div>';
-		}
-
-		echo '<h2>' . ( $editing ? 'Edit Code' : 'Add a Code' ) . '</h2>';
+		echo '<h3>' . ( $editing ? 'Edit Code' : 'Add a Code' ) . '</h3>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 		wp_nonce_field( 'gas_save_code' );
 		echo '<input type="hidden" name="action" value="gas_save_code">';
@@ -324,10 +331,10 @@ class GAS_Admin {
 		echo '</form>';
 
 		if ( $editing ) {
-			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=gas-codes' ) ) . '">&larr; Cancel edit</a></p>';
+			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=gas-affiliates#gas-codes-section' ) ) . '">&larr; Cancel edit</a></p>';
 		}
 
-		echo '<h2>Existing Codes</h2>';
+		echo '<h3>Existing Codes</h3>';
 		$codes = self::get_codes();
 		if ( ! $codes ) {
 			echo '<p>No codes yet.</p>';
@@ -343,7 +350,7 @@ class GAS_Admin {
 				echo '<td>' . esc_html( $c->partner_name ?: '(none)' ) . '</td>';
 				echo '<td>' . ( $c->active ? 'Yes' : 'No' ) . '</td>';
 				echo '<td>';
-				echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-codes&edit=' . $c->id ) ) . '">Edit</a> | ';
+				echo '<a href="' . esc_url( admin_url( 'admin.php?page=gas-affiliates&edit_code=' . $c->id . '#gas-codes-section' ) ) . '">Edit</a> | ';
 				$del_url = wp_nonce_url( admin_url( 'admin-post.php?action=gas_delete_code&id=' . $c->id ), 'gas_delete_code_' . $c->id );
 				echo '<a href="' . esc_url( $del_url ) . '" onclick="return confirm(\'Delete this code? Click history stays but will no longer link to a code.\');">Delete</a>';
 				echo '</td>';
@@ -351,8 +358,6 @@ class GAS_Admin {
 			}
 			echo '</tbody></table>';
 		}
-
-		self::wrap_end();
 	}
 
 	public static function handle_save_code() {
@@ -388,7 +393,7 @@ class GAS_Admin {
 			self::audit_log( 'code', $wpdb->insert_id, 'created', $data );
 		}
 
-		wp_safe_redirect( admin_url( 'admin.php?page=gas-codes&saved=1' ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-affiliates&code_saved=1#gas-codes-section' ) );
 		exit;
 	}
 
@@ -403,7 +408,7 @@ class GAS_Admin {
 		$wpdb->delete( GAS_DB::table( 'codes' ), array( 'id' => $id ) );
 		self::audit_log( 'code', $id, 'deleted' );
 
-		wp_safe_redirect( admin_url( 'admin.php?page=gas-codes&deleted=1' ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-affiliates&code_deleted=1#gas-codes-section' ) );
 		exit;
 	}
 
@@ -1408,6 +1413,9 @@ class GAS_Admin {
 		if ( isset( $_GET['payout_result'] ) ) {
 			self::render_payout_result_notice();
 		}
+		if ( isset( $_GET['token_regenerated'] ) ) {
+			echo '<div class="notice notice-success"><p>Token regenerated &mdash; update Hostinger\'s Cron Job with the new URL below before the next scheduled run.</p></div>';
+		}
 
 		$payouts_table  = GAS_DB::table( 'payouts' );
 		$partners_table = GAS_DB::table( 'partners' );
@@ -2042,6 +2050,51 @@ class GAS_Admin {
 		echo '<a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_paypal_payout_now' ), 'gas_paypal_payout_now' ) ) . '" class="button button-primary" onclick="return confirm(\'Send a real PayPal payout to every affiliate with an unpaid balance on PayPal?\');">Pay All PayPal Affiliates Now</a> ';
 		echo '<a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_wise_payout_now' ), 'gas_wise_payout_now' ) ) . '" class="button button-primary" onclick="return confirm(\'Send real Wise transfers to every affiliate with an unpaid balance on Wise?\');">Pay All Wise Affiliates Now</a>';
 		echo '</p>';
+
+		self::render_automated_run_cron_section();
+	}
+
+	/**
+	 * The URL Cary needs to paste into Hostinger's own Cron Jobs panel
+	 * (hPanel) — this plugin can't create that cron entry itself, SSH on
+	 * this host has no crontab access, so a real server-level schedule has
+	 * to be configured there directly. Everything else (pause toggle, run
+	 * day) lives on the Settings screen since those are ordinary config;
+	 * this lives here since it's the one thing that needs copying
+	 * somewhere else, not edited in place.
+	 */
+	private static function render_automated_run_cron_section() {
+		if ( ! current_user_can( self::CAP_SETTINGS ) ) {
+			return;
+		}
+		$token     = GAS_Settings::get_automated_payout_token();
+		$cron_url  = rest_url( 'gas/v1/automated-payout-run' ) . '?token=' . rawurlencode( $token );
+		$last_run  = get_option( 'gas_last_automated_payout_run', '' );
+		$run_day   = (int) GAS_Settings::get( 'payout_run_day' );
+		$paused    = GAS_Settings::get( 'payout_run_paused' );
+
+		echo '<h3>Automated monthly payout run &mdash; server cron setup</h3>';
+		echo '<p class="description">A real server cron job (not WP-Cron) needs to hit this URL once a day — the run itself only actually fires on/after day ' . esc_html( $run_day ) . ' of the month, and at most once per month, so a daily schedule is safe and simplest. In Hostinger\'s hPanel, add a Cron Job set to run daily hitting this exact URL:</p>';
+		echo '<p><code style="word-break:break-all;">' . esc_html( $cron_url ) . '</code></p>';
+		echo '<p class="description">Status: ' . ( $paused ? '<strong style="color:#b32d2e;">Paused</strong> (see Settings to unpause)' : '<strong style="color:#1a7a3c;">Active</strong>' ) . ( $last_run ? ', last ran ' . esc_html( $last_run ) : ', has not run yet' ) . '.</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" onsubmit="return confirm(\'Regenerate the token? The old cron URL will stop working until you update Hostinger with the new one.\');">';
+		wp_nonce_field( 'gas_regenerate_payout_token' );
+		echo '<input type="hidden" name="action" value="gas_regenerate_payout_token">';
+		echo '<button type="submit" class="button">Regenerate token</button>';
+		echo '</form>';
+	}
+
+	public static function handle_regenerate_payout_token() {
+		if ( ! current_user_can( self::CAP_SETTINGS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		check_admin_referer( 'gas_regenerate_payout_token' );
+
+		GAS_Settings::regenerate_automated_payout_token();
+		self::audit_log( 'settings', 0, 'payout_token_regenerated' );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-ledger&token_regenerated=1' ) );
+		exit;
 	}
 
 	public static function handle_save_payout_api_settings() {
@@ -2107,7 +2160,7 @@ class GAS_Admin {
 					esc_html( $result['currency'] )
 				) . self::held_summary_text( $result['held'] ),
 			);
-			self::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'paid_user_ids' => $result['paid_user_ids'], 'total' => $result['total'], 'held' => $result['held'] ) );
+			self::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'paid_user_ids' => $result['paid_user_ids'], 'total' => $result['total'], 'held' => $result['held'], 'trigger' => 'manual' ) );
 		}
 
 		set_transient( 'gas_payout_result_' . get_current_user_id(), $notice, 60 );
@@ -2137,7 +2190,7 @@ class GAS_Admin {
 		$message .= self::held_summary_text( $result['held'] );
 
 		if ( $paid_count ) {
-			self::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'paid' => $result['paid'], 'failed_count' => $failed_count, 'held' => $result['held'] ) );
+			self::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'paid' => $result['paid'], 'failed_count' => $failed_count, 'held' => $result['held'], 'trigger' => 'manual' ) );
 		}
 
 		set_transient( 'gas_payout_result_' . get_current_user_id(), array( 'error' => (bool) $failed_count && ! $paid_count, 'message' => $message ), 60 );
@@ -2310,6 +2363,12 @@ class GAS_Admin {
 
 		echo '<tr><th><label for="min_payout_threshold">Minimum payout threshold ($)</label></th><td><input type="number" step="0.01" min="0" id="min_payout_threshold" name="min_payout_threshold" style="width:120px" value="' . esc_attr( $settings['min_payout_threshold'] ) . '"> <p class="description">The PayPal/Wise automated payout runs skip anyone with an unpaid balance under this amount &mdash; their balance carries forward untouched rather than triggering a payout (and a transfer fee eating a chunk of a tiny amount). Doesn\'t affect the Payout Calculator/Ledger, only the automated runs.</p></td></tr>';
 
+		echo '<tr><th>Automated monthly payout run</th><td>';
+		echo '<p class="description">Fires automatically each month via a real server cron job (not WP-Cron) &mdash; see the Payout Ledger screen for the exact URL to schedule. Only ever pays out CLOSED prior months, never the current still-open month.</p>';
+		echo '<label>Run on/after day of month: <input type="number" min="1" max="28" name="payout_run_day" style="width:70px" value="' . esc_attr( $settings['payout_run_day'] ) . '"></label><br><br>';
+		echo '<label><input type="checkbox" name="payout_run_paused" value="1"' . checked( $settings['payout_run_paused'], true, false ) . '> Pause the automated run (skips it entirely until unchecked &mdash; for when something needs manual attention first)</label>';
+		echo '</td></tr>';
+
 		echo '<tr><th>Compliance footer (email)</th><td>';
 		echo '<p class="description">Appended to every customer- and affiliate-facing email &mdash; business name/address and a "why you\'re receiving this" line, standard commercial-email practice.</p>';
 		echo '<label>Business/legal name<br><input type="text" name="business_name" class="regular-text" placeholder="' . esc_attr( $settings['site_name'] ) . ' (defaults to Program name above if left blank)" value="' . esc_attr( $settings['business_name'] ) . '"></label><br><br>';
@@ -2340,6 +2399,8 @@ class GAS_Admin {
 			'tier3_split_percent'       => isset( $_POST['tier3_split_percent'] ) ? (float) $_POST['tier3_split_percent'] : 10,
 			'quote_page_intro'          => isset( $_POST['quote_page_intro'] ) ? sanitize_textarea_field( wp_unslash( $_POST['quote_page_intro'] ) ) : '',
 			'min_payout_threshold'      => isset( $_POST['min_payout_threshold'] ) ? (float) $_POST['min_payout_threshold'] : 50,
+			'payout_run_day'            => isset( $_POST['payout_run_day'] ) ? max( 1, min( 28, absint( $_POST['payout_run_day'] ) ) ) : 5,
+			'payout_run_paused'         => ! empty( $_POST['payout_run_paused'] ),
 			'business_name'             => isset( $_POST['business_name'] ) ? sanitize_text_field( wp_unslash( $_POST['business_name'] ) ) : '',
 			'business_address'          => isset( $_POST['business_address'] ) ? sanitize_text_field( wp_unslash( $_POST['business_address'] ) ) : '',
 			'program_terms_url'         => isset( $_POST['program_terms_url'] ) ? esc_url_raw( wp_unslash( $_POST['program_terms_url'] ) ) : '',
@@ -2376,22 +2437,30 @@ class GAS_Admin {
 		?>
 		<h2>Screens at a glance</h2>
 		<ul style="list-style:disc;margin-left:1.5em;">
-			<li><strong>Affiliates</strong> — every self-signed-up affiliate; suspend/reactivate their link here.</li>
-			<li><strong>Codes</strong> — every affiliate's own stable referral code (one per affiliate, not per partner), plus any manually-added codes for real-world/offline referrals.</li>
+			<li><strong>Affiliates</strong> — every self-signed-up affiliate; suspend/reactivate their link here. A "Codes" section further down the same screen handles manually adding an offline-referral code, or auditing/deactivating one.</li>
 			<li><strong>Campaigns</strong> — the actual promotable links: a name, a partner, a URL tracking slug, and optional landing-page variants. Any affiliate's code works with any active campaign automatically — that's what actually makes a link "theirs." Marking a partner "Open to self-signup" auto-creates that partner's first default campaign; add more from this screen any time.</li>
 			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), whether they're open to self-signup (auto-creates a default campaign), the dashboard blurb/spotlight link/capability icons affiliates see on that partner's campaign cards, and partner portal login.</li>
 			<li><strong>Leads</strong> — on-site lead-capture submissions, for partners set to that mode.</li>
 			<li><strong>Click Log</strong> — raw click history per code.</li>
 			<li><strong>Reports</strong> — commission summary, partner outcomes, and agent/referrer performance ranked by earnings.</li>
-			<li><strong>Payout Calculator / Ledger</strong> — enter a completed sale to compute and record the tier split; the Ledger tracks everything entered, paid or not, plus automated PayPal/Wise payout runs.</li>
+			<li><strong>Payout Calculator / Ledger</strong> — enter a completed sale to compute and record the tier split. The Ledger tracks everything entered, paid or not; shows each row's buyer cash back claim/payment status with a manual "Mark cashback paid" action; has PayPal/Wise "Pay All Now" buttons plus the automated-monthly-run cron URL and status; and has a Tax Summary CSV export for your accountant.</li>
 			<li><strong>Audit Log</strong> — who changed what, when.</li>
-			<li><strong>Segments</strong> — every contact this plugin has ever talked to (affiliate/customer/partner), filterable and exportable for outreach.</li>
+			<li><strong>Segments</strong> — every contact this plugin has ever talked to (affiliate/customer/partner), filterable and exportable for outreach — excludes anyone unsubscribed by default.</li>
 			<li><strong>Lead Magnets</strong> — PDF opt-in forms that grow your customer segment.</li>
-			<li><strong>Settings</strong> — program name, terminology, and the commission tier split percentages.</li>
+			<li><strong>Settings</strong> — program name, terminology, commission tier split percentages, minimum payout threshold, compliance-footer business info, and the automated payout run's pause toggle and day-of-month.</li>
 		</ul>
 
 		<h2>How commissions work</h2>
-		<p>Gross commission on a sale is a fixed pool, split across up to 3 tiers (Settings controls the percentages): the affiliate who made the sale, their sponsor (whoever recruited them), and the sponsor's own sponsor. A tier with no one in it keeps its share as net to <?php echo esc_html( $site_name ); ?> — it's never redistributed to the tiers that do have someone in them.</p>
+		<p>Gross commission on a sale is a fixed pool, split across up to 3 tiers (Settings controls the percentages): the affiliate who made the sale, their sponsor (whoever recruited them), and the sponsor's own sponsor. A tier with no one in it keeps its share as net to <?php echo esc_html( $site_name ); ?> — it's never redistributed to the tiers that do have someone in them. A partner can also be configured to pay the buyer cash back, separate from the tier split — see "Buyer cash back" below.</p>
+
+		<h2>Tax compliance and minimum payout</h2>
+		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself).</p>
+
+		<h2>Buyer cash back</h2>
+		<p>If a partner is configured with buyer cash back, entering that sale in the Payout Calculator with a customer email automatically emails the customer a link to claim it — they choose PayPal/Wise/other themselves, the same way an affiliate sets their own payout method. You see a masked summary and a manual "Mark cashback paid" button on the Ledger once they've claimed; it's not wired into the automated PayPal/Wise batch runs.</p>
+
+		<h2>Self-referral</h2>
+		<p>An affiliate is allowed to use their own referral link and become their own customer on a real sale — the commission pool is fixed either way, so this doesn't cost anything extra. What's actually flagged (a non-blocking note in the Audit Log, never a block) is a sponsor chain where two different accounts share the same payout email, PayPal/Wise details, tax ID, or signup IP — a signal worth a manual look, not proof of anything by itself.</p>
 
 		<h2>Roles</h2>
 		<p>Administrators have full access. The "Affiliate Program Manager" role can run every screen above but can never install plugins, manage other WordPress users, or touch general site settings — safe to hand to a trusted staff member.</p>

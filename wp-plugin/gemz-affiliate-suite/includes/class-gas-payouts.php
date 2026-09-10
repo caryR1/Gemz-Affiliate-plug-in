@@ -556,10 +556,55 @@ class GAS_Payouts {
 	}
 
 	/**
+	 * Same three income sources as totals_for_affiliate(), but restricted to
+	 * payout rows entered BEFORE the current (still-open) calendar month —
+	 * i.e. the same "closed months only" boundary already used by
+	 * pending_tier_counts()/finalized_tier_totals() for the affiliate's own
+	 * dashboard display. Added 2026-09-10 specifically for
+	 * affiliates_with_unpaid_balance(): a real bug existed where a payout
+	 * entered on, say, the 3rd of a new month could get swept into a batch
+	 * run firing on the 5th, even though that's THIS month's still-open
+	 * earnings, not a closed prior month owed to the affiliate yet.
+	 * Deliberately a separate method rather than changing
+	 * totals_for_affiliate() itself, which an affiliate's own dashboard
+	 * ("Unpaid balance") still uses to show their true full accrued total,
+	 * current month included — only the money-moving payout-run path needs
+	 * this stricter, closed-months-only figure.
+	 */
+	public static function closed_month_unpaid_balance( $user_id ) {
+		global $wpdb;
+		$payouts_table = GAS_DB::table( 'payouts' );
+		$codes_table   = GAS_DB::table( 'codes' );
+		$month_start   = gmdate( 'Y-m-01 00:00:00', current_time( 'timestamp' ) );
+
+		$direct = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.subaffiliate_cut),0) FROM {$payouts_table} pay
+			 INNER JOIN {$codes_table} c ON c.id = pay.code_id
+			 WHERE c.wp_user_id = %d AND pay.status = 'unpaid' AND pay.entered_at < %s",
+			$user_id, $month_start
+		) );
+		$tier2 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.tier2_amount),0) FROM {$payouts_table} pay
+			 INNER JOIN {$codes_table} c ON c.id = pay.tier2_code_id
+			 WHERE c.wp_user_id = %d AND pay.tier2_paid = 0 AND pay.entered_at < %s",
+			$user_id, $month_start
+		) );
+		$tier3 = (float) $wpdb->get_var( $wpdb->prepare(
+			"SELECT COALESCE(SUM(pay.tier3_amount),0) FROM {$payouts_table} pay
+			 INNER JOIN {$codes_table} c ON c.id = pay.tier3_code_id
+			 WHERE c.wp_user_id = %d AND pay.tier3_paid = 0 AND pay.entered_at < %s",
+			$user_id, $month_start
+		) );
+
+		return $direct + $tier2 + $tier3;
+	}
+
+	/**
 	 * Every affiliate (distinct wp_user_id on gas_codes) whose payout method
-	 * is $method and who currently has an unpaid balance greater than zero.
-	 * Returns rows shaped for the payout processors: user_id, unpaid amount,
-	 * and their banking details. Split into two buckets, both returned,
+	 * is $method and who has an unpaid balance, from CLOSED prior months
+	 * only (see closed_month_unpaid_balance()), greater than zero. Returns
+	 * rows shaped for the payout processors: user_id, unpaid amount, and
+	 * their banking details. Split into two buckets, both returned,
 	 * caller's choice what to do with each:
 	 * - 'eligible': balance >= the minimum payout threshold AND tax info is
 	 *   on file — safe to actually pay.
@@ -583,12 +628,12 @@ class GAS_Payouts {
 			if ( $details['method'] !== $method ) {
 				continue;
 			}
-			$totals = self::totals_for_affiliate( $user_id );
-			if ( $totals['unpaid'] <= 0 ) {
+			$unpaid = self::closed_month_unpaid_balance( $user_id );
+			if ( $unpaid <= 0 ) {
 				continue;
 			}
 
-			$row = array( 'user_id' => $user_id, 'unpaid' => $totals['unpaid'], 'details' => $details );
+			$row = array( 'user_id' => $user_id, 'unpaid' => $unpaid, 'details' => $details );
 
 			// Tax-info gate takes priority in the reason shown — an
 			// affiliate missing both is more clearly "not ready to pay"
@@ -598,7 +643,7 @@ class GAS_Payouts {
 				$held[] = $row + array( 'reason' => 'no_tax_info' );
 				continue;
 			}
-			if ( $totals['unpaid'] < $min_payout ) {
+			if ( $unpaid < $min_payout ) {
 				$held[] = $row + array( 'reason' => 'below_threshold' );
 				continue;
 			}
@@ -609,6 +654,66 @@ class GAS_Payouts {
 	}
 
 	/**
+	 * Plain-text bodies for a held-affiliate notification — added
+	 * 2026-09-10 per Cary's explicit call: encouraging language only, NO
+	 * specific dollar figures anywhere (not their balance, not the
+	 * threshold amount) after an FTC/income-claim caution was raised.
+	 * There's no notification-templating system in GAS yet (that's still
+	 * unstarted "Part 3" of the original GRC port) — these are plain
+	 * hardcoded wp_mail() bodies, same pattern as every other notification
+	 * already in this plugin, not a new templating layer.
+	 */
+	private static function held_notification_copy( $reason ) {
+		if ( 'no_tax_info' === $reason ) {
+			return array(
+				'subject' => 'Action needed before your next payout',
+				'body'    => "Hi,\n\nWe went to send your commission payout this cycle, but couldn't yet — we still need your tax information on file first (a quick one-time form).\n\nAdd it from your dashboard and you'll be included automatically the next time payouts run:\n{dashboard_url}\n\nThanks for being part of the program!",
+			);
+		}
+		if ( 'below_threshold' === $reason ) {
+			return array(
+				'subject' => 'Your balance is building up',
+				'body'    => "Hi,\n\nYou didn't hit this cycle's payout, but nothing is lost — your balance carries forward automatically, and you'll be paid as soon as it's ready.\n\nThe fastest way to get there: keep sharing your link, and don't forget the bonus you earn from recruiting your own team. Check your dashboard for your current stats:\n{dashboard_url}\n\nThanks for being part of the program!",
+			);
+		}
+		return null;
+	}
+
+	/**
+	 * Emails each held affiliate why they weren't paid this run — a real
+	 * gap before this: affiliates_with_unpaid_balance() already reported
+	 * held reasons to the ADMIN in the batch-run summary, but nothing ever
+	 * told the affected affiliate. Called once per actual payout run (both
+	 * the manual "Pay Now" buttons and the future automated monthly run),
+	 * not on every page load that merely checks eligibility — a per-user
+	 * per-reason per-day transient guard prevents a double-send if an
+	 * admin clicks "Pay Now" more than once in the same day.
+	 */
+	public static function notify_held_affiliates( array $held ) {
+		foreach ( $held as $row ) {
+			$copy = self::held_notification_copy( $row['reason'] );
+			if ( ! $copy ) {
+				continue;
+			}
+
+			$dedup_key = 'gas_held_notify_' . $row['user_id'] . '_' . $row['reason'];
+			if ( get_transient( $dedup_key ) ) {
+				continue;
+			}
+
+			$user = get_userdata( $row['user_id'] );
+			if ( ! $user || ! $user->user_email ) {
+				continue;
+			}
+
+			$body = str_replace( '{dashboard_url}', GAS_Frontend::dashboard_url(), $copy['body'] );
+			wp_mail( $user->user_email, $copy['subject'], $body . GAS_Settings::compliance_footer( $user->user_email ) );
+
+			set_transient( $dedup_key, 1, DAY_IN_SECONDS );
+		}
+	}
+
+	/**
 	 * Marks this affiliate's currently-unpaid money as paid — their own
 	 * direct sub-affiliate cut, and separately any tier-2/tier-3 sponsor
 	 * overrides they're owed on other people's sales, since those live on
@@ -616,20 +721,34 @@ class GAS_Payouts {
 	 * whose own direct-cut payment status must not be touched by this.
 	 * Only called after a payment API has confirmed the money is on its
 	 * way — never speculatively.
+	 *
+	 * Restricted to CLOSED prior months (added 2026-09-10, same boundary
+	 * as closed_month_unpaid_balance()) — without this, a payout entered
+	 * earlier the same day a batch run fires would get marked paid even
+	 * though affiliates_with_unpaid_balance() correctly excluded it from
+	 * that affiliate's eligible amount, silently paying out (and marking
+	 * permanently settled) still-open current-month earnings. The two
+	 * callers of this method (GAS_PayPal_Payouts/GAS_Wise_Payouts) are the
+	 * only places anything gets marked paid outside a manual Calculator
+	 * edit, so this boundary applies unconditionally rather than as an
+	 * opt-in parameter.
 	 */
 	public static function mark_affiliate_paid( $user_id ) {
 		global $wpdb;
 		$payouts_table = GAS_DB::table( 'payouts' );
 		$codes_table   = GAS_DB::table( 'codes' );
 		$now           = current_time( 'mysql' );
+		$month_start   = gmdate( 'Y-m-01 00:00:00', current_time( 'timestamp' ) );
 
 		$wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$payouts_table}
 				 SET status = 'paid', paid_at = %s
 				 WHERE status = 'unpaid'
+				 AND entered_at < %s
 				 AND code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
 				$now,
+				$month_start,
 				$user_id
 			)
 		);
@@ -647,8 +766,10 @@ class GAS_Payouts {
 				"UPDATE {$payouts_table}
 				 SET tier2_paid = 1, tier2_paid_at = %s
 				 WHERE tier2_paid = 0
+				 AND entered_at < %s
 				 AND tier2_code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
 				$now,
+				$month_start,
 				$user_id
 			)
 		);
@@ -658,8 +779,10 @@ class GAS_Payouts {
 				"UPDATE {$payouts_table}
 				 SET tier3_paid = 1, tier3_paid_at = %s
 				 WHERE tier3_paid = 0
+				 AND entered_at < %s
 				 AND tier3_code_id IN ( SELECT id FROM {$codes_table} WHERE wp_user_id = %d )",
 				$now,
+				$month_start,
 				$user_id
 			)
 		);

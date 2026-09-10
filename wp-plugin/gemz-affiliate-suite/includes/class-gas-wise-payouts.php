@@ -171,6 +171,10 @@ class GAS_Wise_Payouts {
 		$balance  = GAS_Payouts::affiliates_with_unpaid_balance( 'wise' );
 		$eligible = $balance['eligible'];
 
+		if ( $balance['held'] ) {
+			GAS_Payouts::notify_held_affiliates( $balance['held'] );
+		}
+
 		$paid   = array();
 		$failed = array();
 

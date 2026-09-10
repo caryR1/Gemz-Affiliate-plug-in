@@ -83,6 +83,10 @@ class GAS_PayPal_Payouts {
 			$user_amounts[ $row['user_id'] ] = $row['unpaid'];
 		}
 
+		if ( $held ) {
+			GAS_Payouts::notify_held_affiliates( $held );
+		}
+
 		if ( empty( $items ) ) {
 			$msg = 'No PayPal-method affiliates are currently eligible for a payout.';
 			if ( $held ) {

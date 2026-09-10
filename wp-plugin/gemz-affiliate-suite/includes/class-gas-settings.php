@@ -63,6 +63,16 @@ class GAS_Settings {
 			'business_name'            => '',
 			'business_address'         => '',
 			'program_terms_url'        => '',
+			// Automated monthly payout run (2026-09-10) — see
+			// GAS_REST::run_automated_payout(). Fires on/after this day of
+			// the month (Cary's reasoning: the previous month closes on the
+			// 1st, days 1-4 are the admin's window to fix any holds before
+			// the run fires, and running on the 5th means affiliates see
+			// their money within the first week). The pause toggle is a
+			// simple on/off, not a per-cycle workflow, per Cary's own
+			// framing ("in case we run into a problem").
+			'payout_run_day'           => 5,
+			'payout_run_paused'        => false,
 		);
 	}
 
@@ -119,5 +129,30 @@ class GAS_Settings {
 		$current = self::all();
 		$merged  = array_merge( $current, $values );
 		update_option( self::OPTION, $merged );
+	}
+
+	/**
+	 * A shared secret authenticating the automated-payout-run REST
+	 * endpoint (see GAS_REST::run_automated_payout()) — a real Hostinger
+	 * server cron job hits that URL with this token, not WP-Cron (which
+	 * only fires on site traffic and can silently slip, unacceptable for
+	 * something that moves real money on a schedule). Stored as its own
+	 * raw option, same pattern as the PayPal/Wise API credentials, rather
+	 * than inside the gas_settings blob, since it's a secret to copy into
+	 * an external cron config, not a value an admin edits in place.
+	 */
+	public static function get_automated_payout_token() {
+		$token = get_option( 'gas_automated_payout_token', '' );
+		if ( ! $token ) {
+			$token = wp_generate_password( 40, false, false );
+			update_option( 'gas_automated_payout_token', $token );
+		}
+		return $token;
+	}
+
+	public static function regenerate_automated_payout_token() {
+		$token = wp_generate_password( 40, false, false );
+		update_option( 'gas_automated_payout_token', $token );
+		return $token;
 	}
 }

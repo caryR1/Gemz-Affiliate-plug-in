@@ -13,6 +13,93 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-10 — Solar Referral session: Codes/notifications/automated-payout batch done + help docs pass
+
+### Codes folded into Affiliates, held notifications, automated monthly payout run
+
+All three done, verified live on staging, deployed to Solar, PHPUnit still
+25/55 green. `GAS_VERSION` 2.9.0, no DB version bump (new fields are
+options, not schema).
+
+1. **Codes → Affiliates**: dropped as a top-level menu item; the Add/Edit
+   Code form and Existing Codes table now live as a section on the
+   Affiliates screen (`#gas-codes-section`). Verified via direct render
+   call that the section shows up.
+2. **Held-affiliate notifications**: `GAS_Payouts::notify_held_affiliates()`,
+   plain `wp_mail()` (no templating system exists in GAS — see below),
+   fired from both PayPal and Wise batch runs whenever there's a held
+   list. Verified the actual copy strings contain zero `$` characters
+   anywhere, per Cary's explicit no-dollar-figures call. Per-user-per-
+   reason-per-day transient dedup so a double-click doesn't double-send.
+3. **Automated monthly payout run** — real server cron (Hostinger hPanel,
+   this host has no SSH crontab access) hitting a token-authenticated REST
+   endpoint, `gas/v1/automated-payout-run`. Pause toggle and configurable
+   run-day live on Settings; the exact cron URL + a "Regenerate token"
+   action live on the Payout Ledger.
+   - **Found and fixed the real bug you flagged**: `affiliates_with_unpaid_balance()`
+     had zero date awareness. Fixed with a new `closed_month_unpaid_balance()`
+     (same boundary as the dashboard's existing pending-vs-finalized
+     split) — but also had to fix `mark_affiliate_paid()` itself, which
+     I found was marking ALL of an affiliate's unpaid rows paid regardless
+     of month once a batch API call succeeded. Without that second fix,
+     the eligibility fix alone would've been cosmetic — the actual
+     money-moving call would've paid out current-month earnings anyway.
+   - **Also caught while writing this fix**: the tier3 UPDATE query in
+     `mark_affiliate_paid()` had a `$wpdb->prepare()` call with 3 `%s`/`%d`
+     placeholders but only 2 arguments passed — would've thrown a
+     mismatched-parameter warning (or worse) the first time this code path
+     ran for real. Found by re-reading my own diff carefully before
+     deploying, not by a failed test.
+   - **A third LiteSpeed page-caching bug**, same day as your dashboard
+     one: this new REST endpoint itself was getting cached, which — for a
+     real cron hitting it repeatedly — would have made it serve back
+     whatever its FIRST response was forever after, including "already ran
+     this month." Caught by testing the day-gate live: changed the setting,
+     hit the endpoint again, got the OLD response back. Fixed with the
+     same `nocache_headers()` + `litespeed_control_set_nocache` pair.
+   - **Verified live, not just reviewed**: backdated a real payout row to
+     August, confirmed it correctly counted as a closed-month held balance
+     while a same-day September row didn't; ran `mark_affiliate_paid()`
+     directly and confirmed the August row flipped to paid while the
+     September row stayed untouched; hit the real endpoint end-to-end
+     (wrong token → 403, day-gate skip, pause skip, a real unpaused
+     execution that correctly found zero eligible affiliates since all
+     live staging data was current-month, then correct once-per-month
+     idempotency on a second hit). No live PayPal/Wise send was exercised
+     — nothing on staging was actually eligible during this test pass, by
+     design of the fix being tested.
+
+### Help docs — real pass across affiliate, partner, and admin help
+
+Direct response to Cary's question. Added real coverage (not stub
+mentions) for everything on your list that actually exists in the
+codebase: tax compliance, the $50 minimum threshold, self-referral policy,
+buyer cash back (tied together with self-referral, since that's when an
+affiliate would see it), marketing materials, and unsubscribing — across
+`GAS_Help::render()` (affiliate), `render_partner_help()` (partner, got
+the unsubscribe note — the rest didn't apply, partners don't touch tax/
+cashback/self-referral), and the admin Help screen (new "Tax compliance,"
+"Buyer cash back," and "Self-referral" sections, plus updated bullets for
+Payout Ledger/Segments/Settings). Verified live via direct render calls
+checking for each topic string.
+
+**One item I could not document, flagging rather than guessing**: "a
+notifications system (WhatsApp, custom SMTP, editable templates)" was on
+your list as undocumented — grepped the entire plugin for
+whatsapp/smtp/template, found nothing except an unrelated "whatsapp"
+substring in the bot-UA fraud filter. This doesn't exist in GAS as of what
+I can see in this repo. If it's something you built that hasn't been
+pushed/merged yet, let me know and I'll document it once it's actually
+here — didn't want to write docs for a feature I can't verify exists,
+same reasoning as not building against `DRAFT-affiliate-agreement.md`'s
+placeholder text.
+
+**On the daily 8am docs-sync habit**: noted, that's your own scheduled
+task to run — nothing for me to configure on this end, just flagging I
+saw it so it's not a surprise the next time it fires.
+
+— Solar Referral session
+
 ## 2026-09-10 — Homes session: help docs are significantly behind, full sync needed + going forward as a daily habit
 
 Cary asked directly whether the help docs had been kept current. Checked

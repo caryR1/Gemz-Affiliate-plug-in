@@ -137,11 +137,95 @@ class GAS_REST {
 			'callback'            => array( __CLASS__, 'flush_rewrite_rules' ),
 			'permission_callback' => array( __CLASS__, 'permission_check' ),
 		) );
+
+		// Deliberately NOT gated behind permission_check() (manage_options) —
+		// this is hit anonymously by a real server-level cron job (see
+		// GAS_Settings::get_automated_payout_token()), not a logged-in
+		// admin. Auth is the token query param instead, checked inside the
+		// callback itself with hash_equals().
+		register_rest_route( 'gas/v1', '/automated-payout-run', array(
+			'methods'             => 'GET',
+			'callback'            => array( __CLASS__, 'run_automated_payout' ),
+			'permission_callback' => '__return_true',
+		) );
 	}
 
 	public static function flush_rewrite_rules() {
 		flush_rewrite_rules();
 		return new WP_REST_Response( array( 'flushed' => true ), 200 );
+	}
+
+	/**
+	 * Automated monthly payout run — added 2026-09-10, hit by a real
+	 * Hostinger server cron job (see GAS_Settings::get_automated_payout_
+	 * token()), deliberately NOT WP-Cron, which only fires on site traffic
+	 * and can silently slip: not acceptable for something that moves real
+	 * money on a schedule. Cary was explicit all three of these are
+	 * required, not optional:
+	 * - a pause toggle that skips the run entirely when flipped on;
+	 * - runs at most once per calendar month, only on/after the configured
+	 *   day, even if the cron fires more than once (e.g. a misconfigured
+	 *   schedule, or a retried request) — tracked via the
+	 *   `gas_last_automated_payout_run` option;
+	 * - relies on affiliates_with_unpaid_balance()'s closed-months-only
+	 *   boundary (fixed the same day, see GAS_Payouts::
+	 *   closed_month_unpaid_balance()) so this can never sweep in
+	 *   still-open current-month earnings — the exact bug this whole
+	 *   feature would have reintroduced at scale if left unfixed.
+	 */
+	public static function run_automated_payout( WP_REST_Request $request ) {
+		// Found live while testing this same day (see the matching
+		// comments in GAS_Frontend::render_dashboard() for the first two
+		// instances): LiteSpeed Cache was caching THIS endpoint's response
+		// too. Left unfixed, a real server cron would get the first hit's
+		// response served back forever after — including "already ran this
+		// month," which would have silently stopped the automated payout
+		// from ever running again once it hit that state once.
+		nocache_headers();
+		do_action( 'litespeed_control_set_nocache', 'gas automated payout run must never be cached' );
+
+		$token = (string) $request->get_param( 'token' );
+		if ( ! $token || ! hash_equals( GAS_Settings::get_automated_payout_token(), $token ) ) {
+			return new WP_Error( 'gas_invalid_token', 'Invalid or missing token.', array( 'status' => 403 ) );
+		}
+
+		if ( GAS_Settings::get( 'payout_run_paused' ) ) {
+			GAS_Admin::audit_log( 'payout_run', 0, 'automated_run_skipped', array( 'reason' => 'paused' ) );
+			return new WP_REST_Response( array( 'ran' => false, 'reason' => 'paused' ), 200 );
+		}
+
+		$today   = (int) current_time( 'j' );
+		$run_day = (int) GAS_Settings::get( 'payout_run_day' );
+		if ( $today < $run_day ) {
+			return new WP_REST_Response( array( 'ran' => false, 'reason' => 'not_yet_run_day' ), 200 );
+		}
+
+		// Self-healing if a call was missed on the exact day (e.g. a
+		// server hiccup), but never fires twice for the same month even
+		// if the cron hits this endpoint more than once.
+		$current_month = current_time( 'Y-m' );
+		if ( get_option( 'gas_last_automated_payout_run', '' ) === $current_month ) {
+			return new WP_REST_Response( array( 'ran' => false, 'reason' => 'already_ran_this_month' ), 200 );
+		}
+
+		$results = array();
+
+		if ( get_option( 'gas_paypal_client_id' ) && get_option( 'gas_paypal_client_secret' ) ) {
+			$paypal_result     = GAS_PayPal_Payouts::pay_all_eligible_affiliates( get_option( 'gas_paypal_currency', 'USD' ) );
+			$results['paypal'] = is_wp_error( $paypal_result )
+				? array( 'error' => $paypal_result->get_error_message() )
+				: $paypal_result;
+			GAS_Admin::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'result' => $results['paypal'], 'trigger' => 'automated' ) );
+		}
+
+		if ( get_option( 'gas_wise_api_token' ) && get_option( 'gas_wise_profile_id' ) ) {
+			$results['wise'] = GAS_Wise_Payouts::pay_all_eligible_affiliates();
+			GAS_Admin::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'result' => $results['wise'], 'trigger' => 'automated' ) );
+		}
+
+		update_option( 'gas_last_automated_payout_run', $current_month );
+
+		return new WP_REST_Response( array( 'ran' => true, 'results' => $results ), 200 );
 	}
 
 	public static function list_leads() {
@@ -545,8 +629,9 @@ class GAS_REST {
 			}
 		}
 
-		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id', 'min_payout_threshold', 'business_name', 'business_address', 'program_terms_url' );
+		$allowed  = array( 'site_name', 'partner_label', 'conversion_noun', 'menu_icon', 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_intro', 'quote_page_image_id', 'min_payout_threshold', 'business_name', 'business_address', 'program_terms_url', 'payout_run_day', 'payout_run_paused' );
 		$numeric  = array( 'tier1_split_percent', 'tier2_split_percent', 'tier3_split_percent', 'quote_page_image_id', 'min_payout_threshold' );
+		$boolean  = array( 'payout_run_paused' );
 
 		$values = array();
 		foreach ( $allowed as $field ) {
@@ -555,6 +640,10 @@ class GAS_REST {
 			}
 			if ( in_array( $field, $numeric, true ) ) {
 				$values[ $field ] = (float) $body[ $field ];
+			} elseif ( in_array( $field, $boolean, true ) ) {
+				$values[ $field ] = (bool) $body[ $field ];
+			} elseif ( 'payout_run_day' === $field ) {
+				$values[ $field ] = max( 1, min( 28, absint( $body[ $field ] ) ) );
 			} elseif ( 'quote_page_intro' === $field ) {
 				$values[ $field ] = sanitize_textarea_field( $body[ $field ] );
 			} elseif ( 'program_terms_url' === $field ) {

@@ -109,8 +109,33 @@ class GAS_Help {
 			</div>
 
 			<div class="gas-panel">
+				<h3>Tax information (required before you're paid)</h3>
+				<p>Before we can send you any payout, we need a one-time W-9 (US) or W-8BEN (non-US) form on file — the same Tax Information section on your dashboard as Payment Info. This is standard for anyone earning referral income, not something specific to you. We only ever see a masked summary of what's on file, never your tax ID.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Minimum payout amount</h3>
+				<p>Payouts only go out once your unpaid balance reaches $50. Below that, nothing is lost — your balance just carries forward automatically to the next payout run. If you're ever held back for this reason (or for missing tax info above), we'll email you directly to let you know.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Referring yourself</h3>
+				<p>You're welcome to use your own referral link if you personally become a customer — there's no rule against it, and you'll earn your normal commission on the sale. If that <?php echo esc_html( $partner_label ); ?> also offers buyer cash back, you'd get a separate email with a link to claim it, the same as any other referred customer would. The one thing we do watch for is a second account being created just to stack extra recruiting bonuses on what's really one person's own business, which isn't in the spirit of the program.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Marketing materials</h3>
+				<p>If we've made images or other materials available for your current campaigns, they show up in a Marketing Materials section on your dashboard, ready to download and use when promoting your link.</p>
+			</div>
+
+			<div class="gas-panel">
 				<h3>Changing your password</h3>
 				<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Unsubscribing from emails</h3>
+				<p>Every email we send has an unsubscribe link at the bottom. Using it stops future emails to that address — it doesn't affect your account, your link, or your payouts.</p>
 			</div>
 		</div>
 		<?php
@@ -139,6 +164,11 @@ class GAS_Help {
 			<div class="gas-panel">
 				<h3>Changing your password</h3>
 				<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Unsubscribing from emails</h3>
+				<p>Every email we send has an unsubscribe link at the bottom. Using it stops future emails to that address — it doesn't affect your account, your leads, or how leads keep being assigned to you.</p>
 			</div>
 
 			<div class="gas-panel">

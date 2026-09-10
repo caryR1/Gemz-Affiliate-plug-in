@@ -7,7 +7,28 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.8.3 / `GAS_DB_VERSION`: 16.
+`GAS_VERSION`: 2.9.0 / `GAS_DB_VERSION`: 16.
+
+**Same day, later**: shipped a three-part batch from a real discussion
+Cary had with Homes — folded the Codes screen into Affiliates (its
+link-provisioning job is gone now that campaigns handle that), added
+held-affiliate notifications with deliberately NO dollar figures (an
+FTC/income-claim caution Cary agreed with), and a genuinely automated
+monthly payout run via real server cron (not WP-Cron). Building the
+automated run surfaced and fixed a real, serious pre-existing bug:
+`affiliates_with_unpaid_balance()` had zero date awareness and could have
+swept a same-month, still-open sale into a batch payout. Also did a real
+documentation pass across both Help shortcodes (`GAS_Help::render()`/
+`render_partner_help()`) and the admin Help screen, closing a gap Cary
+asked about directly — tax compliance, buyer cash back, self-referral,
+marketing materials, the $50 threshold, and unsubscribing were all
+genuinely undocumented until now. One item on the ask list — "a
+notifications system (WhatsApp, custom SMTP, editable templates)" — does
+NOT exist in GAS as far as this session can find (grepped the whole
+plugin, zero matches beyond an unrelated "whatsapp" bot-UA string in the
+fraud filter); flagged rather than documented, since it can't be real
+without a Homes-side change this session hasn't seen. See "Automated
+monthly payout run" below for the full fix and how it was verified.
 
 **Since this was first written (2026-09-06)**: shipped self-signup
 affiliates auto-matched to every partner marked "Open to self-signup" with
@@ -342,14 +363,87 @@ it has zero compliance notice today, so this wasn't a redundant add.
   the `paypal` method with an unpaid balance.
 - Wise: one transfer per affiliate (no true batch API), ABA or IBAN, each
   affiliate's failure reported independently rather than blocking the rest.
-- Both are manual triggers (`gas_paypal_payout_now` / `gas_wise_payout_now`)
-  — nothing runs these on a schedule.
+- Both triggerable manually (`gas_paypal_payout_now` / `gas_wise_payout_now`,
+  Payout Ledger screen) AND automatically — see "Automated monthly payout
+  run" below.
 - Admin can also just use the Payout Calculator + Ledger (with CSV export)
   and pay manually outside either API.
 
-**Admin backend** (`class-gas-admin.php`, one submenu per screen): Affiliates,
-Codes, Partners, Leads, Click Log, Reports, Payout Calculator, Payout Ledger,
-Audit Log, Segments, Lead Magnets, Settings, Help.
+**Automated monthly payout run** (2026-09-10, `GAS_REST::
+run_automated_payout()`) — fires both PayPal and Wise batch runs on a
+schedule, per Cary's three hard requirements:
+- **Pause toggle** (Settings screen, `payout_run_paused`) — a simple on/off
+  that skips the run entirely, "in case we run into a problem" (Cary's own
+  framing, deliberately not a more complex per-cycle workflow).
+- **Real server-level cron, not WP-Cron** — WP-Cron only fires on site
+  traffic and can silently slip, unacceptable for something moving real
+  money on a schedule. A token-authenticated REST endpoint
+  (`gas/v1/automated-payout-run?token=...`) is hit by an actual Hostinger
+  cron job configured in hPanel (this host has no SSH crontab access, so
+  that's Cary's own one-time setup step — the exact URL to paste is shown
+  live on the Payout Ledger screen, with a "Regenerate token" action if it
+  ever needs rotating). The endpoint is safe to hit daily: it only actually
+  fires on/after the configured day of the month (`payout_run_day`,
+  default the 5th — Cary's reasoning: the previous month closes on the
+  1st, days 1-4 are the admin's window to fix any holds first, and running
+  on the 5th means affiliates see their money within the first week) and
+  at most once per calendar month (tracked via `gas_last_automated_payout_run`),
+  so a daily cron schedule is simplest and can't double-pay.
+- **Only pays out CLOSED prior months** — a real, serious pre-existing bug
+  fixed as part of this: `affiliates_with_unpaid_balance()` had zero date
+  awareness, so a sale entered on, say, the 3rd of a new month could have
+  been swept into a batch run firing on the 5th, even though that's the
+  current still-open month's earnings, not a closed prior month owed to
+  the affiliate yet. Fixed with a new `GAS_Payouts::
+  closed_month_unpaid_balance()` (same closed-months boundary the
+  dashboard's own pending-vs-finalized split already used) feeding
+  eligibility, AND — easy to miss, would have silently defeated the whole
+  fix otherwise — `mark_affiliate_paid()` itself needed the identical
+  boundary added to its UPDATE queries, since it was previously marking
+  ALL of an affiliate's unpaid rows paid regardless of month once a batch
+  API call succeeded. Applies identically whether triggered by the
+  automated run or the existing manual "Pay All" buttons.
+- **Held-affiliate notifications** (`GAS_Payouts::notify_held_affiliates()`)
+  — a real gap before this: `affiliates_with_unpaid_balance()`'s held
+  reasons (`no_tax_info`/`below_threshold`) reached the admin in the
+  batch-run summary, but never told the affected affiliate anything.
+  Fixed with a plain `wp_mail()` per held reason (GAS has no notification-
+  templating system yet — that's still unstarted "Part 3" of the original
+  GRC port, so this is a hardcoded body, same pattern as every other
+  notification in the plugin, not a new templating layer). **Deliberately
+  NO specific dollar figures anywhere** — not their balance, not the
+  threshold amount — after Cary agreed with an FTC/income-claim caution;
+  copy is encouraging-generic only ("keep sharing your link," "recruit
+  your team"). A per-user-per-reason-per-day transient prevents a
+  double-send if a manual "Pay Now" is clicked more than once same day.
+- **A third instance of the LiteSpeed page-caching bug was found and fixed
+  building this** (see the dashboard/portal fix earlier the same day): the
+  automated-payout-run endpoint itself was getting cached by LiteSpeed,
+  which would have made a real server cron serve back its FIRST response
+  forever after — including "already ran this month," silently stopping
+  the automated payout from ever running again once it hit that state
+  once. Fixed with the same `nocache_headers()` +
+  `litespeed_control_set_nocache` pair.
+- **Verified live on staging**, not just code-reviewed: confirmed via
+  direct DB inspection that the month-boundary fix correctly excludes/
+  includes rows (a backdated August-entered row correctly counted, a
+  same-day September row correctly didn't); confirmed `mark_affiliate_paid()`
+  left a same-day unpaid row untouched while correctly marking the
+  backdated one paid; hit the real REST endpoint end-to-end (wrong token
+  → 403, day-gate skip, pause skip, a real un-paused execution that
+  correctly found zero eligible affiliates since all live staging data was
+  current-month, then correct once-per-month idempotency on a second hit);
+  confirmed the held-notification copy contains no `$` anywhere via direct
+  inspection. No live PayPal/Wise send was exercised (deliberately —
+  staging's live data was all current-month, so nothing was eligible to
+  actually pay during this test pass).
+
+**Admin backend** (`class-gas-admin.php`, one submenu per screen): Affiliates
+(now includes a "Codes" section for manually adding/auditing offline-referral
+codes — dropped as its own top-level menu item 2026-09-10 since its original
+job of matching a new affiliate's code to a partner is gone now that
+campaigns auto-provision that), Partners, Leads, Click Log, Reports, Payout
+Calculator, Payout Ledger, Audit Log, Segments, Lead Magnets, Settings, Help.
 
 **Reports — this already exists**, contrary to it being flagged as a gap:
 Commission Summary (unpaid/paid tier-1, cashback total, tier-2/3 override
@@ -515,16 +609,20 @@ Ranked by what would hurt most if development speed goes up:
    (LiteSpeed Cache's Redis object-cache.php masking page edits on Solar,
    fixed by deactivating the plugin) **and the same drop-in is confirmed
    present, unfixed, on Home.** Same failure mode is latent there. A
-   second, distinct LiteSpeed-caused bug hit 2026-09-10: full PAGE caching
-   (not the object cache) served a stale, wrong-for-the-viewer response on
-   the Affiliate Dashboard and Partner Portal — fixed on those two pages
-   via `litespeed_control_set_nocache` (see "Dashboard styling" above),
-   but nothing systematically audits every OTHER per-user shortcode page
-   in the plugin (signup forms, lead-capture, cashback claim) for the same
-   risk — a signup/lead-capture page being cached would surface as a
-   silently-expired nonce ("Security check failed") rather than wrong
-   content, a subtler failure mode worth a deliberate pass rather than
-   assuming `nocache_headers()` alone is protecting them.
+   second AND THIRD distinct LiteSpeed-caused bugs hit 2026-09-10, same
+   day: full PAGE caching (not the object cache) served a stale,
+   wrong-for-the-viewer response on the Affiliate Dashboard and Partner
+   Portal, then a third time on the automated-payout-run REST endpoint
+   itself (would have made a real cron serve its first response forever
+   after). All three fixed via `litespeed_control_set_nocache` (see
+   "Dashboard styling" and "Automated monthly payout run" above), but
+   nothing systematically audits every OTHER per-user or nonce-bearing
+   shortcode page in the plugin (signup forms, lead-capture, cashback
+   claim) for the same risk — a signup/lead-capture page being cached
+   would surface as a silently-expired nonce ("Security check failed")
+   rather than wrong content, a subtler failure mode worth a deliberate
+   pass rather than assuming `nocache_headers()` alone is protecting them,
+   or that three is the last instance of this bug class on this host.
 7. **Tax info (SSN/EIN) is stored in plaintext user-meta, unencrypted** —
    deliberately consistent with the existing (also unencrypted) banking-info
    fields rather than a new inconsistency, but disclosed here as a real gap

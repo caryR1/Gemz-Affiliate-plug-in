@@ -7,9 +7,22 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-11, by the Solar Referral session. Current
-`GAS_VERSION`: 2.18.0 / `GAS_DB_VERSION`: 18.
+`GAS_VERSION`: 2.19.0 / `GAS_DB_VERSION`: 18.
 
-**2026-09-11**: closed a real gap Cary noticed directly — once a lead
+**2026-09-11, later**: a logged-in affiliate visiting the public
+Refer-a-Friend page no longer sees account-creation fields
+(name/email/phone/password/agree-terms) to refer a friend — reuses the
+dashboard's own "Add a referral" panel (`render_add_referral_section()`,
+now pre-expanded via a new `$open` param) instead of a second form, so
+it's the same handler/rate-limit/partner-picker as the dashboard version,
+not a lookalike copy. Designed by Homes, landed here. No DB change.
+
+**2026-09-11**: two small display bugs fixed — the "earn between $X and
+$Y" payout-range copy (on the signup/refer page and the dashboard's
+per-tier pending-earnings estimate) now collapses to one number when
+min and max round to the same value, instead of "$490 and $490."
+
+**Earlier, 2026-09-11**: closed a real gap Cary noticed directly — once a lead
 was assigned to a fulfillment partner, there was no way to undo it,
 whether the match was a mistake or the partner didn't want the lead.
 New `GAS_Leads::unassign_partner()` resets a lead back to the exact

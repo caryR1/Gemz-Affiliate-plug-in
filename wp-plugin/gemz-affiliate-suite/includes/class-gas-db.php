@@ -38,6 +38,49 @@ class GAS_DB {
 		);
 	}
 
+	/**
+	 * The 50 states + DC — added 2026-09-10 per Cary's direct request:
+	 * "wherever a state is required, it should be a dropdown," not free
+	 * text (was a real gap: e.g. the Get-a-Quote form's address field had
+	 * no separate state at all, so partner coverage-matching couldn't use
+	 * it for leads from that form — flagged earlier the same day). One
+	 * shared list so every state field site-wide (referral forms, partner
+	 * coverage-area fields, etc.) stays consistent rather than each
+	 * screen inventing its own.
+	 */
+	public static function us_states() {
+		return array(
+			'AL' => 'Alabama', 'AK' => 'Alaska', 'AZ' => 'Arizona', 'AR' => 'Arkansas',
+			'CA' => 'California', 'CO' => 'Colorado', 'CT' => 'Connecticut', 'DE' => 'Delaware',
+			'DC' => 'District of Columbia', 'FL' => 'Florida', 'GA' => 'Georgia', 'HI' => 'Hawaii',
+			'ID' => 'Idaho', 'IL' => 'Illinois', 'IN' => 'Indiana', 'IA' => 'Iowa',
+			'KS' => 'Kansas', 'KY' => 'Kentucky', 'LA' => 'Louisiana', 'ME' => 'Maine',
+			'MD' => 'Maryland', 'MA' => 'Massachusetts', 'MI' => 'Michigan', 'MN' => 'Minnesota',
+			'MS' => 'Mississippi', 'MO' => 'Missouri', 'MT' => 'Montana', 'NE' => 'Nebraska',
+			'NV' => 'Nevada', 'NH' => 'New Hampshire', 'NJ' => 'New Jersey', 'NM' => 'New Mexico',
+			'NY' => 'New York', 'NC' => 'North Carolina', 'ND' => 'North Dakota', 'OH' => 'Ohio',
+			'OK' => 'Oklahoma', 'OR' => 'Oregon', 'PA' => 'Pennsylvania', 'RI' => 'Rhode Island',
+			'SC' => 'South Carolina', 'SD' => 'South Dakota', 'TN' => 'Tennessee', 'TX' => 'Texas',
+			'UT' => 'Utah', 'VT' => 'Vermont', 'VA' => 'Virginia', 'WA' => 'Washington',
+			'WV' => 'West Virginia', 'WI' => 'Wisconsin', 'WY' => 'Wyoming',
+		);
+	}
+
+	/**
+	 * The `<option>` tags for a US-state `<select>`, shared by every state
+	 * field site-wide — pass the currently-selected abbreviation (blank
+	 * for none). Renders "XX — Full Name" so an abbreviation-only value
+	 * is never ambiguous in the list, per Cary's own spec ("state
+	 * initial, state name in the dropdown").
+	 */
+	public static function state_dropdown_options( $selected = '' ) {
+		$html = '<option value="">— Select a state —</option>';
+		foreach ( self::us_states() as $abbr => $full_name ) {
+			$html .= '<option value="' . esc_attr( $abbr ) . '"' . selected( $selected, $abbr, false ) . '>' . esc_html( $abbr . ' — ' . $full_name ) . '</option>';
+		}
+		return $html;
+	}
+
 	public static function activate() {
 		self::create_tables();
 		GAS_Roles::add_role();

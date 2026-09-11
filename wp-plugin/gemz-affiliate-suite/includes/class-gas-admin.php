@@ -503,10 +503,15 @@ class GAS_Admin {
 			echo '<tr><th>Service area</th><td><input type="text" name="service_area_description" class="regular-text" value="' . esc_attr( $editing->service_area_description ?? '' ) . '" placeholder="e.g. Tampa Bay area, FL, or Nationwide"> <p class="description">Free-text, for your own reference.</p></td></tr>';
 
 			echo '<tr><th>State / city / zip</th><td>';
-			echo '<input type="text" name="state" style="width:100px;text-transform:uppercase;" placeholder="FL or FL,TX,GA" value="' . esc_attr( $editing->state ?? '' ) . '"> ';
+			$editing_states = ! empty( $editing->state ) ? array_map( 'trim', explode( ',', strtoupper( $editing->state ) ) ) : array();
+			echo '<select name="state[]" multiple size="6" style="min-width:140px;vertical-align:top;">';
+			foreach ( GAS_DB::us_states() as $abbr => $full_name ) {
+				echo '<option value="' . esc_attr( $abbr ) . '"' . selected( in_array( $abbr, $editing_states, true ), true, false ) . '>' . esc_html( $abbr . ' — ' . $full_name ) . '</option>';
+			}
+			echo '</select> ';
 			echo '<input type="text" name="city" class="regular-text" style="width:200px;" placeholder="City" value="' . esc_attr( $editing->city ?? '' ) . '"> ';
 			echo '<input type="text" name="zip" style="width:100px;" placeholder="Zip" value="' . esc_attr( $editing->zip ?? '' ) . '"> ';
-			echo '<p class="description">Structured, so partners can be filtered by state below, and so the affiliate dashboard can show a "Serves: ..." line on this partner\'s link cards &mdash; separate from the free-text service area above. One or more comma-separated 2-letter codes.</p>';
+			echo '<p class="description">Structured, so partners can be filtered by state below, and so the affiliate dashboard can show a "Serves: ..." line on this partner\'s link cards &mdash; separate from the free-text service area above. Hold Ctrl/Cmd to select more than one state. Real dropdown as of 2026-09-10 (was free-text before, comma-separated codes) — see GAS_DB::us_states().</p>';
 			echo '</td></tr>';
 
 			echo '<tr><th>Open to self-signup</th><td>';
@@ -982,7 +987,16 @@ class GAS_Admin {
 			'requires_appointment' => isset( $_POST['requires_appointment'] ) ? 1 : 0,
 			'destination_url'   => isset( $_POST['destination_url'] ) ? esc_url_raw( wp_unslash( $_POST['destination_url'] ) ) : '',
 			'service_area_description' => isset( $_POST['service_area_description'] ) ? sanitize_text_field( wp_unslash( $_POST['service_area_description'] ) ) : '',
-			'state'             => isset( $_POST['state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['state'] ) ) ) : '',
+			// Real multi-select as of 2026-09-10 (was one free-text field
+			// for "FL" or "FL,TX,GA") — $_POST['state'] now arrives as an
+			// array from name="state[]"; validated against
+			// GAS_DB::us_states() and re-joined into the same
+			// comma-separated storage format partner_covers_state() and
+			// everything downstream already expects, so no other code
+			// needed to change.
+			'state'             => isset( $_POST['state'] ) && is_array( $_POST['state'] )
+				? implode( ',', array_intersect( array_map( 'strtoupper', array_map( 'sanitize_text_field', wp_unslash( $_POST['state'] ) ) ), array_keys( GAS_DB::us_states() ) ) )
+				: '',
 			'city'              => isset( $_POST['city'] ) ? sanitize_text_field( wp_unslash( $_POST['city'] ) ) : '',
 			'zip'               => isset( $_POST['zip'] ) ? sanitize_text_field( wp_unslash( $_POST['zip'] ) ) : '',
 			'outreach_status'   => isset( $_POST['outreach_status'] ) && in_array( $_POST['outreach_status'], array( 'new', 'contacted', 'approved', 'declined' ), true ) ? $_POST['outreach_status'] : 'approved',

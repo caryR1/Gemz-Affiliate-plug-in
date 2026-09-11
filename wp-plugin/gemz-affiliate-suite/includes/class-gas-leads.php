@@ -176,6 +176,11 @@ class GAS_Leads {
 				<input type="text" id="gas_lead_address" name="address" class="gas-input">
 			</p>
 			<p>
+				<label for="gas_lead_state">State</label><br>
+				<select id="gas_lead_state" name="state" class="gas-input"><?php echo GAS_DB::state_dropdown_options(); ?></select>
+				<span class="gas-fineprint">Lets us match you to a partner that actually covers your area.</span>
+			</p>
+			<p>
 				<label for="gas_lead_phone">Phone</label><br>
 				<input type="tel" id="gas_lead_phone" name="phone" class="gas-input">
 			</p>
@@ -254,6 +259,13 @@ class GAS_Leads {
 		$email   = isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '';
 		$phone   = isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '';
 		$address = isset( $_POST['address'] ) ? sanitize_text_field( wp_unslash( $_POST['address'] ) ) : '';
+		// Real dropdown as of 2026-09-10 (was missing entirely before —
+		// the exact gap Solar flagged the same day coverage-matching
+		// couldn't use leads from this form). array_key_exists against
+		// GAS_DB::us_states() rather than trusting the raw POST value, so
+		// a tampered request can't inject an arbitrary string here.
+		$state_raw = isset( $_POST['state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['state'] ) ) ) : '';
+		$state     = array_key_exists( $state_raw, GAS_DB::us_states() ) ? $state_raw : '';
 
 		if ( '' === $name ) {
 			$fail( 'Please enter your name.' );
@@ -295,6 +307,7 @@ class GAS_Leads {
 				'customer_email' => $email,
 				'customer_phone' => $phone,
 				'customer_address' => $address,
+				'customer_state' => $state,
 				'appointment_at' => $appointment_at,
 				'status'         => 'new',
 				'created_at'     => current_time( 'mysql' ),

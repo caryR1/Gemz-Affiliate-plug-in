@@ -76,6 +76,19 @@
 .gas-share-label{color:#fff;}
 
 .gas-team-indent td:first-child{padding-left:2.4em;color:inherit;opacity:.9;}
+
+/* Rolled-up "+" disclosure (2026-09-10) — native <details>/<summary>,
+   used for "Add a referral"/"Add a team member" so both forms stay out
+   of the way until someone actually wants them. */
+.gas-disclosure{border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:8px;background:#fff;}
+.gas-disclosure summary{list-style:none;cursor:pointer;padding:.8em 1.1em;font-weight:700;color:var(--gas-accent,#3F8353);display:flex;align-items:center;gap:.5em;}
+.gas-disclosure summary::-webkit-details-marker{display:none;}
+.gas-disclosure summary .gas-fineprint{font-weight:400;}
+.gas-disclosure-plus{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--gas-accent,#3F8353);color:#fff;font-size:1.1em;line-height:1;flex-shrink:0;}
+.gas-disclosure[open] .gas-disclosure-plus{background:var(--gas-accent-dark,#193421);}
+.gas-disclosure[open] summary{border-bottom:1.5px solid var(--gas-accent-border,#CFE3D2);}
+.gas-disclosure-body{padding:.2em 1.1em 1.1em;}
+
 @media (max-width:600px){
 	.gas-dashboard-nav-link{padding:.6em .7em;font-size:.9em;}
 	.gas-share-btn{padding:.5em .8em;font-size:.85em;}

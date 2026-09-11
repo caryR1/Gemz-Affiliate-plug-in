@@ -34,6 +34,7 @@ class GAS_Frontend {
 		add_action( 'admin_post_gas_save_tax_info', array( __CLASS__, 'handle_save_tax_info' ) );
 		add_action( 'admin_post_gas_save_dashboard_theme', array( __CLASS__, 'handle_save_dashboard_theme' ) );
 		add_action( 'admin_post_gas_dashboard_add_referral', array( __CLASS__, 'handle_dashboard_add_referral' ) );
+		add_action( 'admin_post_gas_dashboard_add_team_member', array( __CLASS__, 'handle_dashboard_add_team_member' ) );
 	}
 
 	/**
@@ -644,7 +645,7 @@ class GAS_Frontend {
 				</p>
 				<p>
 					<label for="gas_friend_state">Their state</label><br>
-					<input type="text" id="gas_friend_state" name="friend_state" maxlength="2" placeholder="e.g. FL" style="text-transform:uppercase;" class="gas-input">
+					<select id="gas_friend_state" name="friend_state" class="gas-input"><?php echo GAS_DB::state_dropdown_options(); ?></select>
 					<span class="gas-fineprint">Lets us match them to a partner that actually covers their area.</span>
 				</p>
 			</div>
@@ -717,7 +718,11 @@ class GAS_Frontend {
 			$friend_email   = isset( $_POST['friend_email'] ) ? sanitize_email( wp_unslash( $_POST['friend_email'] ) ) : '';
 			$friend_phone   = isset( $_POST['friend_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_phone'] ) ) : '';
 			$friend_address = isset( $_POST['friend_address'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_address'] ) ) : '';
-			$friend_state   = isset( $_POST['friend_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['friend_state'] ) ) ) : '';
+			// Validated against GAS_DB::us_states() rather than trusted
+			// as-typed, now that this is a real dropdown (2026-09-10) —
+			// a tampered request can't inject an arbitrary string here.
+			$friend_state_raw = isset( $_POST['friend_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['friend_state'] ) ) ) : '';
+			$friend_state      = array_key_exists( $friend_state_raw, GAS_DB::us_states() ) ? $friend_state_raw : '';
 			if ( '' === $friend_name || ( '' === $friend_email && '' === $friend_phone ) ) {
 				$fail( 'Please enter your friend\'s name and at least an email or phone number.' );
 			}
@@ -853,7 +858,7 @@ class GAS_Frontend {
 	 * — since which partner it is, and whether they need an appointment,
 	 * genuinely isn't known yet at referral time.
 	 */
-	private static function create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address = '', $friend_state = '' ) {
+	private static function create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address = '', $friend_state = '', $partner_id = 0 ) {
 		global $wpdb;
 		// consent_call_text intentionally left at its default (0/not
 		// consented) here — the affiliate is submitting their FRIEND's
@@ -865,18 +870,34 @@ class GAS_Frontend {
 		$wpdb->insert(
 			GAS_DB::table( 'leads' ),
 			array(
-				'partner_id'      => 0,
+				// $partner_id lets the referring affiliate pick the
+				// partner directly (2026-09-10, Cary's ask — "we need to
+				// be able to select which fulfillment partner to add them
+				// to") instead of always landing unassigned for an admin
+				// to sort out later. Still defaults to 0/unassigned for
+				// every OTHER caller of this method (the public
+				// refer-a-friend page doesn't collect a partner choice),
+				// so nothing else changes behavior.
+				'partner_id'      => $partner_id,
 				'code_id'         => $code->id,
 				'customer_name'   => $friend_name,
 				'customer_email'  => $friend_email,
 				'customer_phone'  => $friend_phone,
 				'customer_address' => $friend_address,
 				'customer_state'  => $friend_state,
-				'status'          => 'new',
+				'status'          => $partner_id ? 'accepted' : 'new',
 				'created_at'      => current_time( 'mysql' ),
 			)
 		);
 		$lead_id = $wpdb->insert_id;
+
+		// A partner was explicitly chosen — relay to them the SAME way an
+		// admin's manual assignment does (GAS_Leads::assign_partner()),
+		// rather than the coverage-matching guess below, which only
+		// makes sense when nobody's picked a partner yet.
+		if ( $partner_id ) {
+			GAS_Leads::assign_partner( $lead_id, $partner_id );
+		}
 
 		if ( $friend_email ) {
 			GAS_Contacts::upsert( $friend_email, 'customer', array(
@@ -895,7 +916,7 @@ class GAS_Frontend {
 			);
 		}
 
-		if ( $friend_state ) {
+		if ( $friend_state && ! $partner_id ) {
 			self::notify_coverage_match( $lead_id, $friend_name, $friend_state );
 		}
 
@@ -1057,6 +1078,7 @@ class GAS_Frontend {
 				'tax_info_updated'        => 'Tax information submitted — thank you.',
 				'dashboard_theme_updated' => 'Dashboard color updated.',
 				'referral_added'          => 'Referral added — thanks for the introduction!',
+				'team_member_added'       => 'Team member added — they\'ll get an email shortly to set their password.',
 			);
 			$key = sanitize_text_field( wp_unslash( $_GET['gas_notice'] ) );
 			if ( isset( $notices[ $key ] ) ) {
@@ -1245,7 +1267,11 @@ class GAS_Frontend {
 	 * services, share buttons, click count) plus the earnings-by-tier
 	 * breakdown, on one page since they're really one story ("here's what
 	 * you're promoting and what it's earned you"), not two disconnected
-	 * ones like the pre-2026-09-10 layout had them.
+	 * ones like the pre-2026-09-10 layout had them. "Add a referral"
+	 * lives here too (moved from Team the same day, on Cary's direct
+	 * correction) — referring a CUSTOMER is a links/earnings action;
+	 * recruiting a new AFFILIATE (Team's "Add a team member") is a
+	 * different thing entirely, even though both used to look similar.
 	 */
 	public static function render_links_page() {
 		list( $ok, $data ) = self::dashboard_page_open( 'gas_affiliate_links' );
@@ -1256,18 +1282,18 @@ class GAS_Frontend {
 
 		self::render_stats_section( $user_id );
 		self::render_marketing_assets_section( $user_id );
+		self::render_add_referral_section( $user_id, $is_previewing );
 
 		self::dashboard_page_close();
 		return ob_get_clean();
 	}
 
 	/**
-	 * MY TEAM — the downline tree plus both ways to grow it (add a
-	 * referral for someone directly, or invite someone to become an
-	 * affiliate themselves) — these lived in two disconnected spots
-	 * before 2026-09-10 (one buried in "Your links," the other its own
-	 * panel near the bottom); both are "grow my team" actions, so now
-	 * they're together.
+	 * MY TEAM — the downline tree plus both ways to grow it: share a
+	 * join-link for someone to self-signup, or add them directly
+	 * yourself via render_add_team_member_section() (2026-09-10 — real
+	 * account creation, they get the normal "set your password" email,
+	 * not just a link handed to them).
 	 */
 	public static function render_team_page() {
 		list( $ok, $data ) = self::dashboard_page_open( 'gas_affiliate_team' );
@@ -1277,7 +1303,7 @@ class GAS_Frontend {
 		list( $user_id, $user, $is_previewing ) = $data;
 
 		self::render_downline_section( $user_id );
-		self::render_add_referral_section( $user_id, $is_previewing );
+		self::render_add_team_member_section( $user_id, $is_previewing );
 
 		self::dashboard_page_close();
 		return ob_get_clean();
@@ -1575,7 +1601,13 @@ class GAS_Frontend {
 	 * know who's logged in (or, under admin preview, who's being
 	 * previewed; unlike the password/theme sections this one stays live
 	 * during preview so an admin can add a referral on an affiliate's
-	 * behalf, e.g. one called in over the phone).
+	 * behalf, e.g. one called in over the phone). Rolled up behind a
+	 * <details>/<summary> disclosure (2026-09-10, Cary's ask: "rolled
+	 * up... a plus, click here to enter details") rather than a custom JS
+	 * toggle — native, works with no script, keyboard/screen-reader
+	 * accessible for free. Same pattern used for
+	 * render_add_team_member_section() right below, so both "grow my
+	 * business" actions on this page look and behave identically.
 	 */
 	private static function render_add_referral_section( $user_id, $is_previewing = false ) {
 		global $wpdb;
@@ -1583,9 +1615,14 @@ class GAS_Frontend {
 		if ( ! $my_code ) {
 			return;
 		}
+		// Alias, never real name — same rule as everywhere else an
+		// affiliate can see a partner (see the note on partners.partner_alias
+		// in class-gas-db.php). Only approved partners are offered, same
+		// set an affiliate could actually get matched with anyway.
+		$partners = $wpdb->get_results( "SELECT id, partner_alias FROM " . GAS_DB::table( 'partners' ) . " WHERE outreach_status = 'approved' ORDER BY partner_alias ASC" );
 
-		echo '<div class="gas-panel">';
-		echo '<h2>Add a referral</h2>';
+		echo '<div class="gas-panel"><details class="gas-disclosure"><summary><span class="gas-disclosure-plus" aria-hidden="true">+</span> Add a referral <span class="gas-fineprint">— click to enter their details</span></summary>';
+		echo '<div class="gas-disclosure-body">';
 		if ( $is_previewing ) {
 			echo '<p class="gas-fineprint">You\'re adding this to <strong>' . esc_html( get_userdata( $user_id )->display_name ) . '\'s</strong> account, not your own.</p>';
 		} else {
@@ -1614,15 +1651,25 @@ class GAS_Frontend {
 			</p>
 			<p>
 				<label for="gas_ref_state">Their state</label><br>
-				<input type="text" id="gas_ref_state" name="friend_state" maxlength="2" placeholder="e.g. FL" style="text-transform:uppercase;" class="gas-input">
+				<select id="gas_ref_state" name="friend_state" class="gas-input"><?php echo GAS_DB::state_dropdown_options(); ?></select>
 				<span class="gas-fineprint">Lets us match them to a partner that actually covers their area.</span>
+			</p>
+			<p>
+				<label for="gas_ref_partner">Which <?php echo esc_html( GAS_Settings::get( 'partner_label' ) ); ?>? (optional)</label><br>
+				<select id="gas_ref_partner" name="partner_id" class="gas-input">
+					<option value="0">— Let us match them by state instead —</option>
+					<?php foreach ( $partners as $p ) : ?>
+						<option value="<?php echo esc_attr( $p->id ); ?>"><?php echo esc_html( $p->partner_alias ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<span class="gas-fineprint">Pick one only if you already know who's the right fit — otherwise leave this on "let us match them" and their state above will decide.</span>
 			</p>
 			<p>
 				<button type="submit" class="gas-button">Add referral</button>
 			</p>
 		</form>
 		<?php
-		echo '</div>';
+		echo '</div></details></div>';
 	}
 
 	public static function handle_dashboard_add_referral() {
@@ -1639,7 +1686,10 @@ class GAS_Frontend {
 		}
 		$user_id = $is_previewing ? (int) $preview['id'] : get_current_user_id();
 
-		$redirect_back = add_query_arg( 'gas_notice', 'referral_added', self::team_url() );
+		// Moved to Links & Earnings (2026-09-10) — referring a customer is
+		// part of "my links" now, not "my team" (team is for recruiting
+		// other affiliates — see render_add_team_member_section() below).
+		$redirect_back = add_query_arg( 'gas_notice', 'referral_added', self::links_url() );
 		$fail          = function( $msg ) use ( $redirect_back ) {
 			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), remove_query_arg( 'gas_notice', $redirect_back ) ) );
 			exit;
@@ -1655,13 +1705,190 @@ class GAS_Frontend {
 		$friend_email   = isset( $_POST['friend_email'] ) ? sanitize_email( wp_unslash( $_POST['friend_email'] ) ) : '';
 		$friend_phone   = isset( $_POST['friend_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_phone'] ) ) : '';
 		$friend_address = isset( $_POST['friend_address'] ) ? sanitize_text_field( wp_unslash( $_POST['friend_address'] ) ) : '';
-		$friend_state   = isset( $_POST['friend_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['friend_state'] ) ) ) : '';
+		$friend_state_raw = isset( $_POST['friend_state'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_POST['friend_state'] ) ) ) : '';
+		$friend_state     = array_key_exists( $friend_state_raw, GAS_DB::us_states() ) ? $friend_state_raw : '';
+
+		// Explicit partner choice (2026-09-10, Cary's ask) — validated
+		// against real approved partners, not trusted as a raw ID, so a
+		// tampered request can't assign a lead to an unapproved/made-up
+		// partner row.
+		$partner_id = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
+		if ( $partner_id ) {
+			$is_approved = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM " . GAS_DB::table( 'partners' ) . " WHERE id = %d AND outreach_status = 'approved'", $partner_id ) );
+			if ( ! $is_approved ) {
+				$partner_id = 0;
+			}
+		}
 
 		if ( '' === $friend_name || ( '' === $friend_email && '' === $friend_phone ) ) {
 			$fail( 'Please enter a name and at least an email or phone number.' );
 		}
 
-		self::create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address, $friend_state );
+		self::create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address, $friend_state, $partner_id );
+
+		wp_safe_redirect( $redirect_back );
+		exit;
+	}
+
+	/**
+	 * Same rolled-up <details> pattern as render_add_referral_section()
+	 * above — but this one creates a real affiliate account directly
+	 * under the current affiliate as sponsor, rather than a lead. Added
+	 * 2026-09-10 per Cary: "it's a normal flow to add a team member,
+	 * they get an email" — mirrors handle_signup()'s own account-creation
+	 * logic (same role, same get_or_create_code_for_user()/sponsor
+	 * wiring), except the new member can't set their own password in the
+	 * moment (the affiliate adding them doesn't know one to set), so this
+	 * uses the same wp_generate_password()+retrieve_password() pattern
+	 * GAS_Roles::provision_partner_account() already uses for partner
+	 * accounts — WordPress's own standard "set your new password" email.
+	 */
+	private static function render_add_team_member_section( $user_id, $is_previewing = false ) {
+		global $wpdb;
+		$my_code = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'codes' ) . ' WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1', $user_id ) );
+		if ( ! $my_code ) {
+			return;
+		}
+
+		echo '<div class="gas-panel"><details class="gas-disclosure"><summary><span class="gas-disclosure-plus" aria-hidden="true">+</span> Add a team member <span class="gas-fineprint">— click to enter their details</span></summary>';
+		echo '<div class="gas-disclosure-body">';
+		if ( $is_previewing ) {
+			echo '<p class="gas-fineprint">You\'re adding this to <strong>' . esc_html( get_userdata( $user_id )->display_name ) . '\'s</strong> team, not your own.</p>';
+		} else {
+			echo '<p class="gas-fineprint">Met someone in person, or they\'d rather not sign themselves up? Add them directly — they\'ll get an email to set their own password, same as anyone who signs up themselves.</p>';
+		}
+		?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">
+			<?php wp_nonce_field( 'gas_dashboard_add_team_member' ); ?>
+			<input type="hidden" name="action" value="gas_dashboard_add_team_member">
+			<p>
+				<label for="gas_tm_name">Their name</label><br>
+				<input type="text" id="gas_tm_name" name="member_name" required class="gas-input">
+			</p>
+			<p>
+				<label for="gas_tm_email">Their email</label><br>
+				<input type="email" id="gas_tm_email" name="member_email" required class="gas-input">
+			</p>
+			<p>
+				<label for="gas_tm_phone">Their phone (optional)</label><br>
+				<input type="tel" id="gas_tm_phone" name="member_phone" class="gas-input">
+			</p>
+			<p>
+				<button type="submit" class="gas-button">Add team member</button>
+			</p>
+		</form>
+		<?php
+		echo '</div></details></div>';
+	}
+
+	public static function handle_dashboard_add_team_member() {
+		if ( ! is_user_logged_in() ) {
+			wp_die( 'Please log in first.' );
+		}
+		check_admin_referer( 'gas_dashboard_add_team_member' );
+
+		$preview       = GAS_Roles::get_admin_preview();
+		$is_previewing = $preview && 'agent' === $preview['type'];
+
+		if ( ! $is_previewing && ! GAS_Roles::is_affiliate() ) {
+			wp_die( 'This is for affiliates only.' );
+		}
+		$sponsor_user_id = $is_previewing ? (int) $preview['id'] : get_current_user_id();
+
+		$redirect_back = add_query_arg( 'gas_notice', 'team_member_added', self::team_url() );
+		$fail          = function( $msg ) use ( $redirect_back ) {
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $msg ), remove_query_arg( 'gas_notice', $redirect_back ) ) );
+			exit;
+		};
+
+		global $wpdb;
+		$sponsor_code = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'codes' ) . ' WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1', $sponsor_user_id ) );
+		if ( ! $sponsor_code ) {
+			$fail( 'No referral code found on this account yet.' );
+		}
+
+		$name  = isset( $_POST['member_name'] ) ? sanitize_text_field( wp_unslash( $_POST['member_name'] ) ) : '';
+		$email = isset( $_POST['member_email'] ) ? sanitize_email( wp_unslash( $_POST['member_email'] ) ) : '';
+		$phone = isset( $_POST['member_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['member_phone'] ) ) : '';
+
+		if ( '' === $name || ! is_email( $email ) ) {
+			$fail( 'Please enter their name and a valid email address.' );
+		}
+		if ( email_exists( $email ) ) {
+			$fail( 'That email is already registered to an account — ask them to log in instead, or use a different email.' );
+		}
+		if ( GAS_Fraud::is_disposable_email( $email ) ) {
+			$fail( 'Please use a permanent email address — temporary/disposable email services aren\'t accepted.' );
+		}
+		// This creates a real account and emails a stranger's inbox
+		// unprompted — the exact same abuse shape handle_signup() already
+		// guards against (mass account creation), just from a logged-in
+		// affiliate instead of an anonymous visitor. Reuses the same
+		// IP-keyed daily cap rather than leaving this endpoint as the one
+		// unlimited way to spam arbitrary email addresses with "you're an
+		// affiliate" + a WordPress password-reset link.
+		$signup_ip = GAS_Fraud::get_client_ip();
+		if ( GAS_Fraud::signup_rate_limited( $signup_ip ) ) {
+			$fail( 'Too many accounts created from this connection today — please try again tomorrow, or contact us if you think this is a mistake.' );
+		}
+
+		$username = self::generate_unique_username( $email );
+		$new_user_id = wp_insert_user( array(
+			'user_login'   => $username,
+			'user_email'   => $email,
+			'user_pass'    => wp_generate_password( 24 ),
+			'display_name' => $name,
+			'first_name'   => $name,
+			'role'         => GAS_Roles::ROLE,
+		) );
+		if ( is_wp_error( $new_user_id ) ) {
+			$fail( 'Could not create account: ' . $new_user_id->get_error_message() );
+		}
+		GAS_Fraud::record_signup_attempt( $signup_ip );
+
+		update_user_meta( $new_user_id, 'gas_status', 'active' );
+		if ( '' !== $phone ) {
+			update_user_meta( $new_user_id, 'gas_phone', $phone );
+		}
+		// Deliberately NOT setting gas_agreement_accepted_at here — this
+		// affiliate is consenting to the program terms on their OWN
+		// account's behalf, but can't accept an agreement for someone
+		// else any more than they can give TCPA consent for someone
+		// else's phone number (same principle as friend_state/consent in
+		// create_referral_lead() above). They see and can accept it
+		// themselves once they log in.
+
+		$new_code = self::insert_code_row( $new_user_id, $name, 0, $sponsor_code->id, 'Added directly by their sponsor (' . $sponsor_code->sub_affiliate_name . '), not self-signup.' );
+
+		GAS_Contacts::upsert( $email, 'affiliate', array(
+			'name'          => $name,
+			'phone'         => $phone,
+			'source'        => 'added_by_sponsor',
+			'related_table' => 'codes',
+			'related_id'    => $new_code->id,
+		) );
+
+		// WordPress's own standard "set your new password" email — same
+		// mechanism GAS_Roles::provision_partner_account() already uses,
+		// since the sponsor adding this person has no password to hand
+		// them.
+		retrieve_password( $email );
+
+		// A second, plain-language welcome separate from WP's own reset
+		// email (which only talks about passwords) — explains WHY they're
+		// getting this at all and what happens next.
+		$site_name = GAS_Settings::get( 'site_name' );
+		wp_mail(
+			$email,
+			"You're an affiliate with {$site_name}",
+			"Hi {$name},\n\n{$sponsor_code->sub_affiliate_name} added you as an affiliate with {$site_name}. Check your email for a separate message from WordPress with a link to set your password — once that's done, log in here to see your dashboard and referral link:\n\n" . self::dashboard_url() . GAS_Settings::compliance_footer( $email )
+		);
+
+		wp_mail(
+			get_option( 'admin_email' ),
+			'New affiliate added by a sponsor: ' . $name,
+			"{$sponsor_code->sub_affiliate_name} added a new team member directly from their dashboard.\n\nName: {$name}\nEmail: {$email}\nPhone: " . ( $phone ?: '(not provided)' ) . "\nReferral code: {$new_code->code}\nSponsor code: {$sponsor_code->code}"
+		);
 
 		wp_safe_redirect( $redirect_back );
 		exit;

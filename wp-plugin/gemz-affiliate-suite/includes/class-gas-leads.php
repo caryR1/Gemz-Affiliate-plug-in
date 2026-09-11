@@ -90,19 +90,8 @@ class GAS_Leads {
 	 * "solar") since this is the shared plugin.
 	 */
 	public static function consent_label() {
-		// Business name, not the site's marketing name (site_name) — this
-		// is a legal consent notice naming who's actually authorized to
-		// call/text, same reasoning as compliance_footer() preferring
-		// business_name; falls back to site_name only if a site hasn't
-		// filled that in yet. Cary's own wording (2026-09-11), simplified
-		// from the original TCPA boilerplate at his direct request —
-		// still not legal advice; the autodialer/prerecorded-voice and
-		// "not required to receive service" specifics that used to be
-		// spelled out here are gone, worth an attorney's read on whether
-		// this shorter version still covers what a real robocall/SMS
-		// campaign would need.
-		$business_name = GAS_Settings::get( 'business_name' ) ?: GAS_Settings::get( 'site_name' );
-		return 'By submitting this form, you grant ' . $business_name . ' and its associated ' . GAS_Settings::get( 'partner_label' ) . ' permission to call and/or text in relation to this quote.';
+		$site_name = GAS_Settings::get( 'site_name' );
+		return 'By checking this box, I agree that ' . $site_name . ' and its ' . GAS_Settings::get( 'partner_label' ) . '(s) may contact me by phone call and/or text message at the number provided above about my request, including using an automatic telephone dialing system and/or a prerecorded or artificial voice. Message and data rates may apply. This consent is not required to receive service, and I can reply STOP to opt out of texts at any time.';
 	}
 
 	/**
@@ -208,7 +197,7 @@ class GAS_Leads {
 				<input type="email" id="gas_lead_email" name="email" class="gas-input">
 			</p>
 			<p id="gas-consent-row" style="display:none;">
-				<label><input type="checkbox" id="gas_consent_call_text" name="consent_call_text" value="1"> <strong>Permission to call or text:</strong> <?php echo esc_html( self::consent_label() ); ?></label>
+				<label><input type="checkbox" id="gas_consent_call_text" name="consent_call_text" value="1"> <?php echo esc_html( self::consent_label() ); ?></label>
 			</p>
 			<script>
 				(function() {

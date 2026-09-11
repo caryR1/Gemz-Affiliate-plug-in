@@ -6,8 +6,21 @@ solar.gemzonline.com and homes.gemzonline.com). Unlike `SWAP-with-HOMES.md`
 current — update it in place as features land or plans change, rather than
 appending entries.
 
-Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.17.0 / `GAS_DB_VERSION`: 18.
+Last written: 2026-09-11, by the Solar Referral session. Current
+`GAS_VERSION`: 2.18.0 / `GAS_DB_VERSION`: 18.
+
+**2026-09-11**: closed a real gap Cary noticed directly — once a lead
+was assigned to a fulfillment partner, there was no way to undo it,
+whether the match was a mistake or the partner didn't want the lead.
+New `GAS_Leads::unassign_partner()` resets a lead back to the exact
+"needs matching" state a brand-new lead is in (`partner_id` 0,
+`status` 'new'), so it flows straight back through the existing
+match-a-partner UI with no other code needing to change; the old
+partner + reason are preserved in `notes` rather than lost. Two entry
+points: an "Unassign" button on the admin Leads screen (error
+correction), and a "Decline" button in the Partner Portal (partner-
+initiated, ownership-checked the same way status updates already are).
+No DB change.
 
 **Same day, on top of the restructure**: "Add a referral" moved to My
 Links & Earnings (Cary's correction — a customer referral is a

@@ -17,6 +17,7 @@ class GAS_Partner_Portal {
 		add_action( 'admin_post_gas_partner_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_nopriv_gas_partner_login', array( __CLASS__, 'handle_login' ) );
 		add_action( 'admin_post_gas_partner_update_lead_status', array( __CLASS__, 'handle_update_lead_status' ) );
+		add_action( 'admin_post_gas_partner_decline_lead', array( __CLASS__, 'handle_decline_lead' ) );
 		add_action( 'admin_post_gas_partner_change_password', array( __CLASS__, 'handle_change_password' ) );
 	}
 
@@ -149,6 +150,19 @@ class GAS_Partner_Portal {
 					// by an admin — nothing for the partner to set until then.
 					echo esc_html( ucwords( str_replace( '_', ' ', $l->status ) ) );
 				}
+				// Decline (2026-09-10) — available regardless of the status
+				// gate above (even a still-'new' lead can be declined; a
+				// partner not wanting it isn't conditional on admin triage
+				// having happened yet), except once genuinely 'completed' —
+				// nothing left to send back at that point.
+				if ( ! $is_previewing && 'completed' !== $l->status ) {
+					echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:4px;" onsubmit="return confirm(\'Send this lead back — not a fit for you?\');">';
+					wp_nonce_field( 'gas_partner_decline_lead_' . $l->id );
+					echo '<input type="hidden" name="action" value="gas_partner_decline_lead">';
+					echo '<input type="hidden" name="lead_id" value="' . esc_attr( $l->id ) . '">';
+					echo '<button type="submit" class="button button-small">Decline</button>';
+					echo '</form>';
+				}
 				echo '</td>';
 				echo '<td>' . esc_html( $l->created_at ) . '</td>';
 				echo '</tr>';
@@ -278,6 +292,36 @@ class GAS_Partner_Portal {
 			array( 'id' => $lead_id )
 		);
 		GAS_Admin::audit_log( 'lead', $lead_id, 'status_changed_by_partner', array( 'status' => $status ) );
+
+		wp_safe_redirect( add_query_arg( 'updated', '1', self::page_url() ) );
+		exit;
+	}
+
+	/**
+	 * The other half of the "no way to break an assignment" gap Cary
+	 * flagged (2026-09-10) — a partner who doesn't want a lead (wrong fit,
+	 * outside real capacity, whatever) can send it back for rematching
+	 * themselves instead of it just sitting in their queue unresolved
+	 * forever, or an admin having to notice and intervene. Same ownership
+	 * check as handle_update_lead_status(): only ever the partner's OWN
+	 * lead, never trusted from the posted id alone.
+	 */
+	public static function handle_decline_lead() {
+		$partner = self::get_current_partner();
+		if ( ! $partner || ! current_user_can( 'gas_update_own_lead_status' ) ) {
+			wp_die( 'Not allowed.' );
+		}
+
+		$lead_id = isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0;
+		check_admin_referer( 'gas_partner_decline_lead_' . $lead_id );
+
+		global $wpdb;
+		$lead = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'leads' ) . ' WHERE id = %d', $lead_id ) );
+		if ( ! $lead || (int) $lead->partner_id !== (int) $partner->id ) {
+			wp_die( 'That lead does not belong to your account.' );
+		}
+
+		GAS_Leads::unassign_partner( $lead_id, 'Declined by partner: ' . $partner->name );
 
 		wp_safe_redirect( add_query_arg( 'updated', '1', self::page_url() ) );
 		exit;

@@ -1082,7 +1082,19 @@ class GAS_Admin {
 			echo '<td>' . ( $l->customer_address ? esc_html( $l->customer_address ) : '&mdash;' ) . '</td>';
 			echo '<td>' . ( $l->customer_state ? esc_html( $l->customer_state ) : '&mdash;' ) . '</td>';
 			if ( $l->partner_id ) {
-				echo '<td>' . esc_html( $l->partner_name ?: '&mdash;' ) . '</td>';
+				// Unassign (2026-09-10, Cary's ask): a match made in error,
+				// or a partner who doesn't want the lead, previously had no
+				// way to be undone — this sends the lead back through the
+				// exact same "-- match a partner --" form below, once
+				// GAS_Leads::unassign_partner() resets partner_id to 0.
+				echo '<td>' . esc_html( $l->partner_name ?: '&mdash;' ) . '<br>';
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:4px;" onsubmit="return confirm(\'Unassign this lead from ' . esc_js( $l->partner_name ) . ' and send it back for rematching?\');">';
+				wp_nonce_field( 'gas_unassign_lead_partner_' . $l->id );
+				echo '<input type="hidden" name="action" value="gas_unassign_lead_partner">';
+				echo '<input type="hidden" name="lead_id" value="' . esc_attr( $l->id ) . '">';
+				echo '<button type="submit" class="button button-small">Unassign</button>';
+				echo '</form>';
+				echo '</td>';
 			} else {
 				// Unassigned — came from the merged signup/refer page's
 				// referral path (GAS_Frontend::create_referral_lead()),

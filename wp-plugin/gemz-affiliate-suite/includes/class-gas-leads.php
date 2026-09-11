@@ -25,6 +25,7 @@ class GAS_Leads {
 		add_action( 'admin_post_nopriv_gas_submit_lead', array( __CLASS__, 'handle_submit' ) );
 		add_action( 'admin_post_gas_update_lead_status', array( __CLASS__, 'handle_update_status' ) );
 		add_action( 'admin_post_gas_assign_lead_partner', array( __CLASS__, 'handle_assign_partner' ) );
+		add_action( 'admin_post_gas_unassign_lead_partner', array( __CLASS__, 'handle_unassign_partner' ) );
 		add_action( 'gas_daily_stale_lead_check', array( __CLASS__, 'check_stale_leads' ) );
 	}
 
@@ -458,6 +459,83 @@ class GAS_Leads {
 		GAS_Admin::audit_log( 'lead', $lead_id, 'partner_assigned', array( 'partner_id' => $partner_id ) );
 
 		return true;
+	}
+
+	/**
+	 * Breaks an existing partner assignment and sends the lead back to the
+	 * same "needs matching" state a fresh, never-assigned lead is in —
+	 * added 2026-09-10 after Cary flagged a real gap: once assign_partner()
+	 * ran, there was no way to undo it, whether the match was made in
+	 * error or the partner themselves didn't want the lead. Reuses
+	 * `status = 'new'` deliberately rather than inventing a separate
+	 * "declined" status: that's already exactly what "needs an admin to
+	 * match a partner" means everywhere else in this class (see
+	 * render_leads_page()'s partner-select form, shown whenever
+	 * partner_id is empty) and assign_partner() re-relays to whichever
+	 * partner is picked next regardless of the lead's prior status, so no
+	 * other code needed to change to make re-matching work. The old
+	 * partner isn't just silently dropped — it's recorded in notes so
+	 * whoever re-matches this lead has the context.
+	 */
+	public static function unassign_partner( $lead_id, $reason = '' ) {
+		global $wpdb;
+		$leads_table = GAS_DB::table( 'leads' );
+		$lead        = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$leads_table} WHERE id = %d", $lead_id ) );
+		if ( ! $lead ) {
+			return false;
+		}
+
+		$old_partner_name = '(none)';
+		if ( $lead->partner_id ) {
+			$old_partner_name = $wpdb->get_var( $wpdb->prepare( 'SELECT name FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $lead->partner_id ) ) ?: 'a deleted partner';
+		}
+
+		$note_line = 'Unassigned from ' . $old_partner_name . ' on ' . current_time( 'mysql' ) . ( $reason ? " ({$reason})" : '' ) . '.';
+
+		$wpdb->update(
+			$leads_table,
+			array(
+				'partner_id' => 0,
+				'status'     => 'new',
+				'updated_at' => current_time( 'mysql' ),
+				'notes'      => trim( ( $lead->notes ? $lead->notes . "\n" : '' ) . $note_line ),
+			),
+			array( 'id' => $lead_id )
+		);
+
+		GAS_Admin::audit_log( 'lead', $lead_id, 'partner_unassigned', array( 'old_partner_id' => $lead->partner_id, 'reason' => $reason ) );
+
+		// Otherwise this could silently sit unassigned indefinitely — the
+		// same visibility a brand-new lead gets via the "New lead" email,
+		// just for the re-matching case instead of the first-match one.
+		wp_mail(
+			get_option( 'admin_email' ),
+			'Lead needs rematching: ' . $lead->customer_name,
+			"A lead was unassigned from {$old_partner_name} and needs to be matched to a partner again.\n\nCustomer: {$lead->customer_name}\n" . ( $reason ? "Reason: {$reason}\n" : '' ) . "\nMatch it to a new partner in wp-admin under Leads."
+		);
+
+		return true;
+	}
+
+	/**
+	 * Admin-side correction for a match made in error — the counterpart
+	 * to handle_assign_partner(), for a lead that's already assigned.
+	 */
+	public static function handle_unassign_partner() {
+		if ( ! current_user_can( self::manage_cap() ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		$lead_id = isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0;
+		check_admin_referer( 'gas_unassign_lead_partner_' . $lead_id );
+
+		if ( ! $lead_id ) {
+			wp_die( 'Missing lead.' );
+		}
+
+		self::unassign_partner( $lead_id, 'Unassigned by admin' );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-leads&updated=1' ) );
+		exit;
 	}
 
 	private static function format_datetime_local( $raw ) {

@@ -13,6 +13,55 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-11 — Homes session: found + drafted a fix for the "$490 and $490" display bug on Refer-a-Friend — please review/land
+
+Cary noticed the copy on the merged signup/refer page reads "Earn between
+$490 and $490 per completed referral" — an awkward duplicate, not a math
+error. Root cause: `GAS_Frontend::estimated_payout_range()`
+(`class-gas-frontend.php:447`) is working correctly — with only one
+`outreach_status = 'approved'` partner right now (Go Solar Power: $700
+flat agent pool, 70% tier1_split_percent = $490 real tier-1 commission),
+`min` and `max` are legitimately the same number. The bug is purely in
+`render_signup_or_refer()` (line ~584-592), which always renders
+"between $X and $Y" regardless of whether they're equal.
+
+Proposed fix (not applied — file may still be in flux from your
+payout-run work, didn't want to collide):
+
+```php
+$range = self::estimated_payout_range();
+$noun  = GAS_Settings::get( 'conversion_noun' );
+echo '<div class="gas-payout-range">';
+if ( $range && $range['min'] === $range['max'] ) {
+	echo '<p>Earn <strong>$' . esc_html( number_format( $range['min'], 0 ) ) . '</strong> per completed ' . esc_html( $noun ) . ' you refer.</p>';
+} elseif ( $range ) {
+	echo '<p>Earn between <strong>$' . esc_html( number_format( $range['min'], 0 ) ) . '</strong> and <strong>$' . esc_html( number_format( $range['max'], 0 ) ) . '</strong> per completed ' . esc_html( $noun ) . ' you refer.</p>';
+} else {
+	echo '<p>Get paid for every completed ' . esc_html( $noun ) . ' you refer &mdash; exact amounts depend on the partner, and you\'ll see your rate once you\'re matched.</p>';
+}
+echo '</div>';
+```
+
+Only change: split the `$range` branch in two based on `min === max`.
+Everything else (the `null` fallback copy, the surrounding markup)
+is untouched. Happy to land this myself since it's a one-file, one-branch
+change with no schema/API surface, but leaving it to you per how we've
+split plugin work — land it whenever's convenient, or tell me to just
+commit it if that's faster on your end.
+
+Also answered a real product question from Cary while looking at this:
+he asked whether we can/should support bank transfer as a payout method.
+Answer: we already do — `class-gas-wise-payouts.php` sends real payouts
+directly to a bank account (ABA routing+account for US, IBAN elsewhere),
+it's just internally labeled "Wise" rather than described as bank
+transfer anywhere user-facing. No code change needed there; I fixed the
+FAQ page's copy on the Solar site (content, not plugin code) to say
+"PayPal, or a direct bank transfer worldwide via Wise" instead of the
+old "PayPal, Venmo, bank transfer" line — Venmo was never actually
+supported, that was just imprecise copy.
+
+— Homes session
+
 ## 2026-09-11 — Solar session: leads can now be unassigned/declined (2.18.0)
 
 Cary noticed directly: once a lead got assigned to a partner, there was

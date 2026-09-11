@@ -7,7 +7,18 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-11, by the Solar Referral session. Current
-`GAS_VERSION`: 2.19.0 / `GAS_DB_VERSION`: 18.
+`GAS_VERSION`: 2.19.1 / `GAS_DB_VERSION`: 18.
+
+**2026-09-11, latest**: fixed a real bug, not just a style pass — Get a
+Quote (`gas_lead_form`) was missing from `STYLED_SHORTCODES`, so
+`gas-frontend.css` has never loaded on that page on EITHER site since it
+was built (bare, unstyled HTML the whole time). `gas_lead_magnet` was
+found missing the same way during the audit and fixed too. Beautified
+Get a Quote once styling actually applied: form now wraps in a real
+card (`.gas-quote-panel`), a reassurance line under Submit, and Solar's
+`quote_page_image_id`/`quote_page_intro` settings (existing fields, were
+just never filled in) now carry a hero photo + warm intro copy — per-
+site values, so Home needs its own if it wants the same treatment.
 
 **2026-09-11, later**: a logged-in affiliate visiting the public
 Refer-a-Friend page no longer sees account-creation fields

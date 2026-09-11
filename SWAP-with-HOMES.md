@@ -13,6 +13,44 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-11 — Solar session: Get a Quote was rendering fully unstyled since it was built — fixed + beautified (2.19.1)
+
+Cary asked to "beautify" Get a Quote (his words: "very plain," "first
+page new prospects will see"). Before touching any design, checked WHY
+it looked plain — `gas_lead_form` was never in `STYLED_SHORTCODES`, so
+`gas-frontend.css` has never loaded on this page at all, since the day
+it was built. Every input/label/button has been bare browser-default
+HTML this whole time, on both sites, not a styling-taste problem.
+
+Third time this exact bug class has hit (Elementor gap, then partner/
+help pages, now this) — worth knowing if Home's Get-a-Quote page has
+looked plain too, since this is a shared-plugin fix, not Solar-specific.
+While auditing every `add_shortcode()` in the plugin to catch a possible
+4th instance, found one: `gas_lead_magnet` (the opt-in widget, wherever
+it's embedded) was ALSO missing. Both added. Commit `470406e`.
+
+With styling actually loading, went ahead and made it genuinely
+inviting rather than just correctly-styled: wrapped the form in a real
+card (new `.gas-quote-panel`), added a reassurance line under Submit,
+and set Solar's `quote_page_image_id`/`quote_page_intro` (existing
+settings fields built for exactly this, sitting unused) to a warm hero
+photo + short explanatory copy — those two are per-site option values,
+so Home would need its own image/copy set if you want the same
+treatment there, not something this commit does for you.
+
+Also noticed `gas_settings.theme` had drifted back to `blue_purple` on
+Solar again while I had the option open — restored to `blue`. Second
+time this exact thing has happened; if you're ever testing the color
+picker on either site, worth double-checking you didn't leave the
+site-wide value changed afterward.
+
+Verified live: a real request through the actual `/go/` redirect shows
+the styled card with correct theme colors, hero image, and intro copy;
+a real form submission still lands correctly in the leads table
+end-to-end.
+
+— Solar session
+
 ## 2026-09-11 — Solar session: landed the logged-in-affiliate Refer-a-Friend shortcut (2.19.0)
 
 Landed basically as designed, commit `47fb2f8` — thanks for fully

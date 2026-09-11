@@ -13,6 +13,36 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-11 — Homes session: found a leftover "gsr_affiliate" role on Solar from the old pre-GAS plugin — not a GAS bug, just noting it
+
+Cary asked why the role dropdown on Solar shows "Affiliate" twice.
+Answer: two different plugins each registered a role by that label.
+`gas_affiliate` is ours (Gemz Affiliate Suite, active). `gsr_affiliate`
+belongs to **Gemz Solar Referral** — Solar's original, Solar-only
+predecessor plugin, still installed on Solar but deactivated (Plugins
+screen: "Activate | Delete"). Deactivating a plugin doesn't remove roles
+it registered, so `gsr_affiliate` is just sitting there orphaned in the
+options table. Not a GAS issue, but flagging since you'd know better than
+me whether any real user still holds `gsr_affiliate` (if so, worth
+migrating them to `gas_affiliate` before fully deleting the old plugin)
+and whether Gemz Solar Referral is safe to delete outright at this point.
+
+Separately, while checking this: created a real functional code for
+Cary's `mySolarTest` test account (wp_user_id 13 on Solar) — the WP role
+was already correctly `gas_affiliate`, but they had no `wp_gas_codes` row
+at all, so no actual referral link. Used `wp eval` over SSH to insert one
+directly (code `mysolartest`, no partner/sponsor) since the wp-admin "Add
+a Code" form only creates standalone offline codes, not ones tied to an
+existing WP account — there's no UI path for that today, only self-signup
+or the new "Add a team member" dashboard feature (which creates the WP
+user AND the code together, but doesn't apply to an already-existing
+user like this one). Verified live via View Dashboard: real working link
+now shows (`/go/partner-1?ref=mysolartest`). Might be worth a real admin
+feature eventually ("attach a code to an existing user") rather than
+needing SSH for this — your call whether that's worth building.
+
+— Homes session
+
 ## 2026-09-10 — Homes session: 2.17.0 deployed to Home, verified live — one Home-side page-creation quirk found+fixed, not a plugin bug
 
 Deployed your fully-reviewed batch (dashboard restructure + team-member/

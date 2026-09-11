@@ -601,93 +601,113 @@ class GAS_Frontend {
 			echo '<p>Get paid for every completed ' . esc_html( $noun ) . ' you refer &mdash; exact amounts depend on the partner, and you\'ll see your rate once you\'re matched.</p>';
 		}
 		echo '</div>';
-		?>
-		<div class="gas-signup-toggle">
-			<button type="button" class="gas-toggle-btn gas-toggle-active" data-mode="signup">Sign Up as an Affiliate</button>
-			<button type="button" class="gas-toggle-btn" data-mode="refer">Refer a Friend</button>
-		</div>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form" id="gas-signup-or-refer-form">
-			<?php wp_nonce_field( 'gas_signup_or_refer' ); ?>
-			<input type="hidden" name="action" value="gas_signup_or_refer">
-			<input type="hidden" name="is_referral" id="gas_is_referral" value="0">
-			<p style="position:absolute;left:-9999px;" aria-hidden="true">
-				<label>Leave this field empty<input type="text" name="gas_hp" tabindex="-1" autocomplete="off"></label>
-			</p>
 
-			<p>
-				<label for="gas_name">Your name</label><br>
-				<input type="text" id="gas_name" name="name" required class="gas-input">
-			</p>
-			<p>
-				<label for="gas_email">Your email</label><br>
-				<input type="email" id="gas_email" name="email" required class="gas-input">
-			</p>
-			<p>
-				<label for="gas_phone">Your phone (optional)</label><br>
-				<input type="tel" id="gas_phone" name="phone" class="gas-input">
-			</p>
-			<p>
-				<label for="gas_password">Choose a password</label><br>
-				<input type="password" id="gas_password" name="password" required minlength="8" class="gas-input">
-			</p>
-			<p class="gas-fineprint">Already have an account? Password is only needed the first time &mdash; if this email already has one, whatever you type here is ignored and your existing account is used instead.</p>
-			<p>
-				<label for="gas_password2">Confirm password</label><br>
-				<input type="password" id="gas_password2" name="password2" class="gas-input">
-			</p>
+		// Cary's ask (2026-09-11): a logged-in affiliate visiting this
+		// public page already has an account — showing them name/email/
+		// phone/password/agree-terms fields to refer a friend is asking
+		// them to re-register themselves. Reuses render_add_referral_section()
+		// (the dashboard's own "Add a referral" panel, friend-fields only,
+		// posts to gas_dashboard_add_referral, attaches to their existing
+		// code) rather than a second form+handler — same fraud/rate-limit
+		// posture as the dashboard version, nothing new to secure. Only
+		// an actual affiliate gets this treatment; anyone else logged in
+		// (a customer, a partner, an admin browsing) still sees the full
+		// public form below.
+		$logged_in_affiliate = is_user_logged_in() && GAS_Roles::is_affiliate();
 
-			<div class="gas-referral-fields" style="display:none;">
-				<h3>Who are you referring?</h3>
-				<p>
-					<label for="gas_friend_name">Their name</label><br>
-					<input type="text" id="gas_friend_name" name="friend_name" class="gas-input">
-				</p>
-				<p>
-					<label for="gas_friend_email">Their email</label><br>
-					<input type="email" id="gas_friend_email" name="friend_email" class="gas-input">
-				</p>
-				<p>
-					<label for="gas_friend_phone">Their phone (optional)</label><br>
-					<input type="tel" id="gas_friend_phone" name="friend_phone" class="gas-input">
-				</p>
-				<p>
-					<label for="gas_friend_address">Their address (optional)</label><br>
-					<input type="text" id="gas_friend_address" name="friend_address" class="gas-input">
-				</p>
-				<p>
-					<label for="gas_friend_state">Their state</label><br>
-					<select id="gas_friend_state" name="friend_state" class="gas-input"><?php echo GAS_DB::state_dropdown_options(); ?></select>
-					<span class="gas-fineprint">Lets us match them to a partner that actually covers their area.</span>
-				</p>
+		if ( $logged_in_affiliate ) {
+			$current_user = wp_get_current_user();
+			echo '<p>Referring as <strong>' . esc_html( $current_user->display_name ) . '</strong> &mdash; we already have your details on file, just add your friend\'s info below.</p>';
+			self::render_add_referral_section( $current_user->ID, false, true );
+		} else {
+			?>
+			<div class="gas-signup-toggle">
+				<button type="button" class="gas-toggle-btn gas-toggle-active" data-mode="signup">Sign Up as an Affiliate</button>
+				<button type="button" class="gas-toggle-btn" data-mode="refer">Refer a Friend</button>
 			</div>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form" id="gas-signup-or-refer-form">
+				<?php wp_nonce_field( 'gas_signup_or_refer' ); ?>
+				<input type="hidden" name="action" value="gas_signup_or_refer">
+				<input type="hidden" name="is_referral" id="gas_is_referral" value="0">
+				<p style="position:absolute;left:-9999px;" aria-hidden="true">
+					<label>Leave this field empty<input type="text" name="gas_hp" tabindex="-1" autocomplete="off"></label>
+				</p>
 
-			<p>
-				<label><input type="checkbox" name="agree_terms" value="1" required> <?php echo self::agreement_checkbox_label(); ?></label>
-			</p>
-			<p>
-				<button type="submit" class="gas-button" id="gas-submit-btn">Sign up</button>
-			</p>
-			<p class="gas-fineprint">Already have an account? <a href="<?php echo esc_url( self::dashboard_url() ); ?>">Log in on your dashboard</a>.</p>
-		</form>
-		<script>
-			(function() {
-				var buttons  = document.querySelectorAll('.gas-toggle-btn');
-				var referral = document.querySelector('.gas-referral-fields');
-				var isRef    = document.getElementById('gas_is_referral');
-				var submit   = document.getElementById('gas-submit-btn');
-				buttons.forEach(function(btn) {
-					btn.addEventListener('click', function() {
-						buttons.forEach(function(b) { b.classList.remove('gas-toggle-active'); });
-						btn.classList.add('gas-toggle-active');
-						var refer = btn.getAttribute('data-mode') === 'refer';
-						referral.style.display = refer ? '' : 'none';
-						isRef.value = refer ? '1' : '0';
-						submit.textContent = refer ? 'Refer & Sign Up' : 'Sign up';
+				<p>
+					<label for="gas_name">Your name</label><br>
+					<input type="text" id="gas_name" name="name" required class="gas-input">
+				</p>
+				<p>
+					<label for="gas_email">Your email</label><br>
+					<input type="email" id="gas_email" name="email" required class="gas-input">
+				</p>
+				<p>
+					<label for="gas_phone">Your phone (optional)</label><br>
+					<input type="tel" id="gas_phone" name="phone" class="gas-input">
+				</p>
+				<p>
+					<label for="gas_password">Choose a password</label><br>
+					<input type="password" id="gas_password" name="password" required minlength="8" class="gas-input">
+				</p>
+				<p class="gas-fineprint">Already have an account? Password is only needed the first time &mdash; if this email already has one, whatever you type here is ignored and your existing account is used instead.</p>
+				<p>
+					<label for="gas_password2">Confirm password</label><br>
+					<input type="password" id="gas_password2" name="password2" class="gas-input">
+				</p>
+
+				<div class="gas-referral-fields" style="display:none;">
+					<h3>Who are you referring?</h3>
+					<p>
+						<label for="gas_friend_name">Their name</label><br>
+						<input type="text" id="gas_friend_name" name="friend_name" class="gas-input">
+					</p>
+					<p>
+						<label for="gas_friend_email">Their email</label><br>
+						<input type="email" id="gas_friend_email" name="friend_email" class="gas-input">
+					</p>
+					<p>
+						<label for="gas_friend_phone">Their phone (optional)</label><br>
+						<input type="tel" id="gas_friend_phone" name="friend_phone" class="gas-input">
+					</p>
+					<p>
+						<label for="gas_friend_address">Their address (optional)</label><br>
+						<input type="text" id="gas_friend_address" name="friend_address" class="gas-input">
+					</p>
+					<p>
+						<label for="gas_friend_state">Their state</label><br>
+						<select id="gas_friend_state" name="friend_state" class="gas-input"><?php echo GAS_DB::state_dropdown_options(); ?></select>
+						<span class="gas-fineprint">Lets us match them to a partner that actually covers their area.</span>
+					</p>
+				</div>
+
+				<p>
+					<label><input type="checkbox" name="agree_terms" value="1" required> <?php echo self::agreement_checkbox_label(); ?></label>
+				</p>
+				<p>
+					<button type="submit" class="gas-button" id="gas-submit-btn">Sign up</button>
+				</p>
+				<p class="gas-fineprint">Already have an account? <a href="<?php echo esc_url( self::dashboard_url() ); ?>">Log in on your dashboard</a>.</p>
+			</form>
+			<script>
+				(function() {
+					var buttons  = document.querySelectorAll('.gas-toggle-btn');
+					var referral = document.querySelector('.gas-referral-fields');
+					var isRef    = document.getElementById('gas_is_referral');
+					var submit   = document.getElementById('gas-submit-btn');
+					buttons.forEach(function(btn) {
+						btn.addEventListener('click', function() {
+							buttons.forEach(function(b) { b.classList.remove('gas-toggle-active'); });
+							btn.classList.add('gas-toggle-active');
+							var refer = btn.getAttribute('data-mode') === 'refer';
+							referral.style.display = refer ? '' : 'none';
+							isRef.value = refer ? '1' : '0';
+							submit.textContent = refer ? 'Refer & Sign Up' : 'Sign up';
+						});
 					});
-				});
-			})();
-		</script>
-		<?php
+				})();
+			</script>
+			<?php
+		}
 		return ob_get_clean();
 	}
 
@@ -1629,11 +1649,25 @@ class GAS_Frontend {
 	 * accessible for free. Same pattern used for
 	 * render_add_team_member_section() right below, so both "grow my
 	 * business" actions on this page look and behave identically.
+	 * $open (2026-09-11) lets a caller start the <details> expanded —
+	 * used by render_signup_or_refer() on the dedicated public
+	 * Refer-a-Friend page, where this IS the whole page for a logged-in
+	 * affiliate, not one of several rolled-up dashboard actions; the
+	 * dashboard call site stays collapsed (2-arg call, default false).
 	 */
-	private static function render_add_referral_section( $user_id, $is_previewing = false ) {
+	private static function render_add_referral_section( $user_id, $is_previewing = false, $open = false ) {
 		global $wpdb;
 		$my_code = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'codes' ) . ' WHERE wp_user_id = %d ORDER BY created_at ASC LIMIT 1', $user_id ) );
 		if ( ! $my_code ) {
+			// A real, if rare, edge case (an account created/attached
+			// outside normal self-signup with no code row yet — see
+			// SWAP-with-HOMES.md's mySolarTest note) — silently rendering
+			// nothing here would leave a logged-in affiliate on the
+			// Refer-a-Friend page staring at just the "Referring as X"
+			// line with no form and no explanation.
+			if ( $open ) {
+				echo '<div class="gas-panel"><p class="gas-notice gas-notice-error">We couldn\'t find a referral code on your account yet — contact us and we\'ll get that sorted.</p></div>';
+			}
 			return;
 		}
 		// Alias, never real name — same rule as everywhere else an
@@ -1642,7 +1676,7 @@ class GAS_Frontend {
 		// set an affiliate could actually get matched with anyway.
 		$partners = $wpdb->get_results( "SELECT id, partner_alias FROM " . GAS_DB::table( 'partners' ) . " WHERE outreach_status = 'approved' ORDER BY partner_alias ASC" );
 
-		echo '<div class="gas-panel"><details class="gas-disclosure"><summary><span class="gas-disclosure-plus" aria-hidden="true">+</span> Add a referral <span class="gas-fineprint">— click to enter their details</span></summary>';
+		echo '<div class="gas-panel"><details class="gas-disclosure"' . ( $open ? ' open' : '' ) . '><summary><span class="gas-disclosure-plus" aria-hidden="true">+</span> Add a referral <span class="gas-fineprint">— click to enter their details</span></summary>';
 		echo '<div class="gas-disclosure-body">';
 		if ( $is_previewing ) {
 			echo '<p class="gas-fineprint">You\'re adding this to <strong>' . esc_html( get_userdata( $user_id )->display_name ) . '\'s</strong> account, not your own.</p>';

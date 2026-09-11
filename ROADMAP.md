@@ -7,7 +7,25 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-10, by the Solar Referral session. Current
-`GAS_VERSION`: 2.16.0 / `GAS_DB_VERSION`: 18.
+`GAS_VERSION`: 2.17.0 / `GAS_DB_VERSION`: 18.
+
+**Same day, on top of the restructure**: "Add a referral" moved to My
+Links & Earnings (Cary's correction — a customer referral is a
+links/earnings action, not team-building); My Team gained "Add a team
+member" — real account creation directly from an affiliate's own
+dashboard (same role/sponsor-chain wiring as self-signup, WordPress's own
+password-reset email since the sponsor can't set one). "Add a referral"
+can now also pick the fulfillment partner directly instead of always
+landing unassigned. Every free-text state field site-wide is now a real
+dropdown (`GAS_DB::us_states()`), including the Get-a-Quote form (closing
+that day's earlier gap) and the Partners screen's own state field
+(multi-select now). Both new dashboard forms live behind a native
+`<details>` disclosure. Reviewed and live-verified here — found and
+fixed one real gap: the new team-member-creation endpoint had no rate
+limiting, unlike self-signup, which would have let any affiliate
+mass-create real accounts and spam strangers with unsolicited emails;
+added the same IP-based cap `handle_signup()` already uses. Full
+verification detail in `SWAP-with-HOMES.md`'s matching entry.
 
 **Same day, the big one**: real user-testing feedback led to splitting
 the single affiliate dashboard into 4 pages — Overview (hero stats, kept

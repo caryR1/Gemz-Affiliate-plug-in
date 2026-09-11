@@ -70,7 +70,7 @@
 .gas-hero .gas-stat-num{font-size:1.8em;}
 
 .gas-share-row{display:flex;gap:.6em;flex-wrap:wrap;margin:.8em 0 1.2em;}
-.gas-share-btn{display:inline-flex;align-items:center;gap:.4em;background:var(--gas-accent,#3F8353);color:#fff;border:none;border-radius:6px;padding:.55em 1em;font-size:.9em;font-weight:600;cursor:pointer;text-decoration:none;}
+.gas-share-btn{display:inline-flex;align-items:center;gap:.4em;background:var(--gas-accent,#3F8353);color:#fff;border:none;border-radius:999px;padding:.55em 1.2em;font-size:.9em;font-weight:600;cursor:pointer;text-decoration:none;}
 .gas-share-btn:hover{background:var(--gas-accent-dark,#193421);color:#fff;}
 .gas-share-btn .dashicons{width:18px;height:18px;font-size:18px;line-height:18px;}
 .gas-share-label{color:#fff;}

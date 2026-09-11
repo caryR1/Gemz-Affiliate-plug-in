@@ -148,9 +148,16 @@ class GAS_Leads {
 		if ( $error ) {
 			echo '<div class="gas-notice gas-notice-error"><p>' . esc_html( $error ) . '</p></div>';
 		}
+		// Wrapped in a real card (2026-09-11) rather than bare form fields
+		// floating on the page — this shortcode was silently missing from
+		// STYLED_SHORTCODES until the same day (see the note there), so
+		// gas-frontend.css never even loaded here; this is the first time
+		// the panel treatment every other GAS-rendered page already gets
+		// has actually applied to Get a Quote.
+		echo '<div class="gas-panel gas-quote-panel">';
 		$quote_image_id = GAS_Settings::get( 'quote_page_image_id' );
 		if ( ! empty( $quote_image_id ) ) {
-			echo wp_get_attachment_image( $quote_image_id, 'medium', false, array( 'style' => 'max-width:100%;height:auto;margin-bottom:1em;' ) );
+			echo wp_get_attachment_image( $quote_image_id, 'medium_large', false, array( 'style' => 'width:100%;height:auto;border-radius:8px;margin-bottom:1.2em;' ) );
 		}
 		$quote_intro = GAS_Settings::get( 'quote_page_intro' );
 		if ( ! empty( $quote_intro ) ) {
@@ -215,7 +222,9 @@ class GAS_Leads {
 			<p>
 				<button type="submit" class="gas-button">Submit</button>
 			</p>
+			<p class="gas-fineprint" style="text-align:center;">Free, no-obligation quote &mdash; we'll be in touch soon.</p>
 		</form>
+		</div>
 		<?php
 		return ob_get_clean();
 	}

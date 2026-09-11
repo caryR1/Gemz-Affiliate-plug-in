@@ -77,11 +77,17 @@ class GAS_Frontend {
 	 * separate real bugs from the old approach: first (2026-09-06) a check
 	 * that only looked at post_content and missed Elementor pages
 	 * entirely (see post_has_shortcode() above, which now handles both),
-	 * and second (2026-09-10) a hardcoded shortcode list that simply never
+	 * second (2026-09-10) a hardcoded shortcode list that simply never
 	 * included gas_partner_dashboard/gas_help/gas_partner_help/gas_faq —
 	 * meaning the Partner Portal and every Help page never loaded this
-	 * stylesheet AT ALL, silently, since the day each was built. Add any
-	 * new shortcode that uses these classes here, not as a one-off check.
+	 * stylesheet AT ALL, silently, since the day each was built — and
+	 * third (2026-09-11, caught auditing the whole plugin after noticing
+	 * the same thing on Get a Quote): gas_lead_form and gas_lead_magnet
+	 * were ALSO missing, meaning the entire Get a Quote page and every
+	 * lead-magnet opt-in widget have been rendering as bare, unstyled
+	 * HTML — no card, no spacing, plain browser-default inputs and
+	 * button — since the day each was built. Add any new shortcode that
+	 * uses these classes here, not as a one-off check.
 	 */
 	const STYLED_SHORTCODES = array(
 		'gas_affiliate_signup',
@@ -94,6 +100,8 @@ class GAS_Frontend {
 		'gas_help',
 		'gas_partner_help',
 		'gas_faq',
+		'gas_lead_form',
+		'gas_lead_magnet',
 	);
 
 	public static function enqueue_assets() {

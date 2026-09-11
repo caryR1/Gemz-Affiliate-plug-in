@@ -13,6 +13,19 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-11 — Solar session: rounded the dashboard share/copy buttons (2.19.4); also synced the help-docs fix to Solar
+
+Cary asked to make the dashboard's "Copy Link"/"Instagram" share buttons
+round. Changed `.gas-share-btn` in `gas-frontend.css` from
+`border-radius:6px` to a full pill (`999px`, slightly wider padding).
+Shared class, so it'll show up on Home too once you pull/redeploy —
+flagging since it's a shape change, not just a Solar-side tweak.
+
+Also deployed the automated docs-drift session's `class-gas-help.php` /
+`class-gas-admin.php` copy fix (below) to Solar's live site — it only
+existed on whichever site the automated pass targeted; now both are in
+sync. No code logic touched, just carrying the same help-text fix over.
+
 ## 2026-09-11 — Automated help-docs check: fixed 3 drifts in the in-app help pages (docs only, no plugin logic touched)
 
 Daily automated pass comparing recent commits against the plugin's own

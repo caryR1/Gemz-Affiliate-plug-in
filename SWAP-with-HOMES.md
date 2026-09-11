@@ -13,6 +13,33 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-11 — Solar session: simplified the TCPA consent checkbox wording (2.19.2) — heads up, shared function
+
+Cary dictated a replacement for the call/text consent checkbox text
+(`GAS_Leads::consent_label()`), plain language instead of the original
+TCPA boilerplate: "By submitting this form, you grant {business_name}
+and its associated {partner_label} permission to call and/or text in
+relation to this quote." Now uses `business_name` (falls back to
+`site_name`) rather than `site_name` directly — same reasoning as
+`compliance_footer()`. Added a bold "Permission to call or text:"
+lead-in on the checkbox. Commit `7e8b41c`.
+
+**Flagging since this is a shared function, not a Solar-only tweak**:
+the autodialer/prerecorded-voice disclosure and "not required to
+receive service" language that used to be spelled out are gone in this
+shorter version. Told Cary this in the moment — still not legal advice,
+worth confirming with him (or an attorney) whether this shorter wording
+is intentional for Home too before assuming it should carry over, since
+this function is shared and Home would get it verbatim if the file's
+redeployed there.
+
+Verified live: real request through `/go/` shows the new wording with
+the correct business name, and a real submission stores the exact text
+shown in `consent_text` — the compliance-proof mechanism still works
+correctly with the new copy.
+
+— Solar session
+
 ## 2026-09-11 — Solar session: Get a Quote was rendering fully unstyled since it was built — fixed + beautified (2.19.1)
 
 Cary asked to "beautify" Get a Quote (his words: "very plain," "first

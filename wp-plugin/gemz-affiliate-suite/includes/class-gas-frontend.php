@@ -585,7 +585,18 @@ class GAS_Frontend {
 		$noun  = GAS_Settings::get( 'conversion_noun' );
 		echo '<div class="gas-payout-range">';
 		if ( $range ) {
-			echo '<p>Earn between <strong>$' . esc_html( number_format( $range['min'], 0 ) ) . '</strong> and <strong>$' . esc_html( number_format( $range['max'], 0 ) ) . '</strong> per completed ' . esc_html( $noun ) . ' you refer.</p>';
+			$min_fmt = number_format( $range['min'], 0 );
+			$max_fmt = number_format( $range['max'], 0 );
+			if ( $min_fmt === $max_fmt ) {
+				// Compare the FORMATTED values, not the raw floats — with
+				// only one real partner (or several that happen to net the
+				// same rounded number), "between $490 and $490" read like a
+				// bug, not a real range. One partner is the common case
+				// right now, so this isn't an edge case worth ignoring.
+				echo '<p>Earn <strong>$' . esc_html( $min_fmt ) . '</strong> per completed ' . esc_html( $noun ) . ' you refer.</p>';
+			} else {
+				echo '<p>Earn between <strong>$' . esc_html( $min_fmt ) . '</strong> and <strong>$' . esc_html( $max_fmt ) . '</strong> per completed ' . esc_html( $noun ) . ' you refer.</p>';
+			}
 		} else {
 			echo '<p>Get paid for every completed ' . esc_html( $noun ) . ' you refer &mdash; exact amounts depend on the partner, and you\'ll see your rate once you\'re matched.</p>';
 		}
@@ -1504,7 +1515,17 @@ class GAS_Frontend {
 			if ( 0 === $count ) {
 				echo '&mdash;';
 			} elseif ( $range ) {
-				echo esc_html( $count ) . ' sale' . ( 1 === $count ? '' : 's' ) . ' &mdash; est. $' . esc_html( number_format( $range['min'] * $count, 2 ) ) . '&ndash;$' . esc_html( number_format( $range['max'] * $count, 2 ) );
+				$min_fmt = number_format( $range['min'] * $count, 2 );
+				$max_fmt = number_format( $range['max'] * $count, 2 );
+				echo esc_html( $count ) . ' sale' . ( 1 === $count ? '' : 's' ) . ' &mdash; est. $' . esc_html( $min_fmt );
+				// Same fix as the signup page's payout range: compare the
+				// FORMATTED values, not the raw floats, and only show a
+				// second number if it's actually different — with one
+				// partner (today's common case) min and max are identical,
+				// and "$490.00–$490.00" reads like a bug, not a real range.
+				if ( $min_fmt !== $max_fmt ) {
+					echo '&ndash;$' . esc_html( $max_fmt );
+				}
 			} else {
 				echo esc_html( $count ) . ' sale' . ( 1 === $count ? '' : 's' );
 			}

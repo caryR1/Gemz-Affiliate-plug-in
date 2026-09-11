@@ -84,33 +84,43 @@ class GAS_Help {
 			<p><a href="<?php echo esc_url( GAS_Frontend::signup_url() ); ?>">&larr; Back to your dashboard</a></p>
 
 			<div class="gas-panel">
+				<h3>Finding your way around</h3>
+				<p>Your affiliate area is a few linked pages, with a menu at the top of each one to move between them: <strong>Overview</strong> is your landing page with quick stats, <strong>My Links &amp; Earnings</strong> has your link(s), marketing materials, and earnings by tier, <strong>My Team</strong> shows everyone you've recruited, and <strong>Account</strong> holds your password, payment info, tax info, and dashboard color.</p>
+			</div>
+
+			<div class="gas-panel">
 				<h3>Your referral link(s)</h3>
-				<p>You have one personal referral code, and your dashboard shows a ready-to-share link built from it for each active <?php echo esc_html( $partner_label ); ?> campaign — sometimes more than one, if we're running more than one campaign right now. Anyone who clicks one of your links and later does business with that <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically. A new campaign shows up on your dashboard the moment it goes live — nothing you need to do to unlock it.</p>
+				<p>You have one personal referral code, and My Links &amp; Earnings shows a ready-to-share link built from it for each active <?php echo esc_html( $partner_label ); ?> campaign — sometimes more than one, if we're running more than one campaign right now. Anyone who clicks one of your links and later does business with that <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically. A new campaign shows up the moment it goes live — nothing you need to do to unlock it.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Adding a referral by hand</h3>
+				<p>Would rather not wait for someone to click your link? "Add a referral" on My Links &amp; Earnings lets you enter a friend or customer's info directly — it's attached to your code the same as a real click-through. The public "Refer a friend" page offers the same shortcut, pre-filled with your details, when you're logged in.</p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>Recruiting your own team</h3>
-				<p>Your dashboard also shows a second link for inviting other people to become affiliates themselves. Anyone who signs up through that link becomes part of your team, and you earn a bonus on their sales going forward — and again, a smaller bonus, on sales made by people <em>they</em> recruit. This works up to two levels deep below you.</p>
+				<p>My Team shows a link for inviting other people to become affiliates themselves. Anyone who signs up through it becomes part of your team, and you earn a bonus on their sales going forward — and again, a smaller bonus, on sales made by people <em>they</em> recruit. This works up to two levels deep below you. If you already know who you want to add, "Add a team member" on the same page creates their account directly — they get the normal set-your-password email, same as if they'd signed up themselves.</p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>How earnings are figured</h3>
-				<p>Every sale generates a commission that's split a fixed way across up to three tiers: the affiliate who made the sale, that affiliate's recruiter, and the recruiter's own recruiter (if there is one). Your dashboard shows your estimated earnings range for each tier while the current month is still open, and switches to your exact final amount once the month closes.</p>
+				<p>Every sale generates a commission that's split a fixed way across up to three tiers: the affiliate who made the sale, that affiliate's recruiter, and the recruiter's own recruiter (if there is one). My Links &amp; Earnings shows your estimated earnings range for each tier while the current month is still open, and switches to your exact final amount once the month closes.</p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>Your team view</h3>
-				<p>The "Your team" section on your dashboard shows everyone you've personally recruited, and everyone they've recruited in turn, with enough contact info to reach out and help them get started.</p>
+				<p>My Team shows everyone you've personally recruited, and everyone they've recruited in turn, with enough contact info to reach out and help them get started.</p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>Payment info</h3>
-				<p>Enter how you'd like to be paid under Payment Info on your dashboard. This is only ever visible to you — <?php echo esc_html( $site_name ); ?> only ever sees a masked summary, never your full account details.</p>
+				<p>Enter how you'd like to be paid under Payment Info on your Account page. This is only ever visible to you — <?php echo esc_html( $site_name ); ?> only ever sees a masked summary, never your full account details.</p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>Tax information (required before you're paid)</h3>
-				<p>Before we can send you any payout, we need a one-time W-9 (US) or W-8BEN (non-US) form on file — the same Tax Information section on your dashboard as Payment Info. This is standard for anyone earning referral income, not something specific to you. We only ever see a masked summary of what's on file, never your tax ID.</p>
+				<p>Before we can send you any payout, we need a one-time W-9 (US) or W-8BEN (non-US) form on file — the same Tax Information section on your Account page as Payment Info. This is standard for anyone earning referral income, not something specific to you. We only ever see a masked summary of what's on file, never your tax ID.</p>
 			</div>
 
 			<div class="gas-panel">
@@ -125,12 +135,12 @@ class GAS_Help {
 
 			<div class="gas-panel">
 				<h3>Marketing materials</h3>
-				<p>If we've made images or other materials available for your current campaigns, they show up in a Marketing Materials section on your dashboard, ready to download and use when promoting your link.</p>
+				<p>If we've made images or other materials available for your current campaigns, they show up in a Marketing Materials section on My Links &amp; Earnings, ready to download and use when promoting your link.</p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>Changing your password</h3>
-				<p>Use the password field near the bottom of your dashboard. You'll need your current password to set a new one.</p>
+				<p>Use the password field near the bottom of your Account page. You'll need your current password to set a new one.</p>
 			</div>
 
 			<div class="gas-panel">
@@ -159,6 +169,11 @@ class GAS_Help {
 			<div class="gas-panel">
 				<h3>What "new" leads mean</h3>
 				<p>A lead shown without a status dropdown is already on your account, but is still waiting on a first look from an admin before it's yours to work. Once that happens, the dropdown appears and you can start moving it through the pipeline.</p>
+			</div>
+
+			<div class="gas-panel">
+				<h3>Sending a lead back</h3>
+				<p>Not a fit for you? Use the Decline button next to any lead (unless it's already marked Completed) to send it back for rematching — it comes off your queue right away.</p>
 			</div>
 
 			<div class="gas-panel">

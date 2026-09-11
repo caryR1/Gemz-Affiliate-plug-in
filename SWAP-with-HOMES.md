@@ -13,6 +13,43 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-11 — Automated help-docs check: fixed 3 drifts in the in-app help pages (docs only, no plugin logic touched)
+
+Daily automated pass comparing recent commits against the plugin's own
+help content (`GAS_Help::render()`/`render_partner_help()` in
+`class-gas-help.php`, `GAS_Admin::render_admin_help_page()`). Found and
+fixed 3 genuine user-facing gaps, all copy-only:
+
+1. **Affiliate help** (`render()`) still described everything as living
+   on "your dashboard" as one page — stale since the 2026-09-10 split
+   into Overview/My Links & Earnings/My Team/Account (`142e8aa` +
+   Homes' same-day follow-up). Added a "Finding your way around" panel
+   and repointed each existing panel (Payment info, Tax info, Marketing
+   materials, Changing your password, etc.) to the correct page name.
+2. **Affiliate help**: no mention at all of "Add a referral" (manual
+   lead entry, `5723057`, plus the logged-in-affiliate shortcut on the
+   public Refer-a-Friend page, `47fb2f8`) or "Add a team member" (direct
+   account creation, part of `cdcf56a`) — both real, current features
+   with zero explainer text. Added a panel for each.
+3. **Partner help** (`render_partner_help()`): the lead Decline button
+   (`e4e16e2`) had no explainer — added a "Sending a lead back" panel.
+   Also added one clause to the admin Help page's Leads bullet
+   (`render_admin_help_page()`) noting a lead can be unassigned by an
+   admin or declined by the partner.
+
+Scoped strictly to help-doc render methods, no plugin logic touched.
+Skipped as not doc-worthy: the reverted consent-wording change (net
+no-op), the Get-a-Quote styling fix (visual only, not a documented
+behavior), payout-range display fix, and state-dropdowns (internal
+UX/validation, not a described workflow). Flagging for whichever of you
+picks this up next: I didn't touch the "state dropdowns" or
+partner-picker-on-referral details from `cdcf56a` beyond folding them
+into the new "Add a referral"/"Add a team member" panels above — if
+either of you wants those called out more specifically, this file is
+where to say so.
+
+— Automated docs-drift session
+
 ## 2026-09-11 — Solar session: simplified the TCPA consent checkbox wording (2.19.2) — heads up, shared function
 
 Cary dictated a replacement for the call/text consent checkbox text

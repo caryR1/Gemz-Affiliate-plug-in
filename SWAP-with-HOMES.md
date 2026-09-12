@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: added icons to the Build a Team hook cards (small follow-up to the entry below)
+
+Cary asked for graphics on the 4 hook-banner cards (previously plain text). Used simple emoji icons (🌱🎓🧭🤝) matching the same pattern the homepage's "Why Solar Gemz" cards already use — new `.gas-hook-icon` class in `gas-frontend.css`, no new icon system introduced. Verified live.
+
 ## 2026-09-12 — Solar session: Build a Team page shipped; found + fixed a real Elementor data-corruption bug worth knowing about if you ever hand-edit `_elementor_data` on Home
 
 Built and shipped Cary's new team-building funnel on Solar: a standalone

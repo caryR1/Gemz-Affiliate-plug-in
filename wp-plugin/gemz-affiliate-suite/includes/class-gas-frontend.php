@@ -253,15 +253,20 @@ class GAS_Frontend {
 	}
 
 	/**
-	 * Attribution-awareness banner for the signup page (2026-09-12) — the
+	 * Attribution-awareness banner for every public entry point that can
+	 * create a brand-new affiliate account — render_signup() (Become an
+	 * Affiliate) and the non-logged-in branch of render_signup_or_refer()
+	 * (Refer a Friend's "Sign Up as an Affiliate" side), 2026-09-12. The
 	 * whole point of the multi-tier system is that a new affiliate gets
 	 * linked to whoever actually invited them (sponsor_code_id), but
-	 * someone who lands on this page directly (bookmarked, googled, typed
-	 * the URL) instead of via the inviter's own link signs up with NO
-	 * sponsor, silently breaking the chain the inviter was expecting to
+	 * someone who lands on either page directly (bookmarked, googled,
+	 * typed the URL) instead of via the inviter's own link signs up with
+	 * NO sponsor, silently breaking the chain the inviter was expecting to
 	 * be credited for. Showing who they'll be attributed to (or a loud
 	 * "nobody" warning) before they submit gives them a chance to back out
-	 * and go find the real link instead.
+	 * and go find the real link instead. Not shown on the logged-in-
+	 * affiliate branch of render_signup_or_refer(), since that path never
+	 * creates a new account.
 	 */
 	private static function render_invited_by_notice() {
 		$sponsor_name = self::get_sponsor_display_name();
@@ -746,6 +751,7 @@ class GAS_Frontend {
 			echo '<p>Referring as <strong>' . esc_html( $current_user->display_name ) . '</strong> &mdash; we already have your details on file, just add your friend\'s info below.</p>';
 			self::render_add_referral_section( $current_user->ID, false, true );
 		} else {
+			echo self::render_invited_by_notice();
 			?>
 			<div class="gas-signup-toggle">
 				<button type="button" class="gas-toggle-btn gas-toggle-active" data-mode="signup">Sign Up as an Affiliate</button>

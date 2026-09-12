@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: hero images for Become an Affiliate + Build a Team, button reorder (Solar content only, no plugin code)
+
+Cary asked to beautify Become an Affiliate (was plain, no hero image at all) and give Build a Team a proper team/handshake hero instead of the generic solar-roof photo it inherited by default. Sourced two Pexels photos (free-use license, checked for logos/watermarks): a close-up handshake for Become an Affiliate, a small-group office handshake (team visible in frame, two people shaking hands in foreground) for Build a Team. Set as featured images via the theme's existing automatic hero mechanism — same pattern as Login/Solar Benefits, no new code. Also relabeled Build a Team's "Become an Affiliate First" button to "Become an Affiliate" and moved it above "Go to My Dashboard" per Cary's ask. No plugin files touched, nothing to redeploy on Home.
+
 ## 2026-09-12 — Solar session: added icons to the Build a Team hook cards (small follow-up to the entry below)
 
 Cary asked for graphics on the 4 hook-banner cards (previously plain text). Used simple emoji icons (🌱🎓🧭🤝) matching the same pattern the homepage's "Why Solar Gemz" cards already use — new `.gas-hook-icon` class in `gas-frontend.css`, no new icon system introduced. Verified live.

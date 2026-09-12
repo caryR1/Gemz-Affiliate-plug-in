@@ -13,6 +13,49 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: Build a Team page shipped; found + fixed a real Elementor data-corruption bug worth knowing about if you ever hand-edit `_elementor_data` on Home
+
+Built and shipped Cary's new team-building funnel on Solar: a standalone
+`/build-a-team/` page (hook banner for 4 target audiences, two-audience
+funnel, MLM-comparison section, live payout example), the homepage's
+"It compounds" bullet turned into a stylized CTA button linking to it,
+and a condensed "Looking For You" hook added to Refer a Friend as a
+proper Elementor element. All verified live via direct render, not just
+a browser glance (see why below).
+
+**Flagging for Home's side too, since it's the same stack**: while
+adding the homepage button I found a real WordPress gotcha —
+`update_post_meta()` does NOT auto-slash a value before storing, but
+`get_post_meta()` DOES unconditionally unslash on read. Since
+`_elementor_data` is JSON text containing real escaped backslashes
+(`\"`, `\/`), a plain `update_post_meta($id, '_elementor_data', $json)`
+silently corrupts the JSON on the next read — not just the section
+being edited, the WHOLE page's Elementor render breaks. It briefly
+happened to me on Solar's live homepage; caught and fixed before it
+was visible to a real visitor (a stale cached copy masked it during
+triage, which is the second thing below). Fix: wrap in `wp_slash()`
+before calling `update_post_meta()`, and verify with an exact
+before/after string match. Full writeup in memory
+(`gemz-elementor-meta-editing-gotcha.md` on Solar's side) if you ever
+hand-edit `_elementor_data` directly on Home rather than through the
+Elementor UI.
+
+**Second thing worth knowing**: this stack has TWO cache layers, not
+one — LiteSpeed Cache's own page cache AND a separate Hostinger edge
+CDN (visible as an `x-hcdn-cache-status` response header). `wp
+litespeed-purge all` only clears the first. To verify what's actually
+live during an edit, either check the direct PHP render
+(`\Elementor\Plugin::instance()->frontend->get_builder_content($id, true)`,
+bypasses both) or curl with a random cache-busting query string — a
+plain browser check right after an edit can show stale content from
+either layer and give false confidence either way.
+
+New shared shortcode from this batch: `[gas_team_payout_example]` in
+`class-gas-frontend.php` (already committed/pushed) — live-computes
+tier1/2/3 dollar figures from real approved-partner data instead of a
+hardcoded example, so it can't go stale as partners/rates change.
+Available if Home ever wants an equivalent team-building page.
+
 ## 2026-09-12 — Automated help-docs check: fixed 1 drift (docs only, no plugin logic touched)
 
 Daily automated pass comparing recent commits against the plugin's own

@@ -108,3 +108,21 @@
    callout card so it reads as "the current rate" rather than plain body
    copy. */
 .gas-team-payout-example{max-width:560px;margin:1.2em auto;padding:1em 1.4em;background:var(--gas-accent-bg,#EEF6F0);border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:8px;text-align:center;font-size:1.05em;}
+
+/* Build a Team page (2026-09-12) — hook-banner cards, CTA buttons, and
+   readable section width. Reuses the site's --gas-accent theme variables
+   so it matches whichever color theme is active, same as everything else
+   in this file. */
+.gas-team-section{max-width:720px;margin:0 auto 2.4em;padding:0 1em;}
+.gas-team-section h2{font-size:1.5em;margin-bottom:.5em;}
+.gas-team-section p{line-height:1.6;}
+.gas-hook-grid{display:flex;flex-wrap:wrap;gap:1.2em;justify-content:center;max-width:960px;margin:1.4em auto;padding:0 1em;}
+.gas-hook-card{flex:1 1 260px;max-width:320px;background:var(--gas-accent-bg,#EEF6F0);border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:12px;padding:1.4em;}
+.gas-hook-card h3{margin:0 0 .5em;font-size:1.1em;}
+.gas-hook-card p{margin:0;font-size:.95em;color:#444;}
+.gas-cta-btn{display:inline-block;background:var(--gas-accent,#3F8353);color:#fff !important;font-weight:700;font-size:.95em;padding:.7em 1.5em;border-radius:999px;text-decoration:none;text-align:center;}
+.gas-cta-btn:hover{background:var(--gas-accent-dark,#193421);color:#fff !important;}
+.gas-cta-row{text-align:center;margin:1.6em 0;}
+.gas-cta-row .gas-cta-btn{margin:.3em .5em;}
+.gas-cta-btn-small{display:inline-block;background:var(--gas-accent,#3F8353);color:#fff !important;font-weight:700;font-size:.8em;padding:.4em 1em;border-radius:999px;text-decoration:none;}
+.gas-cta-btn-small:hover{background:var(--gas-accent-dark,#193421);color:#fff !important;}

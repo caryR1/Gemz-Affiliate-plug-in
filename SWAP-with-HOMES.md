@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: Refer a Friend's form now shares Get a Quote's card styling (2.20.2, shared plugin feature)
+
+Cary's ask: make Refer a Friend "look like Get a Quote," keeping its own picture. Wrapped `render_signup_or_refer()`'s payout notice + attribution notice + form (both the signup-toggle branch and the logged-in-affiliate "add a referral" branch) in the same `.gas-panel.gas-quote-panel` card class Get a Quote already uses — reused as-is, no new CSS. The page's own hero/infographic images live in the page's Elementor content outside this shortcode, untouched. Shared plugin code — Home's merged signup/refer page (if it has one) would pick up the same look on redeploy.
+
 ## 2026-09-12 — Solar session: sponsor-attribution notice, now on BOTH self-signup entry points (2.20.1, shared plugin feature)
 
 Cary's concern: someone who lands on a signup page directly (bookmarked, googled, typed the URL) instead of via the inviter's actual link signs up with no `sponsor_code_id`, silently breaking the multi-tier chain the real inviter expected credit for. Added a notice before submission on every public entry point that can create a brand-new affiliate account: if the `gas_sponsor_code` cookie resolves to a real active code, shows "You were invited by {name}" with a note to go find the real link if that's wrong; if not, a bold yellow-on-orange "SYSTEM ADMIN" warning telling them to go find their actual invite link first if someone did invite them. New private methods `get_sponsor_display_name()` / `render_invited_by_notice()` in `class-gas-frontend.php`, wired into both `render_signup()` (Become an Affiliate) and the non-logged-in branch of `render_signup_or_refer()` (Refer a Friend's "Sign Up as an Affiliate" side — the logged-in-affiliate branch never creates a new account, so it's skipped there). Shared plugin code, live on Home too once you pull/redeploy — worth adding to Home's equivalent signup entry point(s) if it has more than one.

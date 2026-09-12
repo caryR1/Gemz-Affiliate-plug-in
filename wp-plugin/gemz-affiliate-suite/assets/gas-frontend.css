@@ -118,6 +118,7 @@
 .gas-team-section p{line-height:1.6;}
 .gas-hook-grid{display:flex;flex-wrap:wrap;gap:1.2em;justify-content:center;max-width:960px;margin:1.4em auto;padding:0 1em;}
 .gas-hook-card{flex:1 1 260px;max-width:320px;background:var(--gas-accent-bg,#EEF6F0);border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:12px;padding:1.4em;}
+.gas-hook-icon{font-size:1.8em;margin-bottom:.4em;}
 .gas-hook-card h3{margin:0 0 .5em;font-size:1.1em;}
 .gas-hook-card p{margin:0;font-size:.95em;color:#444;}
 .gas-cta-btn{display:inline-block;background:var(--gas-accent,#3F8353);color:#fff !important;font-weight:700;font-size:.95em;padding:.7em 1.5em;border-radius:999px;text-decoration:none;text-align:center;}

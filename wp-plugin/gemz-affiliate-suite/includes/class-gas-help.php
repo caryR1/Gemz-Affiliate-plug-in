@@ -96,6 +96,7 @@ class GAS_Help {
 			<div class="gas-panel">
 				<h3>Adding a referral by hand</h3>
 				<p>Would rather not wait for someone to click your link? "Add a referral" on My Links &amp; Earnings lets you enter a friend or customer's info directly — it's attached to your code the same as a real click-through. The public "Refer a friend" page offers the same shortcut, pre-filled with your details, when you're logged in.</p>
+				<p>Enter their state so we can match them to a <?php echo esc_html( $partner_label ); ?> that covers their area — or, if you already know who's the right fit, pick that <?php echo esc_html( $partner_label ); ?> directly instead of leaving it to the state match.</p>
 			</div>
 
 			<div class="gas-panel">

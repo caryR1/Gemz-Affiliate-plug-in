@@ -13,6 +13,19 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Automated help-docs check: fixed 1 drift (docs only, no plugin logic touched)
+
+Daily automated pass comparing recent commits against the plugin's own
+help content. Everything since the last pass (2026-09-11) was already
+covered or was cosmetic-only (rounded share buttons, the consent-wording
+round-trip that ended back at the original text) — one real gap found:
+`cdcf56a` (2026-09-10) added a partner-picker to the affiliate dashboard's
+"Add a referral" form (pick a specific fulfillment partner, or leave it
+on state-based auto-match), but `GAS_Help::render()`'s "Adding a referral
+by hand" panel only described entering the friend's info, not the
+partner choice. Added a line covering it. Copy-only change, scoped to
+`class-gas-help.php`.
+
 ## 2026-09-11 — Solar session: rounded the dashboard share/copy buttons (2.19.4); also synced the help-docs fix to Solar
 
 Cary asked to make the dashboard's "Copy Link"/"Instagram" share buttons

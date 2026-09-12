@@ -232,6 +232,45 @@ class GAS_Frontend {
 		return $id ? (int) $id : null;
 	}
 
+	/**
+	 * The display name for whoever's sponsor cookie is currently set (see
+	 * get_sponsor_code_id() above) — used at GET-time on the signup page
+	 * itself (2026-09-12, Cary's ask) so a visitor can SEE who they're
+	 * about to be attributed to before submitting, and back out if it's
+	 * wrong. Deliberately a separate read from get_sponsor_code_id() being
+	 * used at POST-time in handle_signup() — same cookie, same lookup
+	 * logic, just called at a different point in the request lifecycle.
+	 */
+	private static function get_sponsor_display_name() {
+		$id = self::get_sponsor_code_id();
+		if ( ! $id ) {
+			return null;
+		}
+		global $wpdb;
+		$table = GAS_DB::table( 'codes' );
+		$name  = $wpdb->get_var( $wpdb->prepare( "SELECT sub_affiliate_name FROM {$table} WHERE id = %d", $id ) );
+		return $name ? $name : null;
+	}
+
+	/**
+	 * Attribution-awareness banner for the signup page (2026-09-12) — the
+	 * whole point of the multi-tier system is that a new affiliate gets
+	 * linked to whoever actually invited them (sponsor_code_id), but
+	 * someone who lands on this page directly (bookmarked, googled, typed
+	 * the URL) instead of via the inviter's own link signs up with NO
+	 * sponsor, silently breaking the chain the inviter was expecting to
+	 * be credited for. Showing who they'll be attributed to (or a loud
+	 * "nobody" warning) before they submit gives them a chance to back out
+	 * and go find the real link instead.
+	 */
+	private static function render_invited_by_notice() {
+		$sponsor_name = self::get_sponsor_display_name();
+		if ( $sponsor_name ) {
+			return '<div class="gas-invited-by-notice"><p>You were invited by <strong>' . esc_html( $sponsor_name ) . '</strong>.</p><p>If that\'s not who invited you, please don\'t sign up here — go back and use the referral link they shared with you instead, so your signup is credited to the right person.</p></div>';
+		}
+		return '<div class="gas-invited-by-warning"><p><strong>No referral link detected &mdash; you\'ll be signing up under: SYSTEM ADMIN</strong></p><p>Did someone personally invite you to join? If so, stop here and find the referral link they shared with you &mdash; signing up on this page directly means it won\'t be credited to them. If nobody invited you, that\'s fine, you can continue below.</p></div>';
+	}
+
 	private static function generate_unique_code( $name ) {
 		global $wpdb;
 		$table = GAS_DB::table( 'codes' );
@@ -268,6 +307,8 @@ class GAS_Frontend {
 		if ( $error ) {
 			echo '<div class="gas-notice gas-notice-error"><p>' . esc_html( $error ) . '</p></div>';
 		}
+
+		echo self::render_invited_by_notice();
 
 		?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="gas-form">

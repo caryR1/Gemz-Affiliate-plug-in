@@ -19,6 +19,7 @@ class GAS_Frontend {
 		add_shortcode( 'gas_affiliate_team', array( __CLASS__, 'render_team_page' ) );
 		add_shortcode( 'gas_affiliate_account', array( __CLASS__, 'render_account_page' ) );
 		add_shortcode( 'gas_signup_or_refer', array( __CLASS__, 'render_signup_or_refer' ) );
+		add_shortcode( 'gas_team_payout_example', array( __CLASS__, 'render_team_payout_example' ) );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue_assets' ) );
 		add_action( 'init', array( __CLASS__, 'maybe_create_pages' ) );
 		add_action( 'admin_post_gas_affiliate_signup', array( __CLASS__, 'handle_signup' ) );
@@ -102,6 +103,7 @@ class GAS_Frontend {
 		'gas_faq',
 		'gas_lead_form',
 		'gas_lead_magnet',
+		'gas_team_payout_example',
 	);
 
 	public static function enqueue_assets() {
@@ -453,14 +455,35 @@ class GAS_Frontend {
 	 * rather than showing a "$0-$0" range.
 	 */
 	public static function estimated_payout_range() {
+		$pools = self::approved_partner_agent_pools();
+		if ( ! $pools ) {
+			return null;
+		}
+		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
+		$estimates = array_map(
+			function( $pool ) use ( $tier1_pct ) {
+				return $pool * ( $tier1_pct / 100 );
+			},
+			$pools
+		);
+		return array( 'min' => min( $estimates ), 'max' => max( $estimates ) );
+	}
+
+	/**
+	 * The agent-pool dollar amount (gross minus cashback/fulfillment cut,
+	 * before the tier split) for every approved partner with enough data
+	 * to price — shared by estimated_payout_range() (tier 1 only) and
+	 * estimated_team_payout_ranges() (all 3 tiers), so both stay based on
+	 * the exact same live partner set instead of two SQL queries that
+	 * could silently drift apart.
+	 */
+	private static function approved_partner_agent_pools() {
 		global $wpdb;
 		$rows = $wpdb->get_results(
 			'SELECT payout_type, payout_amount, payout_percent, typical_sale_amount, agent_pool_type, agent_pool_value FROM ' . GAS_DB::table( 'partners' ) . " WHERE outreach_status = 'approved'"
 		);
 
-		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
-		$estimates = array();
-
+		$pools = array();
 		foreach ( $rows as $r ) {
 			if ( 'flat' === $r->payout_type ) {
 				$gross = (float) $r->payout_amount;
@@ -472,18 +495,72 @@ class GAS_Frontend {
 			if ( $gross <= 0 ) {
 				continue;
 			}
-
 			$agent_pool = self::partner_agent_pool( $r, $gross );
-			$tier1      = $agent_pool * ( $tier1_pct / 100 );
-			if ( $tier1 > 0 ) {
-				$estimates[] = $tier1;
+			if ( $agent_pool > 0 ) {
+				$pools[] = $agent_pool;
 			}
 		}
+		return $pools;
+	}
 
-		if ( ! $estimates ) {
+	/**
+	 * Same idea as estimated_payout_range() but all 3 recruiting tiers at
+	 * once, for the team-building page's payout example (2026-09-12,
+	 * Cary's ask): rather than hardcoding a dollar example that goes
+	 * stale the moment a partner's rate changes or a second partner is
+	 * added, this is computed live off the same real partner data every
+	 * time the page renders. Returns null when there's no priceable
+	 * partner yet (caller falls back to generic copy).
+	 */
+	public static function estimated_team_payout_ranges() {
+		$pools = self::approved_partner_agent_pools();
+		if ( ! $pools ) {
 			return null;
 		}
-		return array( 'min' => min( $estimates ), 'max' => max( $estimates ) );
+		$pcts = array(
+			'tier1' => (float) GAS_Settings::get( 'tier1_split_percent' ),
+			'tier2' => (float) GAS_Settings::get( 'tier2_split_percent' ),
+			'tier3' => (float) GAS_Settings::get( 'tier3_split_percent' ),
+		);
+		$out = array();
+		foreach ( $pcts as $tier => $pct ) {
+			$estimates    = array_map(
+				function( $pool ) use ( $pct ) {
+					return $pool * ( $pct / 100 );
+				},
+				$pools
+			);
+			$out[ $tier ] = array( 'min' => min( $estimates ), 'max' => max( $estimates ) );
+		}
+		return $out;
+	}
+
+	/**
+	 * Formats a min/max range as the existing site convention: collapse to
+	 * one number when they round the same (the common one-partner case —
+	 * "between $490 and $490" reads like a bug), otherwise "$X-$Y". Shared
+	 * by the payout-range copy and the new team-payout-example shortcode
+	 * so both display ranges identically.
+	 */
+	private static function format_dollar_range( $range ) {
+		$min_fmt = number_format( $range['min'], 0 );
+		$max_fmt = number_format( $range['max'], 0 );
+		return $min_fmt === $max_fmt ? '$' . $min_fmt : '$' . $min_fmt . '-$' . $max_fmt;
+	}
+
+	/**
+	 * [gas_team_payout_example] — live tier1/2/3 dollar figures for the
+	 * team-building page, always computed from current approved-partner
+	 * data (see estimated_team_payout_ranges()) rather than a hardcoded
+	 * number in the page copy, so it never goes stale as partners are
+	 * added or a rate changes.
+	 */
+	public static function render_team_payout_example() {
+		$ranges = self::estimated_team_payout_ranges();
+		if ( ! $ranges ) {
+			return '<p class="gas-team-payout-example">Exact payout depends on the partner — you\'ll see the real number once you\'re matched.</p>';
+		}
+		return '<p class="gas-team-payout-example">Right now, a completed referral pays <strong>' . esc_html( self::format_dollar_range( $ranges['tier1'] ) ) . '</strong> to you directly, <strong>' . esc_html( self::format_dollar_range( $ranges['tier2'] ) ) . '</strong> to whoever brought you in, and <strong>' . esc_html( self::format_dollar_range( $ranges['tier3'] ) ) . '</strong> two levels up &mdash; recalculated live, so this always reflects the current rate.</p>';
 	}
 
 	/**

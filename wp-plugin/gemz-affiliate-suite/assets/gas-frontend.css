@@ -102,3 +102,9 @@
 .gas-quote-panel{max-width:560px;margin:1.6em auto;}
 .gas-quote-panel .gas-form{max-width:none;}
 .gas-lead-intro p{font-size:1.05em;opacity:.85;margin-top:0;}
+
+/* Team-building payout example (2026-09-12) — live-computed dollar figures
+   (see GAS_Frontend::render_team_payout_example()), styled as a small
+   callout card so it reads as "the current rate" rather than plain body
+   copy. */
+.gas-team-payout-example{max-width:560px;margin:1.2em auto;padding:1em 1.4em;background:var(--gas-accent-bg,#EEF6F0);border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:8px;text-align:center;font-size:1.05em;}

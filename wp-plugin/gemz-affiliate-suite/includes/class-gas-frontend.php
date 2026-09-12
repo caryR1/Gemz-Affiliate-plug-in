@@ -712,6 +712,15 @@ class GAS_Frontend {
 			echo '<div class="gas-notice gas-notice-error"><p>' . esc_html( $error ) . '</p></div>';
 		}
 
+		// Wrapped in the same card treatment as Get a Quote (2026-09-12,
+		// Cary's ask — "format Refer a Friend to look like Get a Quote,
+		// keeping its own picture") for visual consistency between the
+		// two lead-capture-style pages. The page's own hero/infographic
+		// images live in this page's Elementor content OUTSIDE this
+		// shortcode's output, so they're untouched by this — only the
+		// shortcode's own form area gets the panel styling.
+		echo '<div class="gas-panel gas-quote-panel">';
+
 		$range = self::estimated_payout_range();
 		$noun  = GAS_Settings::get( 'conversion_noun' );
 		echo '<div class="gas-payout-range">';
@@ -840,6 +849,7 @@ class GAS_Frontend {
 			</script>
 			<?php
 		}
+		echo '</div>';
 		return ob_get_clean();
 	}
 

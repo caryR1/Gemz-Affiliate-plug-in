@@ -23,6 +23,7 @@ class GAS_Admin {
 		add_action( 'admin_menu', array( __CLASS__, 'add_menu' ) );
 		add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_media_library' ) );
 		add_action( 'admin_post_gas_save_partner', array( __CLASS__, 'handle_save_partner' ) );
+		add_action( 'admin_post_gas_add_partner_note', array( __CLASS__, 'handle_add_partner_note' ) );
 		add_action( 'admin_post_gas_add_partner', array( __CLASS__, 'handle_add_partner' ) );
 		add_action( 'admin_post_gas_save_code', array( __CLASS__, 'handle_save_code' ) );
 		add_action( 'admin_post_gas_delete_code', array( __CLASS__, 'handle_delete_code' ) );
@@ -118,6 +119,19 @@ class GAS_Admin {
 	private static function get_partner( $id ) {
 		global $wpdb;
 		return $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . GAS_DB::table( 'partners' ) . ' WHERE id = %d', $id ) );
+	}
+
+	/**
+	 * A partner's note history, newest first — see
+	 * GAS_DB::migrate_partner_notes_to_log() for why this replaced the old
+	 * single flat `notes` column (2026-09-12).
+	 */
+	private static function get_partner_notes( $partner_id ) {
+		global $wpdb;
+		return $wpdb->get_results( $wpdb->prepare(
+			'SELECT * FROM ' . GAS_DB::table( 'partner_notes' ) . ' WHERE partner_id = %d ORDER BY created_at DESC, id DESC',
+			$partner_id
+		) );
 	}
 
 	private static function get_codes() {
@@ -432,6 +446,9 @@ class GAS_Admin {
 		if ( isset( $_GET['added'] ) ) {
 			echo '<div class="notice notice-success"><p>Partner added &mdash; set its payout terms and destination URL below when ready.</p></div>';
 		}
+		if ( isset( $_GET['note_added'] ) ) {
+			echo '<div class="notice notice-success"><p>Note added.</p></div>';
+		}
 
 		if ( $editing ) {
 			echo '<h2>Edit Partner: ' . esc_html( $editing->name ) . '</h2>';
@@ -555,11 +572,40 @@ class GAS_Admin {
 			}
 			echo '<p class="description">Give this partner their own login to <a href="' . esc_url( GAS_Partner_Portal::page_url() ) . '">the Partner Portal</a>, where they can see and update the status of their own leads instead of you having to chase them. Saving with an email here sends them a "set your password" email the first time; leave blank if they don\'t need portal access.</p></td></tr>';
 
-			echo '<tr><th>Notes</th><td><textarea name="notes" class="large-text" rows="3">' . esc_textarea( $editing->notes ?? '' ) . '</textarea></td></tr>';
-
 			echo '</tbody></table>';
 			submit_button( 'Update Partner' );
 			echo '</form>';
+
+			// Running note history (2026-09-12) — replaces the old single
+			// flat `notes` field, which silently overwrote itself every
+			// time the partner form above was saved. See
+			// GAS_DB::migrate_partner_notes_to_log() for the one-time
+			// carry-over of whatever was in that old field.
+			echo '<h3>Notes</h3>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+			wp_nonce_field( 'gas_add_partner_note' );
+			echo '<input type="hidden" name="action" value="gas_add_partner_note">';
+			echo '<input type="hidden" name="partner_id" value="' . esc_attr( $editing->id ) . '">';
+			echo '<textarea name="note" class="large-text" rows="2" placeholder="Add a note..." required></textarea>';
+			submit_button( 'Add Note', 'secondary', 'submit', false );
+			echo '</form>';
+
+			$partner_notes = self::get_partner_notes( $editing->id );
+			if ( ! $partner_notes ) {
+				echo '<p class="description">No notes yet.</p>';
+			} else {
+				echo '<table class="widefat striped" style="margin-top:1em;max-width:800px;"><thead><tr><th style="width:160px;">Date</th><th style="width:160px;">Added by</th><th>Note</th></tr></thead><tbody>';
+				foreach ( $partner_notes as $n ) {
+					$author = $n->created_by ? get_userdata( $n->created_by ) : null;
+					echo '<tr>';
+					echo '<td>' . esc_html( mysql2date( 'M j, Y g:ia', $n->created_at ) ) . '</td>';
+					echo '<td>' . ( $author ? esc_html( $author->display_name ) : '<em>(migrated)</em>' ) . '</td>';
+					echo '<td>' . nl2br( esc_html( $n->note ) ) . '</td>';
+					echo '</tr>';
+				}
+				echo '</tbody></table>';
+			}
+
 			echo '<p><a href="' . esc_url( admin_url( 'admin.php?page=gas-partners' ) ) . '">&larr; Back to partner list</a></p>';
 		} else {
 			echo '<h2>Add a partner</h2>';
@@ -1007,7 +1053,12 @@ class GAS_Admin {
 			'capability_tags'   => isset( $_POST['capability_tags'] ) && is_array( $_POST['capability_tags'] )
 				? implode( ',', array_intersect( array_map( 'sanitize_key', wp_unslash( $_POST['capability_tags'] ) ), array_keys( GAS_DB::capability_tags() ) ) )
 				: '',
-			'notes'             => isset( $_POST['notes'] ) ? sanitize_textarea_field( wp_unslash( $_POST['notes'] ) ) : '',
+			// The old flat `notes` column is no longer written here — see
+			// get_partner_notes()/handle_add_partner_note() and
+			// GAS_DB::migrate_partner_notes_to_log(). Deliberately not
+			// included in $data at all, so this form save can never
+			// clobber whatever (if anything) is still sitting in that
+			// legacy column.
 		);
 
 		// Never save a blank alias over an existing one — an admin
@@ -1029,6 +1080,42 @@ class GAS_Admin {
 		self::audit_log( 'partner', $id, 'updated', $data );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&saved=1' ) );
+		exit;
+	}
+
+	/**
+	 * Appends one entry to a partner's note history (2026-09-12) — see
+	 * get_partner_notes() and GAS_DB::migrate_partner_notes_to_log(). A
+	 * separate small form/action from handle_save_partner() on purpose:
+	 * adding a note shouldn't require resubmitting (and risk fat-fingering)
+	 * every other field on the partner.
+	 */
+	public static function handle_add_partner_note() {
+		if ( ! current_user_can( self::CAP_PARTNERS ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		check_admin_referer( 'gas_add_partner_note' );
+
+		$partner_id = isset( $_POST['partner_id'] ) ? absint( $_POST['partner_id'] ) : 0;
+		$note       = isset( $_POST['note'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note'] ) ) : '';
+
+		if ( ! $partner_id || '' === $note ) {
+			wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&edit=' . $partner_id ) );
+			exit;
+		}
+
+		global $wpdb;
+		$wpdb->insert(
+			GAS_DB::table( 'partner_notes' ),
+			array(
+				'partner_id' => $partner_id,
+				'note'       => $note,
+				'created_by' => get_current_user_id(),
+				'created_at' => current_time( 'mysql' ),
+			)
+		);
+
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-partners&edit=' . $partner_id . '&note_added=1' ) );
 		exit;
 	}
 

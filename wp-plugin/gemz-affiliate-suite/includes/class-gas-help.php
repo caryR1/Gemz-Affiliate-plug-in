@@ -131,7 +131,8 @@ class GAS_Help {
 
 			<div class="gas-panel">
 				<h3>Referring yourself</h3>
-				<p>You're welcome to use your own referral link if you personally become a customer — there's no rule against it, and you'll earn your normal commission on the sale. If that <?php echo esc_html( $partner_label ); ?> also offers buyer cash back, you'd get a separate email with a link to claim it, the same as any other referred customer would. The one thing we do watch for is a second account being created just to stack extra recruiting bonuses on what's really one person's own business, which isn't in the spirit of the program.</p>
+				<p><strong>Allowed:</strong> using your own referral link for a personal purchase. There's no rule against it, and you'll earn your normal commission on the sale. If that <?php echo esc_html( $partner_label ); ?> also offers buyer cash back, you'd get a separate email with a link to claim it, the same as any other referred customer would.</p>
+				<p><strong>Not allowed:</strong> creating more than one account to stack extra recruiting bonuses on what's really one person's own business.</p>
 			</div>
 
 			<div class="gas-panel">

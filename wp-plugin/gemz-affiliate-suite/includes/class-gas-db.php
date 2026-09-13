@@ -96,6 +96,7 @@ class GAS_DB {
 			self::create_tables();
 			GAS_Roles::add_role();
 			GAS_Campaigns::migrate_partner_privacy();
+			self::migrate_partner_notes_to_log();
 			update_option( 'gas_db_version', GAS_DB_VERSION );
 		}
 	}
@@ -175,6 +176,7 @@ class GAS_DB {
 		$campaigns         = self::table( 'campaigns' );
 		$campaign_variants = self::table( 'campaign_variants' );
 		$marketing_assets  = self::table( 'marketing_assets' );
+		$partner_notes     = self::table( 'partner_notes' );
 
 		$sql = "CREATE TABLE {$partners} (
 			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -398,8 +400,57 @@ class GAS_DB {
 			PRIMARY KEY  (id),
 			KEY partner_id (partner_id),
 			KEY campaign_id (campaign_id)
+		) {$charset_collate};
+
+		CREATE TABLE {$partner_notes} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			partner_id BIGINT UNSIGNED NOT NULL,
+			note TEXT NOT NULL,
+			created_by BIGINT UNSIGNED NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY  (id),
+			KEY partner_id (partner_id)
 		) {$charset_collate};";
 
 		dbDelta( $sql );
+	}
+
+	/**
+	 * One-time migration (2026-09-12): partners.notes was a single flat
+	 * field that got overwritten every time the partner was re-saved, so
+	 * anything written there before was silently lost the next time
+	 * someone edited the partner. Replaced with the partner_notes table
+	 * (a real running history, newest first, each entry timestamped and
+	 * attributed to whoever added it) — the admin UI's Notes field is now
+	 * that history plus a small "add a note" box, not an editable
+	 * textarea. This runs once per site: for any partner whose old flat
+	 * `notes` column still has text AND has no rows in partner_notes yet,
+	 * carries that old text over as the first historical entry (dated to
+	 * when the partner was created, since we don't know when the note
+	 * itself was actually written) rather than silently dropping it.
+	 * Safe to run multiple times — the "no rows yet" check makes it a
+	 * no-op after the first run.
+	 */
+	public static function migrate_partner_notes_to_log() {
+		global $wpdb;
+		$partners_table = self::table( 'partners' );
+		$notes_table    = self::table( 'partner_notes' );
+
+		$partners = $wpdb->get_results( "SELECT id, notes, created_at FROM {$partners_table} WHERE notes IS NOT NULL AND notes != ''" );
+		foreach ( $partners as $p ) {
+			$existing = $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$notes_table} WHERE partner_id = %d", $p->id ) );
+			if ( $existing ) {
+				continue;
+			}
+			$wpdb->insert(
+				$notes_table,
+				array(
+					'partner_id' => $p->id,
+					'note'       => $p->notes,
+					'created_by' => null,
+					'created_at' => $p->created_at ? $p->created_at : current_time( 'mysql' ),
+				)
+			);
+		}
 	}
 }

@@ -300,6 +300,28 @@ class GAS_Payouts {
 	 * partner has no pool configured, so existing partners behave exactly
 	 * as before this field existed.
 	 */
+	/**
+	 * Rounds a dollar figure UP to the nearest $10 (2026-09-13, Cary's
+	 * ask — "we need everything to be uniform") — every tier payout, real
+	 * or displayed, should land on a clean multiple of ten, never cents
+	 * or an odd amount. This is the single canonical implementation;
+	 * GAS_Frontend's display-side estimate functions call this one
+	 * instead of duplicating it, so a future change to the rounding rule
+	 * only has to happen here.
+	 *
+	 * Known tradeoff, accepted by Cary: rounding every tier UP means the
+	 * total actually disbursed on a sale can exceed the exact 70/20/10
+	 * math would give — the house absorbs that extra few dollars as a
+	 * cost of clean numbers (see net's definition below, which already
+	 * absorbs it automatically). On a partner with a thin agent_pool
+	 * relative to gross, this could in theory push net_to_cary quite low
+	 * or negative — worth a sanity check on any new partner's numbers,
+	 * not just trusting the split percentages alone.
+	 */
+	public static function round_up_to_ten( $amount ) {
+		return ceil( $amount / 10 ) * 10;
+	}
+
 	public static function agent_pool_amount( $partner, $gross ) {
 		$type  = isset( $partner->agent_pool_type ) ? $partner->agent_pool_type : 'percent';
 		$value = isset( $partner->agent_pool_value ) && '' !== $partner->agent_pool_value ? (float) $partner->agent_pool_value : 100;
@@ -359,9 +381,9 @@ class GAS_Payouts {
 		$tier2_pct = (float) GAS_Settings::get( 'tier2_split_percent' );
 		$tier3_pct = (float) GAS_Settings::get( 'tier3_split_percent' );
 
-		$tier1_amount = round( $agent_pool * ( $tier1_pct / 100 ), 2 );
-		$tier2_amount = $tier2_code ? round( $agent_pool * ( $tier2_pct / 100 ), 2 ) : 0.0;
-		$tier3_amount = $tier3_code ? round( $agent_pool * ( $tier3_pct / 100 ), 2 ) : 0.0;
+		$tier1_amount = self::round_up_to_ten( $agent_pool * ( $tier1_pct / 100 ) );
+		$tier2_amount = $tier2_code ? self::round_up_to_ten( $agent_pool * ( $tier2_pct / 100 ) ) : 0.0;
+		$tier3_amount = $tier3_code ? self::round_up_to_ten( $agent_pool * ( $tier3_pct / 100 ) ) : 0.0;
 
 		$net = $gross - $cashback - $tier1_amount - $tier2_amount - $tier3_amount;
 

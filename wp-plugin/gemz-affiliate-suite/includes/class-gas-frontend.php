@@ -513,28 +513,11 @@ class GAS_Frontend {
 		$tier1_pct = (float) GAS_Settings::get( 'tier1_split_percent' );
 		$estimates = array_map(
 			function( $pool ) use ( $tier1_pct ) {
-				return self::round_up_to_ten( $pool * ( $tier1_pct / 100 ) );
+				return GAS_Payouts::round_up_to_ten( $pool * ( $tier1_pct / 100 ) );
 			},
 			$pools
 		);
 		return array( 'min' => min( $estimates ), 'max' => max( $estimates ) );
-	}
-
-	/**
-	 * Rounds a dollar figure UP to the nearest $10 (2026-09-13, Cary's ask)
-	 * — every payout figure shown to a visitor should land on a clean
-	 * multiple of ten, never cents or an odd amount. Used by the marketing/
-	 * display estimate functions below only (estimated_payout_range(),
-	 * estimated_team_payout_ranges()) — deliberately NOT applied to
-	 * GAS_Payouts::compute(), which computes actual dollar amounts for
-	 * real payout-ledger entries; rounding a real payout up on every tier
-	 * risks the total disbursed exceeding the actual gross commission
-	 * collected on a given sale. Whether that same rounding should also
-	 * apply to real payouts is still an open question as of this comment
-	 * — see SWAP-with-HOMES.md.
-	 */
-	private static function round_up_to_ten( $amount ) {
-		return ceil( $amount / 10 ) * 10;
 	}
 
 	/**
@@ -594,7 +577,7 @@ class GAS_Frontend {
 		foreach ( $pcts as $tier => $pct ) {
 			$estimates    = array_map(
 				function( $pool ) use ( $pct ) {
-					return self::round_up_to_ten( $pool * ( $pct / 100 ) );
+					return GAS_Payouts::round_up_to_ten( $pool * ( $pct / 100 ) );
 				},
 				$pools
 			);

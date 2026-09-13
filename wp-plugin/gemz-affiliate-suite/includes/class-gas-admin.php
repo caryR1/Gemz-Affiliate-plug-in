@@ -467,19 +467,20 @@ class GAS_Admin {
 			echo '<option value="percent"' . selected( $editing->payout_type, 'percent', false ) . '>Percent of sale</option>';
 			echo '</select></td></tr>';
 
-			echo '<tr><th>Flat amount ($)</th><td><input type="number" step="0.01" min="0" name="payout_amount" value="' . esc_attr( $editing->payout_amount ?? '' ) . '"> <p class="description">Used only if payout type is Flat.</p></td></tr>';
+			echo '<tr><th>Flat amount ($)</th><td><input type="number" step="0.01" min="0" name="payout_amount" id="gas_payout_amount" value="' . esc_attr( $editing->payout_amount ?? '' ) . '"> <p class="description">Used only if payout type is Flat.</p></td></tr>';
 
-			echo '<tr><th>Percent (%)</th><td><input type="number" step="0.01" min="0" max="100" name="payout_percent" value="' . esc_attr( $editing->payout_percent ?? '' ) . '"> <p class="description">Used only if payout type is Percent, e.g. 8 for 8%.</p></td></tr>';
+			echo '<tr><th>Percent (%)</th><td><input type="number" step="0.01" min="0" max="100" name="payout_percent" id="gas_payout_percent" value="' . esc_attr( $editing->payout_percent ?? '' ) . '"> <p class="description">Used only if payout type is Percent, e.g. 8 for 8%.</p></td></tr>';
 
-			echo '<tr><th>Typical sale amount ($)</th><td><input type="number" step="0.01" min="0" name="typical_sale_amount" value="' . esc_attr( $editing->typical_sale_amount ?? '' ) . '"> <p class="description">Only used (for Percent-type payout) to estimate the earnings range shown to affiliates &mdash; has no effect on real payout calculations, which always use the actual sale amount entered in the Calculator. Leave blank if unsure; this partner is simply left out of the affiliate-facing range until it\'s set.</p></td></tr>';
+			echo '<tr><th>Typical sale amount ($)</th><td><input type="number" step="0.01" min="0" name="typical_sale_amount" id="gas_typical_sale_amount" value="' . esc_attr( $editing->typical_sale_amount ?? '' ) . '"> <p class="description">Only used (for Percent-type payout) to estimate the earnings range shown to affiliates &mdash; has no effect on real payout calculations, which always use the actual sale amount entered in the Calculator. Leave blank if unsure; this partner is simply left out of the affiliate-facing range until it\'s set.</p></td></tr>';
 
 			echo '<tr><th>Agent commission pool</th><td>';
 			echo '<select name="agent_pool_type" id="agent_pool_type">';
 			echo '<option value="percent"' . selected( $editing->agent_pool_type ?? 'percent', 'percent', false ) . '>Percent of gross commission</option>';
 			echo '<option value="flat"' . selected( $editing->agent_pool_type ?? 'percent', 'flat', false ) . '>Flat amount per sale</option>';
 			echo '</select> ';
-			echo '<input type="number" step="0.01" min="0" name="agent_pool_value" value="' . esc_attr( $editing->agent_pool_value ?? '100' ) . '"> ';
+			echo '<input type="number" step="0.01" min="0" name="agent_pool_value" id="gas_agent_pool_value" value="' . esc_attr( $editing->agent_pool_value ?? '100' ) . '"> ';
 			echo '<p class="description">How much of the gross commission above is actually divided across the affiliate tiers (Settings &gt; tier split percentages apply to THIS amount, not to the full gross). The rest of gross stays with you as margin, on top of your tier-1 share. Defaults to 100% of gross &mdash; the whole commission is split, nothing held back &mdash; unless set otherwise here.</p>';
+			echo '<p id="gas-tier-calc-output" style="font-weight:600;background:#f0f6fc;border-left:4px solid #2271b1;padding:.6em 1em;margin-top:.6em;"></p>';
 			echo '</td></tr>';
 
 			$installments = $editing->installments_json ? json_decode( $editing->installments_json, true ) : array();
@@ -573,6 +574,72 @@ class GAS_Admin {
 			echo '<p class="description">Give this partner their own login to <a href="' . esc_url( GAS_Partner_Portal::page_url() ) . '">the Partner Portal</a>, where they can see and update the status of their own leads instead of you having to chase them. Saving with an email here sends them a "set your password" email the first time; leave blank if they don\'t need portal access.</p></td></tr>';
 
 			echo '</tbody></table>';
+
+			// Live tier-split mini-calculator (2026-09-13, Cary's ask) —
+			// recomputes gross -> agent pool -> tier1/2/3 in the browser as
+			// any of the relevant fields change, so the pool size can be
+			// gauged/tuned without saving and reloading first. Mirrors
+			// GAS_Payouts::agent_pool_amount()/compute()'s exact math
+			// (including round_up_to_ten()) so what's shown here always
+			// matches what the real engine would actually pay out —
+			// deliberately duplicated in JS rather than an AJAX round-trip,
+			// since the math is simple and this needs to feel instant.
+			?>
+			<script>
+			(function() {
+				var tier1Pct = <?php echo (float) GAS_Settings::get( 'tier1_split_percent' ); ?>;
+				var tier2Pct = <?php echo (float) GAS_Settings::get( 'tier2_split_percent' ); ?>;
+				var tier3Pct = <?php echo (float) GAS_Settings::get( 'tier3_split_percent' ); ?>;
+
+				function roundUpToTen( n ) {
+					return Math.ceil( n / 10 ) * 10;
+				}
+				function num( id ) {
+					var el = document.getElementById( id );
+					var v = el ? parseFloat( el.value ) : NaN;
+					return isNaN( v ) ? 0 : v;
+				}
+
+				function recalc() {
+					var payoutType   = document.getElementById( 'payout_type' ).value;
+					var gross;
+					if ( 'flat' === payoutType ) {
+						gross = num( 'gas_payout_amount' );
+					} else {
+						gross = num( 'gas_typical_sale_amount' ) * ( num( 'gas_payout_percent' ) / 100 );
+					}
+
+					var poolType  = document.getElementById( 'agent_pool_type' ).value;
+					var poolValue = num( 'gas_agent_pool_value' );
+					var pool      = 'flat' === poolType ? Math.min( poolValue, gross ) : gross * ( poolValue / 100 );
+
+					var tier1 = roundUpToTen( pool * ( tier1Pct / 100 ) );
+					var tier2 = roundUpToTen( pool * ( tier2Pct / 100 ) );
+					var tier3 = roundUpToTen( pool * ( tier3Pct / 100 ) );
+
+					var out = document.getElementById( 'gas-tier-calc-output' );
+					if ( gross <= 0 ) {
+						out.textContent = 'Enter a payout amount above to see the tier split.';
+						return;
+					}
+					var netNoDownline = gross - tier1;
+					var netFullChain  = gross - tier1 - tier2 - tier3;
+					out.textContent = 'At current settings: $' + tier1 + ' / $' + tier2 + ' / $' + tier3
+						+ ' (tier 1 / 2 / 3, rounded up to the nearest $10) — net to you: $' + netFullChain
+						+ ' (full 3-tier chain) to $' + netNoDownline + ' (no downline)';
+				}
+
+				[ 'payout_type', 'gas_payout_amount', 'gas_payout_percent', 'gas_typical_sale_amount', 'agent_pool_type', 'gas_agent_pool_value' ].forEach( function( id ) {
+					var el = document.getElementById( id );
+					if ( el ) {
+						el.addEventListener( 'input', recalc );
+						el.addEventListener( 'change', recalc );
+					}
+				} );
+				recalc();
+			})();
+			</script>
+			<?php
 			submit_button( 'Update Partner' );
 			echo '</form>';
 

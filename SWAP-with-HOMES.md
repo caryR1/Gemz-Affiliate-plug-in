@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: darker SYSTEM ADMIN warning box (2.20.3, shared plugin feature) + Refer a Friend hook copy updated (Solar content only)
+
+Cary's ask: make the sponsor-attribution warning box (`.gas-invited-by-warning`) even harder to miss — darkened the orange background (#E8720C → #C25400) and added a bold `border-top` on top of the existing border for extra alert emphasis. Shared plugin CSS, live on Home too on redeploy. Also updated the "Looking For You" hook paragraph on Solar's Refer a Friend page (Elementor content, not plugin code) to Cary's dictated replacement copy — used the decode/modify/re-encode-as-array approach (not raw string splicing) per the Elementor-editing gotcha noted below, verified via direct render before trusting it, backup taken first.
+
 ## 2026-09-12 — Solar session: Refer a Friend's form now shares Get a Quote's card styling (2.20.2, shared plugin feature)
 
 Cary's ask: make Refer a Friend "look like Get a Quote," keeping its own picture. Wrapped `render_signup_or_refer()`'s payout notice + attribution notice + form (both the signup-toggle branch and the logged-in-affiliate "add a referral" branch) in the same `.gas-panel.gas-quote-panel` card class Get a Quote already uses — reused as-is, no new CSS. The page's own hero/infographic images live in the page's Elementor content outside this shortcode, untouched. Shared plugin code — Home's merged signup/refer page (if it has one) would pick up the same look on redeploy.

@@ -262,18 +262,23 @@ class GAS_Frontend {
 	 * someone who lands on either page directly (bookmarked, googled,
 	 * typed the URL) instead of via the inviter's own link signs up with
 	 * NO sponsor, silently breaking the chain the inviter was expecting to
-	 * be credited for. Showing who they'll be attributed to (or a loud
-	 * "nobody" warning) before they submit gives them a chance to back out
-	 * and go find the real link instead. Not shown on the logged-in-
-	 * affiliate branch of render_signup_or_refer(), since that path never
-	 * creates a new account.
+	 * be credited for. Naming who they'll be attributed to (real name, or
+	 * "System Admin" when there's no sponsor cookie) gives them a chance
+	 * to back out and go find the real link instead. Not shown on the
+	 * logged-in-affiliate branch of render_signup_or_refer(), since that
+	 * path never creates a new account.
+	 *
+	 * Styled 2026-09-12 to match the dashboard's own admin-preview banner
+	 * (see the "Previewing X's dashboard" notice in render_dashboard()) —
+	 * a light-yellow callout with an amber left border, one short line —
+	 * rather than a full-bleed orange/brown warning block. Cary's ask:
+	 * one header-weight line ("You are signing up under X"), 1-2 lines
+	 * max total.
 	 */
 	private static function render_invited_by_notice() {
 		$sponsor_name = self::get_sponsor_display_name();
-		if ( $sponsor_name ) {
-			return '<div class="gas-invited-by-notice"><p>You were invited by <strong>' . esc_html( $sponsor_name ) . '</strong>.</p><p>If that\'s not who invited you, please don\'t sign up here — go back and use the referral link they shared with you instead, so your signup is credited to the right person.</p></div>';
-		}
-		return '<div class="gas-invited-by-warning"><p><strong>No referral link detected &mdash; you\'ll be signing up under: SYSTEM ADMIN</strong></p><p>Did someone personally invite you to join? If so, stop here and find the referral link they shared with you &mdash; signing up on this page directly means it won\'t be credited to them. If nobody invited you, that\'s fine, you can continue below.</p></div>';
+		$who          = $sponsor_name ? esc_html( $sponsor_name ) : 'System Admin';
+		return '<div class="gas-invited-by-notice"><strong>You are signing up under ' . $who . '.</strong> Not them? Use the referral link they shared with you instead.</div>';
 	}
 
 	private static function generate_unique_code( $name ) {

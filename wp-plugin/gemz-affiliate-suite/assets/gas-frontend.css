@@ -8,18 +8,15 @@
 .gas-notice-success{background:#E4F6E2;}
 .gas-notice-error{background:#fbeaea;color:#7a1f1f;}
 
-/* Sponsor-attribution banner on the signup page (2026-09-12) — lets a
-   visitor confirm who they'll be credited to before submitting, so a
-   direct/bookmarked visit doesn't silently break the referral chain the
-   real inviter was expecting credit for. The "no sponsor" case is a
-   deliberate, non-theme warning color (yellow-on-orange) rather than the
-   site's normal accent palette — it's meant to interrupt, not blend in. */
-.gas-invited-by-notice{max-width:480px;background:var(--gas-accent-tint,#F7FBF7);border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:6px;padding:1em 1.2em;margin-bottom:1.2em;}
-.gas-invited-by-notice p{margin:0 0 .5em;}
-.gas-invited-by-notice p:last-child{margin-bottom:0;font-size:.92em;}
-.gas-invited-by-warning{max-width:480px;background:#C25400;color:#FFF200;border:2px solid #7A3300;border-top:6px solid #7A3300;border-radius:6px;padding:1em 1.2em;margin-bottom:1.2em;font-weight:600;}
-.gas-invited-by-warning p{margin:0 0 .5em;}
-.gas-invited-by-warning p:last-child{margin-bottom:0;font-size:.92em;font-weight:500;}
+/* Sponsor-attribution banner on the signup page (2026-09-12, restyled
+   same day) — lets a visitor confirm who they'll be credited to before
+   submitting, so a direct/bookmarked visit doesn't silently break the
+   referral chain the real inviter was expecting credit for. Matches the
+   dashboard's own admin-preview banner (see the "Previewing X's
+   dashboard" notice in GAS_Frontend::render_dashboard()) — light-yellow
+   callout, amber left border, one short line — rather than a full-bleed
+   warning block, so it reads as a helpful heads-up, not an alarm. */
+.gas-invited-by-notice{max-width:480px;border-left:4px solid #d98500;padding:8px 12px;background:#fff8e5;margin-bottom:1.2em;font-size:.95em;}
 .gas-dashboard h2{margin-top:1.6em;}
 .gas-code-card{border:1.5px solid var(--gas-accent-border,#CFE3D2);border-radius:6px;padding:1em 1.2em;margin-bottom:1em;}
 .gas-stat-row{display:flex;gap:1.5em;margin-top:.6em;flex-wrap:wrap;}

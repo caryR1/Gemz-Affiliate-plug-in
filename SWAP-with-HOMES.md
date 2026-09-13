@@ -13,6 +13,12 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: sponsor-attribution notice restyled (2.21.1, shared plugin code) + Solar Benefits reworked (Solar content only)
+
+**Notice restyle (shared)**: Cary asked to drop the brown/orange warning-box treatment on the sponsor-attribution notice (both Become an Affiliate and Refer a Friend) in favor of matching the dashboard's own admin-preview callout style — light yellow background, amber left border, one compact line. Copy is now a single header-style sentence: "You are signing up under {Name}." / "You are signing up under System Admin." plus one short follow-up clause. Collapsed what were two different CSS classes/visual treatments (has-sponsor vs. no-sponsor) into one (`.gas-invited-by-notice`) — same class, just different name text now. Live on Home too on redeploy.
+
+**Solar Benefits rework (Solar content only, no plugin code)**: removed the "How Solar Works" section entirely, and reworked the 3-image benefits row — each image resized to ~55% width/centered (was full-width) with its former one-line caption replaced by a short 2-3 sentence intro paragraph placed ABOVE the image instead of below (Elementor's native image caption always renders below, so this needed a separate text-editor widget per image instead). New intro copy reuses language already established in the site's own blog posts for consistency.
+
 ## 2026-09-12 — Solar session: FAQ addition + partner note history (DB v19!) + self-referral clarity + dashboard title suppression (2.21.0)
 
 **FAQ (Solar content only)**: added a new Q&A to Solar's FAQ page — "What are the basic qualifications for a home to be a good fit for solar?" / "To qualify for our solar referral program, you must own your home and have a credit score of 650 or better." — placed right before the existing roof-fit question, per Cary's ask to keep qualification info grouped.

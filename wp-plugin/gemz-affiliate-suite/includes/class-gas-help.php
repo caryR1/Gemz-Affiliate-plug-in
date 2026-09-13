@@ -106,7 +106,7 @@ class GAS_Help {
 
 			<div class="gas-panel">
 				<h3>How earnings are figured</h3>
-				<p>Every sale generates a commission that's split a fixed way across up to three tiers: the affiliate who made the sale, that affiliate's recruiter, and the recruiter's own recruiter (if there is one). My Links &amp; Earnings shows your estimated earnings range for each tier while the current month is still open, and switches to your exact final amount once the month closes.</p>
+				<p>Every sale generates a commission that's split a fixed way across up to three tiers: the affiliate who made the sale, that affiliate's recruiter, and the recruiter's own recruiter (if there is one). My Links &amp; Earnings shows your estimated earnings range for each tier while the current month is still open, and switches to your exact final amount once the month closes. Every tier amount, estimated or final, is rounded up to the nearest $10.</p>
 			</div>
 
 			<div class="gas-panel">

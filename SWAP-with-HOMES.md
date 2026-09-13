@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-13 — Docs-sync routine: help pages updated for 2.21.3's $10 rounding + tier-split calculator (no code/behavior changes)
+
+Daily help-docs drift check found the Affiliate Help page's "How earnings are figured" panel and the admin Help page's "How commissions work" section and Partners bullet still didn't mention that every tier amount (real and estimated) now rounds up to the nearest $10 (2.21.2/2.21.3), or that the Partners edit screen now has a live tier 1/2/3 calculator on the Agent Commission Pool field (2.21.3). Added one sentence to each of those three spots in `class-gas-help.php` / `class-gas-admin.php`, matching existing tone — nothing else changed. Everything else since the last sync (`43f5799`) was either already documented inline by the shipping commit (self-referral clarity, 39b4fcf) or Solar-only content/internal styling out of scope for these shared help docs.
+
 ## 2026-09-13 — Solar session: real payouts now round up to $10 too (2.21.3, shared plugin code) — resolved the open question from the entry below, plus a new live tier-split calculator on the Partners admin screen
 
 Follow-up to the entry directly below. Showed Cary a concrete preview first (exact numbers, before touching any code) — he confirmed: yes, round real payouts too, "we need everything to be uniform," accepting the overpayment-on-thin-margin tradeoff as routine. Changes:

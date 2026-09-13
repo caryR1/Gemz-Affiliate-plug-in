@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-12 — Solar session: Solar Benefits gets a Qualifications section + new 3-image row; blog posts link to it (Solar content only, no plugin code)
+
+Cary supplied 3 AI-generated marketing images (from the other-AI image-gen handoff earlier today) and asked them swapped in for the 3 existing plain infographics on Solar Benefits, each with a visible caption matching the old images' alt-text style (previously no visible caption at all, alt-text only). New images + captions: "energy savings" photo → "Lower your energy bills with solar.", "increase home value" photo → "Increase your home's value with solar.", "energy you can rely on" (storm/battery) photo → "Energy you can rely on with solar and battery storage." Also added a new "Qualifications" section at the bottom of the page (min credit score 650, adequate roof/land space, homeownership) with a `#qualifications` anchor ID, and added a "See if you qualify" link pointing to that anchor at the end of all 3 blog posts' existing Solar Benefits CTA sentence. Used the decode/modify/re-encode-as-array approach for the Elementor edit (backup taken, verified via direct render before trusting it) — same safe pattern as the other Elementor edits today.
+
 ## 2026-09-12 — Solar session: darker SYSTEM ADMIN warning box (2.20.3, shared plugin feature) + Refer a Friend hook copy updated (Solar content only)
 
 Cary's ask: make the sponsor-attribution warning box (`.gas-invited-by-warning`) even harder to miss — darkened the orange background (#E8720C → #C25400) and added a bold `border-top` on top of the existing border for extra alert emphasis. Shared plugin CSS, live on Home too on redeploy. Also updated the "Looking For You" hook paragraph on Solar's Refer a Friend page (Elementor content, not plugin code) to Cary's dictated replacement copy — used the decode/modify/re-encode-as-array approach (not raw string splicing) per the Elementor-editing gotcha noted below, verified via direct render before trusting it, backup taken first.

@@ -13,6 +13,10 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-17 — Docs-sync routine: admin Help page's Partners bullet updated for the running note history (no code/behavior changes)
+
+Daily help-docs drift check found one gap: 39b4fcf (2026-09-12) replaced Partners' single overwrite-on-save Notes field with a running, dated note history (its own small "add a note" form on the partner edit screen), but the admin Help page's "Screens at a glance" Partners bullet never mentioned either the old or new behavior. Added one clause to that bullet in `class-gas-admin.php` noting the note history and that nothing written is overwritten anymore. Nothing else changed. Everything shipped since the last sync (`251bccc`, 2026-09-13) — none, no commits have landed since — so this pass just caught something the last sync's own scope missed rather than new drift.
+
 ## 2026-09-13 — Docs-sync routine: help pages updated for 2.21.3's $10 rounding + tier-split calculator (no code/behavior changes)
 
 Daily help-docs drift check found the Affiliate Help page's "How earnings are figured" panel and the admin Help page's "How commissions work" section and Partners bullet still didn't mention that every tier amount (real and estimated) now rounds up to the nearest $10 (2.21.2/2.21.3), or that the Partners edit screen now has a live tier 1/2/3 calculator on the Agent Commission Pool field (2.21.3). Added one sentence to each of those three spots in `class-gas-help.php` / `class-gas-admin.php`, matching existing tone — nothing else changed. Everything else since the last sync (`43f5799`) was either already documented inline by the shipping commit (self-referral clarity, 39b4fcf) or Solar-only content/internal styling out of scope for these shared help docs.

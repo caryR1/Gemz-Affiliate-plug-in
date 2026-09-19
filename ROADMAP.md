@@ -16,8 +16,10 @@ enterprise features. Definition of done includes current help docs (see
   ~~unsubscribe and Segments export test~~ — all passed 2026-09-19 (STATUS.md F7).
 - **Fix client-controlled IP** (`GAS_Fraud::get_client_ip()` → `REMOTE_ADDR`);
   spoofable consent IP and rate limits (STATUS.md F7 finding 1).
-- **Organic Get-a-Quote fallback** — nav item dead-ends without a referral link
-  (finding 2).
+- ~~Organic Get-a-Quote fallback~~ — done 2026-09-19 (v2.21.4): credited to the
+  house (STATUS.md F8).
+- **Reassign referral credit** (house → affiliate, admin-only, reason required,
+  audit-logged, blocked after payment) — proposed in STATUS.md F8, awaiting Cary.
 - Throttle referral emails to third parties on the existing-affiliate branch
   (finding 3).
 - Refresh the FAQ "How and when do I get paid?" answer (finding 4; copy needs

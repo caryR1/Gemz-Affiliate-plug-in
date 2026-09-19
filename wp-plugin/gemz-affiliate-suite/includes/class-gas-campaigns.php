@@ -48,6 +48,21 @@ class GAS_Campaigns {
 	}
 
 	/**
+	 * Campaign used for visitors who reach Get a Quote with no referral
+	 * link/cookie (menu clicks, search, video). Their lead is credited to the
+	 * house (no affiliate code). Prefers a default campaign, then the oldest
+	 * active one, and only for approved partners that take leads directly.
+	 */
+	public static function get_house_campaign() {
+		global $wpdb;
+		return $wpdb->get_row(
+			'SELECT c.* FROM ' . GAS_DB::table( 'campaigns' ) . ' c INNER JOIN ' . GAS_DB::table( 'partners' ) . " p ON p.id = c.partner_id
+			 WHERE c.status = 'active' AND p.outreach_status = 'approved' AND p.fulfillment_mode = 'lead_capture'
+			 ORDER BY c.is_default DESC, c.id ASC LIMIT 1"
+		);
+	}
+
+	/**
 	 * Every active campaign for an approved partner, for the affiliate
 	 * dashboard — deliberately not filtered by `open_to_self_signup`,
 	 * since that flag's only remaining job is gating whether a default

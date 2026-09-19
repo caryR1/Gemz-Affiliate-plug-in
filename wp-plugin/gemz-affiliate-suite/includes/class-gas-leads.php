@@ -132,6 +132,11 @@ class GAS_Leads {
 
 		$campaign = self::get_campaign_from_cookie();
 		if ( ! $campaign ) {
+			// No referral link: credit the house (no affiliate code) rather
+			// than dead-ending a real homeowner — see get_house_campaign().
+			$campaign = GAS_Campaigns::get_house_campaign();
+		}
+		if ( ! $campaign ) {
 			return '<div class="gas-notice"><p>We couldn\'t find a referral link for this visit. Please use the link that was shared with you.</p></div>';
 		}
 		$code = self::get_code_from_cookie(); // optional — organic visits have none

@@ -26,6 +26,7 @@ class GAS_Leads {
 		add_action( 'admin_post_gas_update_lead_status', array( __CLASS__, 'handle_update_status' ) );
 		add_action( 'admin_post_gas_assign_lead_partner', array( __CLASS__, 'handle_assign_partner' ) );
 		add_action( 'admin_post_gas_unassign_lead_partner', array( __CLASS__, 'handle_unassign_partner' ) );
+		add_action( 'admin_post_gas_reassign_lead_credit', array( __CLASS__, 'handle_reassign_credit' ) );
 		add_action( 'gas_daily_stale_lead_check', array( __CLASS__, 'check_stale_leads' ) );
 	}
 
@@ -427,6 +428,107 @@ class GAS_Leads {
 
 	private static function manage_cap() {
 		return apply_filters( 'gas_leads_manage_cap', 'gas_manage_leads' );
+	}
+
+	/**
+	 * How long after a lead arrives its referral credit may still be moved to
+	 * a different affiliate (or back to the house). Cary's rule, 2026-09-19:
+	 * 100 days, roughly three monthly payout cycles to notice a mistake.
+	 */
+	const CREDIT_CHANGE_WINDOW_DAYS = 100;
+
+	/**
+	 * Pure check, both arguments MySQL datetime strings in the same timezone.
+	 */
+	public static function credit_change_window_open( $lead_created_at, $now ) {
+		$created = strtotime( $lead_created_at );
+		$current = strtotime( $now );
+		if ( false === $created || false === $current ) {
+			return false;
+		}
+		return ( $current - $created ) <= self::CREDIT_CHANGE_WINDOW_DAYS * DAY_IN_SECONDS;
+	}
+
+	/**
+	 * Moves a lead's referral credit to another affiliate code, or back to the
+	 * house when $new_code_id is 0. Any proof is accepted (Cary's call), so
+	 * the only requirements are a written reason, a change, and the window
+	 * above. Payouts are not linked to leads: credit is chosen when a payout
+	 * is entered, so a payout already entered under the old code has to be
+	 * corrected in the Payout Ledger separately (the admin notice says so).
+	 * Returns array( 'ok' => bool, 'message' => string ).
+	 */
+	public static function reassign_credit( $lead_id, $new_code_id, $reason ) {
+		global $wpdb;
+		$leads_table = GAS_DB::table( 'leads' );
+		$codes_table = GAS_DB::table( 'codes' );
+		$reason      = trim( (string) $reason );
+
+		$lead = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$leads_table} WHERE id = %d", $lead_id ) );
+		if ( ! $lead ) {
+			return array( 'ok' => false, 'message' => 'Lead not found.' );
+		}
+		if ( '' === $reason ) {
+			return array( 'ok' => false, 'message' => 'Please write a short reason (for example, what the affiliate reported).' );
+		}
+		if ( ! self::credit_change_window_open( $lead->created_at, current_time( 'mysql' ) ) ) {
+			return array( 'ok' => false, 'message' => 'This lead is more than ' . self::CREDIT_CHANGE_WINDOW_DAYS . ' days old, so its credit can no longer be changed here.' );
+		}
+
+		$old_code = $lead->code_id ? $wpdb->get_row( $wpdb->prepare( "SELECT id, code FROM {$codes_table} WHERE id = %d", $lead->code_id ) ) : null;
+		$new_code = null;
+		if ( $new_code_id ) {
+			$new_code = $wpdb->get_row( $wpdb->prepare( "SELECT id, code, status FROM {$codes_table} WHERE id = %d", $new_code_id ) );
+			if ( ! $new_code || 'active' !== $new_code->status ) {
+				return array( 'ok' => false, 'message' => 'That affiliate code was not found or is not active.' );
+			}
+		}
+		if ( (int) $lead->code_id === (int) $new_code_id ) {
+			return array( 'ok' => false, 'message' => 'That is already the credited affiliate.' );
+		}
+
+		$old_label = $old_code ? $old_code->code : 'house';
+		$new_label = $new_code ? $new_code->code : 'house';
+		$note_line = 'Credit changed from ' . $old_label . ' to ' . $new_label . ' on ' . current_time( 'mysql' ) . ' (' . $reason . ').';
+
+		$wpdb->update(
+			$leads_table,
+			array(
+				'code_id'    => $new_code ? $new_code->id : null,
+				'updated_at' => current_time( 'mysql' ),
+				'notes'      => trim( ( $lead->notes ? $lead->notes . "\n" : '' ) . $note_line ),
+			),
+			array( 'id' => $lead_id )
+		);
+
+		GAS_Admin::audit_log( 'lead', $lead_id, 'credit_reassigned', array(
+			'old_code_id' => $lead->code_id ? (int) $lead->code_id : null,
+			'old_code'    => $old_label,
+			'new_code_id' => $new_code ? (int) $new_code->id : null,
+			'new_code'    => $new_label,
+			'reason'      => $reason,
+		) );
+
+		return array( 'ok' => true, 'message' => "Credit for this lead moved from {$old_label} to {$new_label}." );
+	}
+
+	public static function handle_reassign_credit() {
+		if ( ! current_user_can( self::manage_cap() ) ) {
+			wp_die( 'Not allowed.' );
+		}
+		$lead_id = isset( $_POST['lead_id'] ) ? absint( $_POST['lead_id'] ) : 0;
+		check_admin_referer( 'gas_reassign_lead_credit_' . $lead_id );
+
+		$new_code_id = isset( $_POST['new_code_id'] ) ? absint( $_POST['new_code_id'] ) : 0;
+		$reason      = isset( $_POST['reason'] ) ? sanitize_textarea_field( wp_unslash( $_POST['reason'] ) ) : '';
+
+		$result = self::reassign_credit( $lead_id, $new_code_id, $reason );
+
+		wp_safe_redirect( add_query_arg(
+			array( 'page' => 'gas-leads', 'credit_result' => $result['ok'] ? 'ok' : 'error', 'credit_msg' => rawurlencode( $result['message'] ) ),
+			admin_url( 'admin.php' )
+		) );
+		exit;
 	}
 
 	/**

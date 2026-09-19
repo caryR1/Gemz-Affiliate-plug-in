@@ -91,7 +91,7 @@ class GAS_Help {
 			<div class="gas-panel">
 				<h3>Your referral link(s)</h3>
 				<p>You have one personal referral code, and My Links &amp; Earnings shows a ready-to-share link built from it for each active <?php echo esc_html( $partner_label ); ?> campaign — sometimes more than one, if we're running more than one campaign right now. Anyone who clicks one of your links and later does business with that <?php echo esc_html( $partner_label ); ?> gets tracked back to you automatically. A new campaign shows up the moment it goes live — nothing you need to do to unlock it.</p>
-				<p>Only people who arrive through your link are credited to you. Someone who requests a quote without using anyone's link is credited to the house, not to an affiliate.</p>
+				<p>Only people who arrive through your link are credited to you. Someone who requests a quote without using anyone's link is credited to the house, not to an affiliate. If you think one of your referrals was credited to the house by mistake, let us know within 100 days and we'll review it.</p>
 			</div>
 
 			<div class="gas-panel">

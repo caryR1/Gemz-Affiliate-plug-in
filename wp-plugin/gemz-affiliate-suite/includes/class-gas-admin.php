@@ -1200,15 +1200,26 @@ class GAS_Admin {
 		if ( isset( $_GET['updated'] ) ) {
 			echo '<div class="notice notice-success"><p>Status updated.</p></div>';
 		}
+		if ( isset( $_GET['credit_result'] ) ) {
+			$credit_msg = isset( $_GET['credit_msg'] ) ? sanitize_text_field( wp_unslash( rawurldecode( $_GET['credit_msg'] ) ) ) : '';
+			if ( 'ok' === $_GET['credit_result'] ) {
+				echo '<div class="notice notice-success"><p>' . esc_html( $credit_msg ) . ' Payouts are not linked to leads: if a payout was already entered for this sale, correct it in the Payout Ledger so it is credited to the right affiliate.</p></div>';
+			} else {
+				echo '<div class="notice notice-error"><p>' . esc_html( $credit_msg ) . '</p></div>';
+			}
+		}
 
 		$leads_table    = GAS_DB::table( 'leads' );
 		$partners_table = GAS_DB::table( 'partners' );
+		$codes_table    = GAS_DB::table( 'codes' );
 
 		$rows = $wpdb->get_results(
-			"SELECT l.*, p.name AS partner_name FROM {$leads_table} l
+			"SELECT l.*, p.name AS partner_name, c.code AS credit_code, c.sub_affiliate_name AS credit_name FROM {$leads_table} l
 			 LEFT JOIN {$partners_table} p ON p.id = l.partner_id
+			 LEFT JOIN {$codes_table} c ON c.id = l.code_id
 			 ORDER BY l.created_at DESC"
 		);
+		$credit_codes = $wpdb->get_results( "SELECT id, code, sub_affiliate_name FROM {$codes_table} WHERE status = 'active' ORDER BY sub_affiliate_name ASC, code ASC" );
 
 		if ( ! $rows ) {
 			echo '<p>No leads yet. Leads show up here when a visitor submits the on-site form for a partner set to "Capture the lead on this site" &mdash; see the Partners screen.</p>';
@@ -1218,7 +1229,7 @@ class GAS_Admin {
 
 		$partners = $wpdb->get_results( "SELECT id, name, requires_appointment FROM {$partners_table} WHERE outreach_status = 'approved' ORDER BY name ASC" );
 
-		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Call/text consent</th><th>Address</th><th>State</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
+		echo '<table class="widefat striped"><thead><tr><th>Received</th><th>Customer</th><th>Contact</th><th>Call/text consent</th><th>Address</th><th>State</th><th>Credited to</th><th>Partner</th><th>Appointment</th><th>Status</th></tr></thead><tbody>';
 		foreach ( $rows as $l ) {
 			echo '<tr>';
 			echo '<td>' . esc_html( $l->created_at ) . '</td>';
@@ -1235,6 +1246,25 @@ class GAS_Admin {
 			echo '</td>';
 			echo '<td>' . ( $l->customer_address ? esc_html( $l->customer_address ) : '&mdash;' ) . '</td>';
 			echo '<td>' . ( $l->customer_state ? esc_html( $l->customer_state ) : '&mdash;' ) . '</td>';
+			// Referral credit. NULL code = the house (organic visit). Movable
+			// within GAS_Leads::CREDIT_CHANGE_WINDOW_DAYS of the lead arriving.
+			echo '<td>' . ( $l->credit_code ? esc_html( trim( $l->credit_name . ' (' . $l->credit_code . ')' ) ) : '<em>House</em>' );
+			if ( GAS_Leads::credit_change_window_open( $l->created_at, current_time( 'mysql' ) ) ) {
+				echo '<details style="margin-top:4px;"><summary style="cursor:pointer;">Change</summary>';
+				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:4px;">';
+				wp_nonce_field( 'gas_reassign_lead_credit_' . $l->id );
+				echo '<input type="hidden" name="action" value="gas_reassign_lead_credit">';
+				echo '<input type="hidden" name="lead_id" value="' . esc_attr( $l->id ) . '">';
+				echo '<select name="new_code_id" style="max-width:170px;"><option value="0">House (no affiliate)</option>';
+				foreach ( $credit_codes as $cc ) {
+					echo '<option value="' . esc_attr( $cc->id ) . '"' . selected( (int) $l->code_id, (int) $cc->id, false ) . '>' . esc_html( trim( $cc->sub_affiliate_name . ' (' . $cc->code . ')' ) ) . '</option>';
+				}
+				echo '</select><br>';
+				echo '<textarea name="reason" rows="2" required placeholder="Reason / what the affiliate reported" style="max-width:170px;margin-top:4px;"></textarea><br>';
+				echo '<button type="submit" class="button button-small" style="margin-top:4px;">Move credit</button>';
+				echo '</form></details>';
+			}
+			echo '</td>';
 			if ( $l->partner_id ) {
 				// Unassign (2026-09-10, Cary's ask): a match made in error,
 				// or a partner who doesn't want the lead, previously had no
@@ -2660,7 +2690,7 @@ class GAS_Admin {
 			<li><strong>Affiliates</strong> — every self-signed-up affiliate; suspend/reactivate their link here. A "Codes" section further down the same screen handles manually adding an offline-referral code, or auditing/deactivating one.</li>
 			<li><strong>Campaigns</strong> — the actual promotable links: a name, a partner, a URL tracking slug, and optional landing-page variants. Any affiliate's code works with any active campaign automatically — that's what actually makes a link "theirs." Marking a partner "Open to self-signup" auto-creates that partner's first default campaign; add more from this screen any time.</li>
 			<li><strong>Partners</strong> — your fulfillment partners: payout terms, buyer cash back, fulfillment mode (redirect vs. on-site lead capture), whether they're open to self-signup (auto-creates a default campaign), the dashboard blurb/spotlight link/capability icons affiliates see on that partner's campaign cards, and partner portal login. The Agent Commission Pool field shows a live tier 1/2/3 preview as you type, so you can gauge a payout structure before saving. Each partner's edit screen also keeps a running, dated note history — add a note any time with its own small form; unlike the old single Notes field, nothing you've already written is ever overwritten.</li>
-			<li><strong>Leads</strong> — on-site lead-capture submissions, for partners set to that mode. An assigned lead can be unassigned (sends it back for rematching, e.g. a wrong match) — a partner can also decline one themselves from the Partner Portal. A visitor who opens Get a Quote without a referral link (menu, search, video) is still accepted and credited to the house: the lead has no affiliate code, and no affiliate commission is created for it.</li>
+			<li><strong>Leads</strong> — on-site lead-capture submissions, for partners set to that mode. An assigned lead can be unassigned (sends it back for rematching, e.g. a wrong match) — a partner can also decline one themselves from the Partner Portal. A visitor who opens Get a Quote without a referral link (menu, search, video) is still accepted and credited to the house: the lead has no affiliate code, and no affiliate commission is created for it. Each lead shows who it is credited to; "Change" moves the credit to another affiliate (or back to the house) with a written reason, within 100 days of the lead arriving. Payouts are not linked to leads, so a payout already entered for that sale must be corrected in the Payout Ledger.</li>
 			<li><strong>Click Log</strong> — raw click history per code.</li>
 			<li><strong>Reports</strong> — commission summary, partner outcomes, and agent/referrer performance ranked by earnings.</li>
 			<li><strong>Payout Calculator / Ledger</strong> — enter a completed sale to compute and record the tier split. The Ledger tracks everything entered, paid or not; shows each row's buyer cash back claim/payment status with a manual "Mark cashback paid" action; has PayPal/Wise "Pay All Now" buttons plus the automated-monthly-run cron URL and status; and has a Tax Summary CSV export for your accountant.</li>

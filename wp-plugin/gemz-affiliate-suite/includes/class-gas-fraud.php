@@ -134,20 +134,43 @@ class GAS_Fraud {
 	}
 
 	/**
-	 * Shared IP-detection helper — moved here from GAS_Redirect (which had
-	 * its own private copy) so signup rate-limiting and click rate-limiting
-	 * use the exact same logic rather than two copies drifting apart.
+	 * Caps referrals submitted through the public merged form on behalf of an
+	 * EXISTING affiliate's email — that path has no account to create, so the
+	 * signup limit never applied, and it emails a third party ("X referred
+	 * you") on every submission. Same per-IP-per-day transient pattern.
+	 */
+	const MAX_PUBLIC_REFERRALS_PER_IP_PER_DAY = 5;
+
+	public static function referral_rate_limited( $ip ) {
+		if ( '' === $ip ) {
+			return false;
+		}
+		return (int) get_transient( self::referral_transient_key( $ip ) ) >= self::MAX_PUBLIC_REFERRALS_PER_IP_PER_DAY;
+	}
+
+	public static function record_referral( $ip ) {
+		if ( '' === $ip ) {
+			return;
+		}
+		$key = self::referral_transient_key( $ip );
+		set_transient( $key, (int) get_transient( $key ) + 1, DAY_IN_SECONDS );
+	}
+
+	private static function referral_transient_key( $ip ) {
+		return 'gas_ref_ct_' . md5( $ip );
+	}
+
+	/**
+	 * Shared IP-detection helper for signup, click and referral rate limits
+	 * and the recorded TCPA consent IP. Uses ONLY the server's own connection
+	 * address: forwarding headers (X-Forwarded-For, CF-Connecting-IP) are
+	 * client-supplied and were spoofable — a forged value was stored as a
+	 * lead's consent IP and dodged the limits (2026-09-19 test). Verified on
+	 * this host that REMOTE_ADDR is the real visitor through the CDN. If a
+	 * proxy is ever put in front, add a trusted-proxy check here.
 	 */
 	public static function get_client_ip() {
-		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' ) as $key ) {
-			if ( ! empty( $_SERVER[ $key ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
-				$ip = trim( explode( ',', $ip )[0] );
-				if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-					return $ip;
-				}
-			}
-		}
-		return '';
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? trim( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) ) : '';
+		return filter_var( $ip, FILTER_VALIDATE_IP ) ? $ip : '';
 	}
 }

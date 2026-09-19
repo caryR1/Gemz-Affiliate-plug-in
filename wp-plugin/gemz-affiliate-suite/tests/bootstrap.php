@@ -110,7 +110,23 @@ class GAS_Test_Wpdb {
 
 $GLOBALS['wpdb'] = new GAS_Test_Wpdb();
 
+/**
+ * Added 2026-09-19 for GAS_Fraud::get_client_ip() and
+ * GAS_Leads::credit_change_window_open() — plain pass-through stand-ins.
+ */
+if ( ! defined( 'DAY_IN_SECONDS' ) ) {
+	define( 'DAY_IN_SECONDS', 86400 );
+}
+function wp_unslash( $value ) {
+	return $value;
+}
+function sanitize_text_field( $value ) {
+	return trim( (string) $value );
+}
+
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-settings.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-db.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-frontend.php';
+require_once GAS_PLUGIN_DIR . 'includes/class-gas-fraud.php';
+require_once GAS_PLUGIN_DIR . 'includes/class-gas-leads.php';

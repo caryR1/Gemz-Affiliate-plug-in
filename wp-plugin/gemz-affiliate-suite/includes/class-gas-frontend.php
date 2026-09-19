@@ -919,10 +919,18 @@ class GAS_Frontend {
 		$existing_affiliate = self::find_affiliate_by_email( $email );
 
 		if ( $existing_affiliate ) {
+			// This path emails a third party on every submission and creates
+			// no account, so the signup limit never covered it.
+			$referral_ip = GAS_Fraud::get_client_ip();
+			if ( $is_referral && GAS_Fraud::referral_rate_limited( $referral_ip ) ) {
+				$fail( 'Too many referrals from this connection today — please try again tomorrow, or contact us if you think this is a mistake.' );
+			}
+
 			$user_id = $existing_affiliate->ID;
 			$code    = self::get_or_create_code_for_user( $user_id, $existing_affiliate->display_name, $sponsor_code_id );
 
 			if ( $is_referral ) {
+				GAS_Fraud::record_referral( $referral_ip );
 				self::create_referral_lead( $code, $friend_name, $friend_email, $friend_phone, $friend_address, $friend_state );
 				wp_mail(
 					$existing_affiliate->user_email,

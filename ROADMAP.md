@@ -14,16 +14,11 @@ enterprise features. Definition of done includes current help docs (see
 - ~~Duplicate partner id 2~~ — audited clean and deleted 2026-09-19.
 - ~~Logged-out merged Refer-a-Friend E2E~~, ~~public-form cache/nonce pass~~,
   ~~unsubscribe and Segments export test~~ — all passed 2026-09-19 (STATUS.md F7).
-- **Fix client-controlled IP** (`GAS_Fraud::get_client_ip()` → `REMOTE_ADDR`);
-  spoofable consent IP and rate limits (STATUS.md F7 finding 1).
+- ~~Fix client-controlled IP~~, ~~throttle third-party referral emails~~,
+  ~~refresh the FAQ payout answer~~, ~~reassign referral credit (100 days)~~ —
+  all done 2026-09-19 in v2.21.5 (STATUS.md F9).
 - ~~Organic Get-a-Quote fallback~~ — done 2026-09-19 (v2.21.4): credited to the
   house (STATUS.md F8).
-- **Reassign referral credit** (house → affiliate, admin-only, reason required,
-  audit-logged, blocked after payment) — proposed in STATUS.md F8, awaiting Cary.
-- Throttle referral emails to third parties on the existing-affiliate branch
-  (finding 3).
-- Refresh the FAQ "How and when do I get paid?" answer (finding 4; copy needs
-  Cary's OK).
 - Automated payout cron: almost certainly not configured; Cary checks the
   hosting-panel Cron Jobs page (finding 5).
 - Small release smoke checklist; fix plugin header version (1.0.0 vs 2.21.3).

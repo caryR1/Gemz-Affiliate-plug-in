@@ -2309,9 +2309,29 @@ class GAS_Admin {
 		$paused    = GAS_Settings::get( 'payout_run_paused' );
 
 		echo '<h3>Automated monthly payout run &mdash; server cron setup</h3>';
-		echo '<p class="description">A real server cron job (not WP-Cron) needs to hit this URL once a day — the run itself only actually fires on/after day ' . esc_html( $run_day ) . ' of the month, and at most once per month, so a daily schedule is safe and simplest. In Hostinger\'s hPanel, add a Cron Job set to run daily hitting this exact URL:</p>';
+		echo '<p class="description">A real server cron job (not WP-Cron) needs to hit this URL once a day — the run itself only actually fires on/after day ' . esc_html( $run_day ) . ' of the month, and at most once per month, so a daily schedule is safe and simplest. (A schedule that only ever runs on days before day ' . esc_html( $run_day ) . ', such as monthly on the 1st, would never run.) In Hostinger\'s hPanel, add a Cron Job set to run daily hitting this exact URL:</p>';
 		echo '<p><code style="word-break:break-all;">' . esc_html( $cron_url ) . '</code></p>';
 		echo '<p class="description">Status: ' . ( $paused ? '<strong style="color:#b32d2e;">Paused</strong> (see Settings to unpause)' : '<strong style="color:#1a7a3c;">Active</strong>' ) . ( $last_run ? ', last ran ' . esc_html( $last_run ) : ', has not run yet' ) . '.</p>';
+		// Separate from "last ran": when did the cron last CALL this endpoint,
+		// and what did it answer? Empty here means nothing has called with the
+		// current token yet.
+		$last_call = get_option( 'gas_last_automated_payout_call', array() );
+		$bad_token = get_transient( 'gas_payout_cron_badtoken' );
+		if ( ! empty( $last_call['at'] ) ) {
+			$outcomes = array(
+				'ran'                    => 'it ran',
+				'already_ran_this_month' => 'already ran this month',
+				'not_yet_run_day'        => 'too early in the month (before day ' . $run_day . ')',
+				'paused'                 => 'paused',
+			);
+			$label = isset( $outcomes[ $last_call['outcome'] ] ) ? $outcomes[ $last_call['outcome'] ] : $last_call['outcome'];
+			echo '<p class="description">Last call from the cron: <strong>' . esc_html( $last_call['at'] ) . '</strong> &mdash; ' . esc_html( $label ) . '.</p>';
+		} else {
+			echo '<p class="description">Last call from the cron: <strong>none received yet</strong> with the current token.</p>';
+		}
+		if ( $bad_token ) {
+			echo '<p class="description" style="color:#b32d2e;">A call with a wrong or old token arrived at ' . esc_html( $bad_token ) . ' &mdash; update the cron URL in hPanel.</p>';
+		}
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" onsubmit="return confirm(\'Regenerate the token? The old cron URL will stop working until you update Hostinger with the new one.\');">';
 		wp_nonce_field( 'gas_regenerate_payout_token' );
 		echo '<input type="hidden" name="action" value="gas_regenerate_payout_token">';

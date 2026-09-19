@@ -186,10 +186,18 @@ class GAS_REST {
 
 		$token = (string) $request->get_param( 'token' );
 		if ( ! $token || ! hash_equals( GAS_Settings::get_automated_payout_token(), $token ) ) {
+			// Observability only: remember that a call with a wrong token
+			// arrived (at most one write per hour, since this path is
+			// unauthenticated) so the Ledger page can say the cron URL is
+			// out of date.
+			if ( false === get_transient( 'gas_payout_cron_badtoken' ) ) {
+				set_transient( 'gas_payout_cron_badtoken', current_time( 'mysql' ), HOUR_IN_SECONDS );
+			}
 			return new WP_Error( 'gas_invalid_token', 'Invalid or missing token.', array( 'status' => 403 ) );
 		}
 
 		if ( GAS_Settings::get( 'payout_run_paused' ) ) {
+			self::record_payout_cron_call( 'paused' );
 			GAS_Admin::audit_log( 'payout_run', 0, 'automated_run_skipped', array( 'reason' => 'paused' ) );
 			return new WP_REST_Response( array( 'ran' => false, 'reason' => 'paused' ), 200 );
 		}
@@ -197,6 +205,7 @@ class GAS_REST {
 		$today   = (int) current_time( 'j' );
 		$run_day = (int) GAS_Settings::get( 'payout_run_day' );
 		if ( $today < $run_day ) {
+			self::record_payout_cron_call( 'not_yet_run_day' );
 			return new WP_REST_Response( array( 'ran' => false, 'reason' => 'not_yet_run_day' ), 200 );
 		}
 
@@ -205,6 +214,7 @@ class GAS_REST {
 		// if the cron hits this endpoint more than once.
 		$current_month = current_time( 'Y-m' );
 		if ( get_option( 'gas_last_automated_payout_run', '' ) === $current_month ) {
+			self::record_payout_cron_call( 'already_ran_this_month' );
 			return new WP_REST_Response( array( 'ran' => false, 'reason' => 'already_ran_this_month' ), 200 );
 		}
 
@@ -224,8 +234,19 @@ class GAS_REST {
 		}
 
 		update_option( 'gas_last_automated_payout_run', $current_month );
+		self::record_payout_cron_call( 'ran' );
 
 		return new WP_REST_Response( array( 'ran' => true, 'results' => $results ), 200 );
+	}
+
+	/**
+	 * Observability only — does not affect whether or what gets paid. Records
+	 * the time and outcome of the latest authenticated call so the Ledger page
+	 * can distinguish "the cron is calling but it is too early / already ran"
+	 * from "nothing has called at all".
+	 */
+	private static function record_payout_cron_call( $outcome ) {
+		update_option( 'gas_last_automated_payout_call', array( 'at' => current_time( 'mysql' ), 'outcome' => $outcome ), false );
 	}
 
 	public static function list_leads() {

@@ -12,10 +12,18 @@ enterprise features. Definition of done includes current help docs (see
 - ~~First post-rounding multi-tier end-to-end payout at $425~~ — passed
   2026-09-19: $300 / $90 / $50, 3-level cap, attribution and ledger (STATUS.md F6).
 - ~~Duplicate partner id 2~~ — audited clean and deleted 2026-09-19.
-- Logged-out merged Refer-a-Friend end-to-end test.
-- Public-form cache/nonce pass (signup, quote).
-- Unsubscribe and Segments export test.
-- Automated payout cron readiness (does the hosting-panel cron exist).
+- ~~Logged-out merged Refer-a-Friend E2E~~, ~~public-form cache/nonce pass~~,
+  ~~unsubscribe and Segments export test~~ — all passed 2026-09-19 (STATUS.md F7).
+- **Fix client-controlled IP** (`GAS_Fraud::get_client_ip()` → `REMOTE_ADDR`);
+  spoofable consent IP and rate limits (STATUS.md F7 finding 1).
+- **Organic Get-a-Quote fallback** — nav item dead-ends without a referral link
+  (finding 2).
+- Throttle referral emails to third parties on the existing-affiliate branch
+  (finding 3).
+- Refresh the FAQ "How and when do I get paid?" answer (finding 4; copy needs
+  Cary's OK).
+- Automated payout cron: almost certainly not configured; Cary checks the
+  hosting-panel Cron Jobs page (finding 5).
 - Small release smoke checklist; fix plugin header version (1.0.0 vs 2.21.3).
 - Derive the REST settings allowlist from the settings defaults.
 - Help-docs audit against current behavior.

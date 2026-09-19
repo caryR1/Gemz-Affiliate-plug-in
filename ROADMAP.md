@@ -7,10 +7,11 @@ enterprise features. Definition of done includes current help docs (see
 `STATUS.md` section F4). Evidence and reasoning: `STATUS.md` section F.
 
 **NOW / HARDEN**
-- Update the PHPUnit payout tests for round-up-to-$10, run them on the server.
-- First post-rounding multi-tier end-to-end payout at the current $425 pool
-  (expect $300 / $90 / $50; 3-level cap; attribution and ledger).
-- Duplicate partner id 2: dependency audit done (clean); delete pending Cary.
+- ~~Update the PHPUnit payout tests for round-up-to-$10~~ — done 2026-09-19
+  (`RoundingTest.php`; 31 tests / 78 assertions green on the server).
+- ~~First post-rounding multi-tier end-to-end payout at $425~~ — passed
+  2026-09-19: $300 / $90 / $50, 3-level cap, attribution and ledger (STATUS.md F6).
+- ~~Duplicate partner id 2~~ — audited clean and deleted 2026-09-19.
 - Logged-out merged Refer-a-Friend end-to-end test.
 - Public-form cache/nonce pass (signup, quote).
 - Unsubscribe and Segments export test.

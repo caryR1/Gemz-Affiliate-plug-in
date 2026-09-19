@@ -19,8 +19,10 @@ enterprise features. Definition of done includes current help docs (see
   all done 2026-09-19 in v2.21.5 (STATUS.md F9).
 - ~~Organic Get-a-Quote fallback~~ — done 2026-09-19 (v2.21.4): credited to the
   house (STATUS.md F8).
-- Automated payout cron: almost certainly not configured; Cary checks the
-  hosting-panel Cron Jobs page (finding 5).
+- Automated payout cron: **unverified** (an empty last-run option only means no
+  call has passed the gates; see STATUS.md F10). Cary checks hPanel Cron Jobs:
+  daily schedule (or monthly on day 5 to 28), URL ends with the token from the
+  Payout Ledger page. Optional later: record every authenticated call.
 - Small release smoke checklist; fix plugin header version (1.0.0 vs 2.21.3).
 - Derive the REST settings allowlist from the settings defaults.
 - Help-docs audit against current behavior.

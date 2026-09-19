@@ -1666,7 +1666,7 @@ class GAS_Admin {
 		echo '<h2>Tax summary (for your accountant)</h2>';
 		if ( GAS_Crypto::available() ) {
 			$plain_left = GAS_Crypto::count_plaintext();
-			echo '<p class="description" style="color:#1a7a3c;"><strong>Tax and payment details are stored encrypted</strong> (AES-256-GCM, key kept in wp-config.php, not the database).' . ( $plain_left ? ' <span style="color:#b32d2e;">' . esc_html( $plain_left ) . ' older value(s) are still unencrypted and need the one-time conversion.</span>' : '' ) . ' Keep a separate backup of the key: without it, stored tax and payment details cannot be recovered.</p>';
+			echo '<p class="description" style="color:#1a7a3c;"><strong>Tax and payment details, and the PayPal/Wise API secrets, are stored encrypted</strong> (AES-256-GCM, key kept in wp-config.php, not the database).' . ( $plain_left ? ' <span style="color:#b32d2e;">' . esc_html( $plain_left ) . ' older value(s) are still unencrypted and need the one-time conversion.</span>' : '' ) . ' Keep a separate backup of the key: without it, stored tax and payment details cannot be recovered.</p>';
 		} else {
 			echo '<p class="description" style="color:#b32d2e;"><strong>Encryption is NOT active:</strong> no valid GAS_DATA_KEY is set in wp-config.php, so tax IDs and payment details are stored unencrypted.</p>';
 		}
@@ -2269,7 +2269,9 @@ class GAS_Admin {
 		echo '<option value="live"' . selected( get_option( 'gas_paypal_env', 'sandbox' ), 'live', false ) . '>Live</option>';
 		echo '</select></td></tr>';
 		echo '<tr><th>Client ID</th><td><input type="text" name="gas_paypal_client_id" class="regular-text" value="' . esc_attr( get_option( 'gas_paypal_client_id', '' ) ) . '"></td></tr>';
-		echo '<tr><th>Client secret</th><td><input type="password" name="gas_paypal_client_secret" class="regular-text" value="' . esc_attr( get_option( 'gas_paypal_client_secret', '' ) ) . '"></td></tr>';
+		// The saved secret is never written back into the page: blank keeps it.
+		$pp_saved = GAS_Crypto::has_secret_option( 'gas_paypal_client_secret' );
+		echo '<tr><th>Client secret</th><td><input type="password" name="gas_paypal_client_secret" class="regular-text" autocomplete="new-password" value="" placeholder="' . esc_attr( $pp_saved ? 'Saved — leave blank to keep' : 'Not set' ) . '">' . ( $pp_saved ? '<br><label><input type="checkbox" name="gas_paypal_clear_secret" value="1"> Remove the saved secret</label>' : '' ) . '</td></tr>';
 		echo '<tr><th>Payout currency</th><td><input type="text" name="gas_paypal_currency" maxlength="3" style="width:80px" value="' . esc_attr( get_option( 'gas_paypal_currency', 'USD' ) ) . '"></td></tr>';
 		echo '</tbody></table>';
 
@@ -2279,7 +2281,8 @@ class GAS_Admin {
 		echo '<option value="sandbox"' . selected( get_option( 'gas_wise_env', 'sandbox' ), 'sandbox', false ) . '>Sandbox</option>';
 		echo '<option value="live"' . selected( get_option( 'gas_wise_env', 'sandbox' ), 'live', false ) . '>Live</option>';
 		echo '</select></td></tr>';
-		echo '<tr><th>API token</th><td><input type="password" name="gas_wise_api_token" class="regular-text" value="' . esc_attr( get_option( 'gas_wise_api_token', '' ) ) . '"></td></tr>';
+		$wise_saved = GAS_Crypto::has_secret_option( 'gas_wise_api_token' );
+		echo '<tr><th>API token</th><td><input type="password" name="gas_wise_api_token" class="regular-text" autocomplete="new-password" value="" placeholder="' . esc_attr( $wise_saved ? 'Saved — leave blank to keep' : 'Not set' ) . '">' . ( $wise_saved ? '<br><label><input type="checkbox" name="gas_wise_clear_token" value="1"> Remove the saved token</label>' : '' ) . '</td></tr>';
 		echo '<tr><th>Profile ID</th><td><input type="text" name="gas_wise_profile_id" class="regular-text" value="' . esc_attr( get_option( 'gas_wise_profile_id', '' ) ) . '"></td></tr>';
 		echo '<tr><th>Source currency (what you\'re paying from)</th><td><input type="text" name="gas_wise_source_currency" maxlength="3" style="width:80px" value="' . esc_attr( get_option( 'gas_wise_source_currency', 'USD' ) ) . '"></td></tr>';
 		echo '</tbody></table>';
@@ -2366,11 +2369,23 @@ class GAS_Admin {
 
 		update_option( 'gas_paypal_env', 'live' === ( $_POST['gas_paypal_env'] ?? '' ) ? 'live' : 'sandbox' );
 		update_option( 'gas_paypal_client_id', sanitize_text_field( wp_unslash( $_POST['gas_paypal_client_id'] ?? '' ) ) );
-		update_option( 'gas_paypal_client_secret', sanitize_text_field( wp_unslash( $_POST['gas_paypal_client_secret'] ?? '' ) ) );
+		// Secrets are stored encrypted; a blank field keeps the saved value,
+		// and removing one needs the explicit checkbox.
+		$pp_secret = sanitize_text_field( wp_unslash( $_POST['gas_paypal_client_secret'] ?? '' ) );
+		if ( '' !== $pp_secret ) {
+			GAS_Crypto::update_secret_option( 'gas_paypal_client_secret', $pp_secret );
+		} elseif ( ! empty( $_POST['gas_paypal_clear_secret'] ) ) {
+			update_option( 'gas_paypal_client_secret', '' );
+		}
 		update_option( 'gas_paypal_currency', strtoupper( sanitize_text_field( wp_unslash( $_POST['gas_paypal_currency'] ?? 'USD' ) ) ) );
 
 		update_option( 'gas_wise_env', 'live' === ( $_POST['gas_wise_env'] ?? '' ) ? 'live' : 'sandbox' );
-		update_option( 'gas_wise_api_token', sanitize_text_field( wp_unslash( $_POST['gas_wise_api_token'] ?? '' ) ) );
+		$wise_token = sanitize_text_field( wp_unslash( $_POST['gas_wise_api_token'] ?? '' ) );
+		if ( '' !== $wise_token ) {
+			GAS_Crypto::update_secret_option( 'gas_wise_api_token', $wise_token );
+		} elseif ( ! empty( $_POST['gas_wise_clear_token'] ) ) {
+			update_option( 'gas_wise_api_token', '' );
+		}
 		update_option( 'gas_wise_profile_id', sanitize_text_field( wp_unslash( $_POST['gas_wise_profile_id'] ?? '' ) ) );
 		update_option( 'gas_wise_source_currency', strtoupper( sanitize_text_field( wp_unslash( $_POST['gas_wise_source_currency'] ?? 'USD' ) ) ) );
 
@@ -2730,7 +2745,7 @@ class GAS_Admin {
 		<p>Gross commission on a sale is a fixed pool, split across up to 3 tiers (Settings controls the percentages): the affiliate who made the sale, their sponsor (whoever recruited them), and the sponsor's own sponsor. A tier with no one in it keeps its share as net to <?php echo esc_html( $site_name ); ?> — it's never redistributed to the tiers that do have someone in them. Every tier amount rounds up to the nearest $10, both on the real Payout Ledger and in the marketing-page estimates shown to affiliates and prospects. A partner can also be configured to pay the buyer cash back, separate from the tier split — see "Buyer cash back" below.</p>
 
 		<h2>Tax compliance and minimum payout</h2>
-		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself). Tax IDs, legal names and payment details are stored encrypted when a GAS_DATA_KEY is set in wp-config.php (the Ledger page shows whether it is active); keep a separate backup of that key, because without it the stored values cannot be recovered.</p>
+		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself). Tax IDs, legal names, payment details and the PayPal/Wise API secrets are stored encrypted when a GAS_DATA_KEY is set in wp-config.php (a saved API secret is never shown back on the settings form: leave the field blank to keep it) (the Ledger page shows whether it is active); keep a separate backup of that key, because without it the stored values cannot be recovered.</p>
 
 		<h2>Buyer cash back</h2>
 		<p>If a partner is configured with buyer cash back, entering that sale in the Payout Calculator with a customer email automatically emails the customer a link to claim it — they choose PayPal/Wise/other themselves, the same way an affiliate sets their own payout method. You see a masked summary and a manual "Mark cashback paid" button on the Ledger once they've claimed; it's not wired into the automated PayPal/Wise batch runs.</p>

@@ -25,7 +25,7 @@ class GAS_Wise_Payouts {
 	}
 
 	private static function api_token() {
-		return get_option( 'gas_wise_api_token', '' );
+		return GAS_Crypto::get_secret_option( 'gas_wise_api_token' );
 	}
 
 	private static function profile_id() {

@@ -91,6 +91,27 @@ class GAS_Crypto {
 	}
 
 	/**
+	 * API credentials stored in wp_options (PayPal client secret, Wise API
+	 * token). Client IDs and profile IDs are identifiers, not secrets, and
+	 * stay plain.
+	 */
+	const SECRET_OPTIONS = array( 'gas_paypal_client_secret', 'gas_wise_api_token' );
+
+	public static function get_secret_option( $name ) {
+		$plain = self::decrypt( get_option( $name, '' ), 'opt:' . $name );
+		return null === $plain ? '' : (string) $plain;
+	}
+
+	/** True when something is stored, even if it can't currently be decrypted. */
+	public static function has_secret_option( $name ) {
+		return '' !== (string) get_option( $name, '' );
+	}
+
+	public static function update_secret_option( $name, $value ) {
+		update_option( $name, self::encrypt( $value, 'opt:' . $name ) );
+	}
+
+	/**
 	 * Encrypts every still-plaintext sensitive value in place. Idempotent and
 	 * safe to re-run. Each value is decrypted again and compared before it is
 	 * written; a mismatch is skipped and counted, never overwritten.
@@ -111,8 +132,24 @@ class GAS_Crypto {
 			$ctx = 'u' . $r->user_id . ':' . $r->meta_key;
 			$enc = self::encrypt( $r->meta_value, $ctx );
 			if ( self::is_encrypted( $enc ) && self::decrypt( $enc, $ctx ) === $r->meta_value ) {
-				$wpdb->update( $wpdb->usermeta, array( 'meta_value' => $enc ), array( 'umeta_id' => $r->umeta_id ) );
+				// Through WordPress (not a raw UPDATE) so the object cache is refreshed too.
+				update_user_meta( (int) $r->user_id, $r->meta_key, $enc );
 				$result['user_meta']++;
+			} else {
+				$result['skipped']++;
+			}
+		}
+
+		$result['options'] = 0;
+		foreach ( self::SECRET_OPTIONS as $name ) {
+			$value = get_option( $name, '' );
+			if ( '' === (string) $value || self::is_encrypted( $value ) ) {
+				continue;
+			}
+			$enc = self::encrypt( $value, 'opt:' . $name );
+			if ( self::is_encrypted( $enc ) && self::decrypt( $enc, 'opt:' . $name ) === $value ) {
+				update_option( $name, $enc );
+				$result['options']++;
 			} else {
 				$result['skipped']++;
 			}
@@ -140,6 +177,12 @@ class GAS_Crypto {
 		$in   = "'" . implode( "','", array_map( 'esc_sql', $keys ) ) . "'";
 		$n    = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->usermeta} WHERE meta_key IN ({$in}) AND meta_value <> '' AND meta_value NOT LIKE '" . self::PREFIX . "%'" );
 		$n   += (int) $wpdb->get_var( 'SELECT COUNT(*) FROM ' . GAS_DB::table( 'payouts' ) . " WHERE cashback_payment_details IS NOT NULL AND cashback_payment_details <> '' AND cashback_payment_details NOT LIKE '" . self::PREFIX . "%'" );
+		foreach ( self::SECRET_OPTIONS as $name ) {
+			$value = get_option( $name, '' );
+			if ( '' !== (string) $value && ! self::is_encrypted( $value ) ) {
+				$n++;
+			}
+		}
 		return $n;
 	}
 }

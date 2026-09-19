@@ -220,7 +220,7 @@ class GAS_REST {
 
 		$results = array();
 
-		if ( get_option( 'gas_paypal_client_id' ) && get_option( 'gas_paypal_client_secret' ) ) {
+		if ( get_option( 'gas_paypal_client_id' ) && GAS_Crypto::has_secret_option( 'gas_paypal_client_secret' ) ) {
 			$paypal_result     = GAS_PayPal_Payouts::pay_all_eligible_affiliates( get_option( 'gas_paypal_currency', 'USD' ) );
 			$results['paypal'] = is_wp_error( $paypal_result )
 				? array( 'error' => $paypal_result->get_error_message() )
@@ -228,7 +228,7 @@ class GAS_REST {
 			GAS_Admin::audit_log( 'payout_run', 0, 'paypal_pay_all', array( 'result' => $results['paypal'], 'trigger' => 'automated' ) );
 		}
 
-		if ( get_option( 'gas_wise_api_token' ) && get_option( 'gas_wise_profile_id' ) ) {
+		if ( GAS_Crypto::has_secret_option( 'gas_wise_api_token' ) && get_option( 'gas_wise_profile_id' ) ) {
 			$results['wise'] = GAS_Wise_Payouts::pay_all_eligible_affiliates();
 			GAS_Admin::audit_log( 'payout_run', 0, 'wise_pay_all', array( 'result' => $results['wise'], 'trigger' => 'automated' ) );
 		}

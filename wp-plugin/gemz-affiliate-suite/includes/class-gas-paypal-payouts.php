@@ -21,7 +21,7 @@ class GAS_PayPal_Payouts {
 
 	private static function get_access_token() {
 		$client_id     = get_option( 'gas_paypal_client_id', '' );
-		$client_secret = get_option( 'gas_paypal_client_secret', '' );
+		$client_secret = GAS_Crypto::get_secret_option( 'gas_paypal_client_secret' );
 
 		if ( ! $client_id || ! $client_secret ) {
 			return new WP_Error( 'paypal_not_configured', 'PayPal API credentials are not set.' );

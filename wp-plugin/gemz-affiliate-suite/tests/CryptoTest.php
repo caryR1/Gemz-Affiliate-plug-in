@@ -71,6 +71,35 @@ final class CryptoTest extends TestCase {
 		$this->assertNull( GAS_Crypto::decrypt( $enc, 'c' ), 'encrypted data is unreadable without the key' );
 	}
 
+	public function test_secret_option_is_stored_encrypted_and_read_back(): void {
+		$GLOBALS['gas_test_options'] = array();
+		GAS_Crypto::update_secret_option( 'gas_wise_api_token', 'tok_live_abc123' );
+		$stored = $GLOBALS['gas_test_options']['gas_wise_api_token'];
+		$this->assertTrue( GAS_Crypto::is_encrypted( $stored ) );
+		$this->assertStringNotContainsString( 'tok_live_abc123', $stored );
+		$this->assertSame( 'tok_live_abc123', GAS_Crypto::get_secret_option( 'gas_wise_api_token' ) );
+		$this->assertTrue( GAS_Crypto::has_secret_option( 'gas_wise_api_token' ) );
+	}
+
+	public function test_legacy_plaintext_secret_option_still_reads(): void {
+		$GLOBALS['gas_test_options'] = array( 'gas_paypal_client_secret' => 'plain-secret' );
+		$this->assertSame( 'plain-secret', GAS_Crypto::get_secret_option( 'gas_paypal_client_secret' ) );
+	}
+
+	public function test_secret_option_is_bound_to_its_own_name(): void {
+		$GLOBALS['gas_test_options'] = array();
+		GAS_Crypto::update_secret_option( 'gas_wise_api_token', 'tok' );
+		$GLOBALS['gas_test_options']['gas_paypal_client_secret'] = $GLOBALS['gas_test_options']['gas_wise_api_token'];
+		$this->assertSame( '', GAS_Crypto::get_secret_option( 'gas_paypal_client_secret' ), 'copied to another option: unreadable, so empty' );
+		$this->assertTrue( GAS_Crypto::has_secret_option( 'gas_paypal_client_secret' ), 'still counts as set' );
+	}
+
+	public function test_unset_secret_option_reads_empty(): void {
+		$GLOBALS['gas_test_options'] = array();
+		$this->assertSame( '', GAS_Crypto::get_secret_option( 'gas_wise_api_token' ) );
+		$this->assertFalse( GAS_Crypto::has_secret_option( 'gas_wise_api_token' ) );
+	}
+
 	public function test_unicode_and_long_values_round_trip(): void {
 		$value = "Zoë Müller — 東京 \n" . str_repeat( 'x', 5000 );
 		$this->assertSame( $value, GAS_Crypto::decrypt( GAS_Crypto::encrypt( $value, 'c' ), 'c' ) );

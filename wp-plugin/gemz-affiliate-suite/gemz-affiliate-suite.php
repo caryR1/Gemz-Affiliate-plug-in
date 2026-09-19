@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'GAS_VERSION', '2.21.6' );
+define( 'GAS_VERSION', '2.22.0' );
 define( 'GAS_DB_VERSION', '19' );
 define( 'GAS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'GAS_PLUGIN_FILE', __FILE__ );
@@ -20,6 +20,7 @@ require_once GAS_PLUGIN_DIR . 'includes/class-gas-settings.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-roles.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-db.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-fraud.php';
+require_once GAS_PLUGIN_DIR . 'includes/class-gas-crypto.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-cashback.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-paypal-payouts.php';

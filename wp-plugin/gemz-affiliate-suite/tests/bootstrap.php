@@ -129,4 +129,5 @@ require_once GAS_PLUGIN_DIR . 'includes/class-gas-db.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-payouts.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-frontend.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-fraud.php';
+require_once GAS_PLUGIN_DIR . 'includes/class-gas-crypto.php';
 require_once GAS_PLUGIN_DIR . 'includes/class-gas-leads.php';

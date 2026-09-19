@@ -45,16 +45,48 @@ class GAS_Payouts {
 	// already covers that).
 	const META_SIGNUP_IP = 'gas_signup_ip';
 
+	/**
+	 * The user-meta keys stored encrypted (see GAS_Crypto). Method, currency,
+	 * transfer type, form type and the submitted-at timestamp stay plaintext:
+	 * they are not sensitive and other code checks them directly.
+	 */
+	public static function encrypted_meta_keys() {
+		return array(
+			self::META_PAYPAL_EMAIL, self::META_WISE_NAME, self::META_WISE_ACCOUNT, self::META_WISE_ROUTING, self::META_NOTES,
+			self::META_TAX_LEGAL_NAME, self::META_TAX_ID, self::META_TAX_COUNTRY,
+		);
+	}
+
+	/**
+	 * Reads one sensitive meta value, decrypting it. A legacy plaintext value
+	 * is returned as-is. If it is encrypted but unreadable (missing or changed
+	 * key, tampering) this returns '' and sets $unreadable, rather than
+	 * failing or returning ciphertext.
+	 */
+	private static function read_secret( $user_id, $meta_key, &$unreadable = false ) {
+		$raw   = get_user_meta( $user_id, $meta_key, true );
+		$plain = GAS_Crypto::decrypt( $raw, 'u' . (int) $user_id . ':' . $meta_key );
+		if ( null === $plain ) {
+			$unreadable = true;
+			return '';
+		}
+		return $plain;
+	}
+
+	private static function write_secret( $user_id, $meta_key, $value ) {
+		update_user_meta( $user_id, $meta_key, GAS_Crypto::encrypt( $value, 'u' . (int) $user_id . ':' . $meta_key ) );
+	}
+
 	public static function get_details( $user_id ) {
 		return array(
 			'method'          => get_user_meta( $user_id, self::META_METHOD, true ) ?: '',
-			'paypal_email'    => get_user_meta( $user_id, self::META_PAYPAL_EMAIL, true ),
-			'wise_name'       => get_user_meta( $user_id, self::META_WISE_NAME, true ),
+			'paypal_email'    => self::read_secret( $user_id, self::META_PAYPAL_EMAIL ),
+			'wise_name'       => self::read_secret( $user_id, self::META_WISE_NAME ),
 			'wise_currency'   => get_user_meta( $user_id, self::META_WISE_CURRENCY, true ),
 			'wise_transfer'   => get_user_meta( $user_id, self::META_WISE_TRANSFER, true ),
-			'wise_account'    => get_user_meta( $user_id, self::META_WISE_ACCOUNT, true ),
-			'wise_routing'    => get_user_meta( $user_id, self::META_WISE_ROUTING, true ),
-			'notes'           => get_user_meta( $user_id, self::META_NOTES, true ),
+			'wise_account'    => self::read_secret( $user_id, self::META_WISE_ACCOUNT ),
+			'wise_routing'    => self::read_secret( $user_id, self::META_WISE_ROUTING ),
+			'notes'           => self::read_secret( $user_id, self::META_NOTES ),
 		);
 	}
 
@@ -68,14 +100,14 @@ class GAS_Payouts {
 			: '';
 
 		update_user_meta( $user_id, self::META_METHOD, $method );
-		update_user_meta( $user_id, self::META_PAYPAL_EMAIL, isset( $post['paypal_email'] ) ? sanitize_email( wp_unslash( $post['paypal_email'] ) ) : '' );
-		update_user_meta( $user_id, self::META_WISE_NAME, isset( $post['wise_account_name'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_name'] ) ) : '' );
+		self::write_secret( $user_id, self::META_PAYPAL_EMAIL, isset( $post['paypal_email'] ) ? sanitize_email( wp_unslash( $post['paypal_email'] ) ) : '' );
+		self::write_secret( $user_id, self::META_WISE_NAME, isset( $post['wise_account_name'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_name'] ) ) : '' );
 		update_user_meta( $user_id, self::META_WISE_CURRENCY, isset( $post['wise_currency'] ) ? strtoupper( sanitize_text_field( wp_unslash( $post['wise_currency'] ) ) ) : '' );
 		$transfer = isset( $post['wise_transfer_type'] ) && in_array( $post['wise_transfer_type'], array( 'aba', 'iban' ), true ) ? $post['wise_transfer_type'] : '';
 		update_user_meta( $user_id, self::META_WISE_TRANSFER, $transfer );
-		update_user_meta( $user_id, self::META_WISE_ACCOUNT, isset( $post['wise_account_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_number'] ) ) : '' );
-		update_user_meta( $user_id, self::META_WISE_ROUTING, isset( $post['wise_routing_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_routing_number'] ) ) : '' );
-		update_user_meta( $user_id, self::META_NOTES, isset( $post['payment_notes'] ) ? sanitize_textarea_field( wp_unslash( $post['payment_notes'] ) ) : '' );
+		self::write_secret( $user_id, self::META_WISE_ACCOUNT, isset( $post['wise_account_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_number'] ) ) : '' );
+		self::write_secret( $user_id, self::META_WISE_ROUTING, isset( $post['wise_routing_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_routing_number'] ) ) : '' );
+		self::write_secret( $user_id, self::META_NOTES, isset( $post['payment_notes'] ) ? sanitize_textarea_field( wp_unslash( $post['payment_notes'] ) ) : '' );
 	}
 
 	/**
@@ -99,12 +131,16 @@ class GAS_Payouts {
 	}
 
 	public static function get_tax_info( $user_id ) {
+		$unreadable = false;
 		return array(
 			'form_type'    => get_user_meta( $user_id, self::META_TAX_FORM_TYPE, true ) ?: '',
-			'legal_name'   => get_user_meta( $user_id, self::META_TAX_LEGAL_NAME, true ),
-			'tax_id'       => get_user_meta( $user_id, self::META_TAX_ID, true ),
-			'country'      => get_user_meta( $user_id, self::META_TAX_COUNTRY, true ),
+			'legal_name'   => self::read_secret( $user_id, self::META_TAX_LEGAL_NAME, $unreadable ),
+			'tax_id'       => self::read_secret( $user_id, self::META_TAX_ID, $unreadable ),
+			'country'      => self::read_secret( $user_id, self::META_TAX_COUNTRY, $unreadable ),
 			'submitted_at' => get_user_meta( $user_id, self::META_TAX_SUBMITTED_AT, true ),
+			// true when a stored value is encrypted but cannot be read (key
+			// missing or changed): the tax export flags it instead of showing blanks.
+			'unreadable'   => $unreadable,
 		);
 	}
 
@@ -131,9 +167,9 @@ class GAS_Payouts {
 		}
 
 		update_user_meta( $user_id, self::META_TAX_FORM_TYPE, $form_type );
-		update_user_meta( $user_id, self::META_TAX_LEGAL_NAME, $legal_name );
-		update_user_meta( $user_id, self::META_TAX_ID, $tax_id );
-		update_user_meta( $user_id, self::META_TAX_COUNTRY, $country );
+		self::write_secret( $user_id, self::META_TAX_LEGAL_NAME, $legal_name );
+		self::write_secret( $user_id, self::META_TAX_ID, $tax_id );
+		self::write_secret( $user_id, self::META_TAX_COUNTRY, $country );
 		update_user_meta( $user_id, self::META_TAX_SUBMITTED_AT, current_time( 'mysql' ) );
 		return true;
 	}

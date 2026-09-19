@@ -838,7 +838,7 @@ Ranked by what would hurt most if development speed goes up:
    rather than wrong content, a subtler failure mode worth a deliberate
    pass rather than assuming `nocache_headers()` alone is protecting them,
    or that three is the last instance of this bug class on this host.
-7. **Tax info (SSN/EIN) is stored in plaintext user-meta, unencrypted** —
+7. **RESOLVED 2026-09-19 (v2.22.0, STATUS.md F11): tax IDs, legal names and payment details are now encrypted at rest when a `GAS_DATA_KEY` is set in wp-config.php.** Original entry: **Tax info (SSN/EIN) is stored in plaintext user-meta, unencrypted** —
    deliberately consistent with the existing (also unencrypted) banking-info
    fields rather than a new inconsistency, but disclosed here as a real gap
    worth revisiting once affiliate volume makes it a bigger target.

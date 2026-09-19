@@ -1664,6 +1664,12 @@ class GAS_Admin {
 		echo '<p><a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_export_ledger_csv' ), 'gas_export_ledger_csv' ) ) . '" class="button">Export CSV</a></p>';
 
 		echo '<h2>Tax summary (for your accountant)</h2>';
+		if ( GAS_Crypto::available() ) {
+			$plain_left = GAS_Crypto::count_plaintext();
+			echo '<p class="description" style="color:#1a7a3c;"><strong>Tax and payment details are stored encrypted</strong> (AES-256-GCM, key kept in wp-config.php, not the database).' . ( $plain_left ? ' <span style="color:#b32d2e;">' . esc_html( $plain_left ) . ' older value(s) are still unencrypted and need the one-time conversion.</span>' : '' ) . ' Keep a separate backup of the key: without it, stored tax and payment details cannot be recovered.</p>';
+		} else {
+			echo '<p class="description" style="color:#b32d2e;"><strong>Encryption is NOT active:</strong> no valid GAS_DATA_KEY is set in wp-config.php, so tax IDs and payment details are stored unencrypted.</p>';
+		}
 		echo '<p class="description">Everything actually paid to each affiliate in one calendar year, plus their tax info on file &mdash; hand this to your accountant or a 1099 e-filing service (e.g. Track1099). This plugin doesn\'t file with the IRS itself. <strong>Contains full, unmasked SSNs/EINs</strong> &mdash; handle the downloaded file as sensitive.</p>';
 		$current_year = (int) current_time( 'Y' );
 		echo '<form method="get" style="display:inline;">';
@@ -2544,7 +2550,7 @@ class GAS_Admin {
 				number_format( $total, 2, '.', '' ),
 				$tax['form_type'] ? strtoupper( $tax['form_type'] ) : 'NOT ON FILE',
 				$tax['legal_name'],
-				$tax['tax_id'],
+				! empty( $tax['unreadable'] ) ? 'UNREADABLE (encryption key missing or changed)' : $tax['tax_id'],
 				$tax['country'],
 				$tax['submitted_at'] ?: '',
 			) );
@@ -2724,7 +2730,7 @@ class GAS_Admin {
 		<p>Gross commission on a sale is a fixed pool, split across up to 3 tiers (Settings controls the percentages): the affiliate who made the sale, their sponsor (whoever recruited them), and the sponsor's own sponsor. A tier with no one in it keeps its share as net to <?php echo esc_html( $site_name ); ?> — it's never redistributed to the tiers that do have someone in them. Every tier amount rounds up to the nearest $10, both on the real Payout Ledger and in the marketing-page estimates shown to affiliates and prospects. A partner can also be configured to pay the buyer cash back, separate from the tier split — see "Buyer cash back" below.</p>
 
 		<h2>Tax compliance and minimum payout</h2>
-		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself).</p>
+		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself). Tax IDs, legal names and payment details are stored encrypted when a GAS_DATA_KEY is set in wp-config.php (the Ledger page shows whether it is active); keep a separate backup of that key, because without it the stored values cannot be recovered.</p>
 
 		<h2>Buyer cash back</h2>
 		<p>If a partner is configured with buyer cash back, entering that sale in the Payout Calculator with a customer email automatically emails the customer a link to claim it — they choose PayPal/Wise/other themselves, the same way an affiliate sets their own payout method. You see a masked summary and a manual "Mark cashback paid" button on the Ledger once they've claimed; it's not wired into the automated PayPal/Wise batch runs.</p>

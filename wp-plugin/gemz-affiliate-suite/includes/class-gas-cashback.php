@@ -66,7 +66,9 @@ class GAS_Cashback {
 			'SELECT cashback_payment_details FROM ' . GAS_DB::table( 'payouts' ) . ' WHERE id = %d',
 			$payout_id
 		) );
-		$decoded = $raw ? json_decode( $raw, true ) : array();
+		// Stored encrypted (GAS_Crypto); an unreadable value reads as empty.
+		$plain   = $raw ? GAS_Crypto::decrypt( $raw, 'p' . (int) $payout_id . ':cashback' ) : '';
+		$decoded = $plain ? json_decode( $plain, true ) : array();
 		return wp_parse_args( is_array( $decoded ) ? $decoded : array(), array(
 			'method'        => '',
 			'paypal_email'  => '',
@@ -109,7 +111,7 @@ class GAS_Cashback {
 		$wpdb->update(
 			GAS_DB::table( 'payouts' ),
 			array(
-				'cashback_payment_details' => wp_json_encode( $details ),
+				'cashback_payment_details' => GAS_Crypto::encrypt( wp_json_encode( $details ), 'p' . (int) $payout_id . ':cashback' ),
 				'cashback_claimed_at'      => current_time( 'mysql' ),
 			),
 			array( 'id' => $payout_id )

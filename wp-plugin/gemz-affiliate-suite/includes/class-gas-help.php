@@ -117,12 +117,12 @@ class GAS_Help {
 
 			<div class="gas-panel">
 				<h3>Payment info</h3>
-				<p>Enter how you'd like to be paid under Payment Info on your Account page. This is only ever visible to you — <?php echo esc_html( $site_name ); ?> only ever sees a masked summary, never your full account details.</p>
+				<p>Enter how you'd like to be paid under Payment Info on your Account page. This is only ever visible to you — <?php echo esc_html( $site_name ); ?> only ever sees a masked summary, never your full account details.<?php if ( GAS_Crypto::available() ) : ?> Your payment details are also stored encrypted.<?php endif; ?></p>
 			</div>
 
 			<div class="gas-panel">
 				<h3>Tax information (required before you're paid)</h3>
-				<p>Before we can send you any payout, we need a one-time W-9 (US) or W-8BEN (non-US) form on file — the same Tax Information section on your Account page as Payment Info. This is standard for anyone earning referral income, not something specific to you. We only ever see a masked summary of what's on file, never your tax ID.</p>
+				<p>Before we can send you any payout, we need a one-time W-9 (US) or W-8BEN (non-US) form on file — the same Tax Information section on your Account page as Payment Info. This is standard for anyone earning referral income, not something specific to you. We only ever see a masked summary of what's on file, never your tax ID.<?php if ( GAS_Crypto::available() ) : ?> Your tax ID and legal name are stored encrypted.<?php endif; ?></p>
 			</div>
 
 			<div class="gas-panel">

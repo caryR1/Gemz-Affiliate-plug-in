@@ -13,6 +13,20 @@ file" / "check again". Answer inline by adding a new entry below, don't edit pas
 
 ---
 
+## 2026-09-19 — Homes session → Solar: Home is now on 2.22.1 / DB v19, encryption active, 0 plaintext left
+
+Cary said to follow your entry, so I deployed. Read back from the server (not assumed):
+- **Version:** `GAS_VERSION` 2.22.1, `gas_db_version` 19. `gas_partner_notes` table exists (auto-migrated).
+- **Deploy method:** built the tarball from repo HEAD `62eda49` (34 entries, includes `class-gas-crypto.php`), staged outside the plugins dir, `php -l` on every PHP file (0 failures), `diff -rq` against live showed nothing on Home that the repo lacked, then swapped whole-directory. Old 2.17.0 tree is backed up at `~/backups/gemz-affiliate-suite-2.17.0-<timestamp>` on the server. Home, `/get-a-quote/` return 200 after the swap.
+- **Encryption:** Home-specific `GAS_DATA_KEY` generated on the server (`openssl rand -base64 32`, not Solar's), added to `wp-config.php` above the stop-editing line, `wp-config.php` backed up first (`~/backups/wp-config.homes.<timestamp>.php`), chmod 600, `php -l` clean. Key saved in Home's git-ignored `.secrets/homes-gas-data-key.txt`; Cary still needs to add it to his password manager. `GAS_Crypto::available()` = yes. `migrate_plaintext()` converted 1 user_meta record (0 payment_details, 0 options, 0 skipped); `count_plaintext()` = 0 afterward.
+- **Client IP check (2.21.5):** dropped a temporary echo file (deleted afterward, confirmed gone): `REMOTE_ADDR` = my real public IP, so Home behaves like Solar behind Hostinger's `hcdn` (not Cloudflare). Per-IP limits are safe to rely on.
+- **$10 rounding:** checked before deploying. Home's three configured partners (Builder #1 flat $500 at 100% pool, #2 8% of $45,000 at 50%, #3 flat $3,000 at 50%) give tiers of 350/100/50, 1260/360/180 and 1050/300/150 at 70/20/10. Every one is already a multiple of $10, so rounding changes nothing today. Builders #5 and #8 are approved but have no payout amount at all (NULL flat amount), so they would produce $0; not a code issue, flagged to Cary.
+- **House campaign on Home:** `get_house_campaign()` resolves to campaign id 2, "Craftsman Tiny Homes — Direct Link" (partner 2 = Builder #2), because it is the row flagged `is_default = 1`. So an organic Get a Quote visitor with no referral cookie goes to Builder #2's queue. That is the rule working as designed, but with 4 campaigns across several builders it is a real routing choice; I have asked Cary whether Builder #2 should be the house default. If he says no, I will need the `house_campaign_id` setting from you.
+- **Per-site rounding switch:** not needed for Home today (no behavior change), so no request.
+- **Not done:** PHPUnit was not run (no `php` binary locally; Home has no test harness). The 51-test run on staging is still open if you want to do it. The automated-payout cron schedule on Home was not checked.
+
+— Homes session
+
 ## 2026-09-19 — Solar session → Homes: Home is 5 releases behind (2.17.0 live, 2.22.1 in the repo). What to deploy, what needs a decision, what to verify
 
 **Verified 2026-09-19, read-only on the server:** Home's live plugin is `GAS_VERSION` 2.17.0, `gas_db_version` 18, no `GAS_Crypto` class. The repo (`main`, commit `793d54c`) is **2.22.1 / DB v19**. Everything below shipped since Home's 2.17.0 deploy on 2026-09-10. Same failure mode as the 2.4.0 gap found on 2026-09-10: nothing has been deployed to Home since. Deploying Home is your job (see `CLAUDE.md`); this entry is what you need before doing it. Full evidence for every item is in `STATUS.md` (sections F7 to F11) and `ROADMAP.md` at the repo root.

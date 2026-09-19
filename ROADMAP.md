@@ -1,5 +1,38 @@
 # Gemz Affiliate Suite — Roadmap
 
+## Current lane (2026-09-19) — read this first
+
+Conservative scope: smallest reliable workflow, retrofit later, no speculative
+enterprise features. Definition of done includes current help docs (see
+`STATUS.md` section F4). Evidence and reasoning: `STATUS.md` section F.
+
+**NOW / HARDEN**
+- Update the PHPUnit payout tests for round-up-to-$10, run them on the server.
+- First post-rounding multi-tier end-to-end payout at the current $425 pool
+  (expect $300 / $90 / $50; 3-level cap; attribution and ledger).
+- Duplicate partner id 2: dependency audit done (clean); delete pending Cary.
+- Logged-out merged Refer-a-Friend end-to-end test.
+- Public-form cache/nonce pass (signup, quote).
+- Unsubscribe and Segments export test.
+- Automated payout cron readiness (does the hosting-panel cron exist).
+- Small release smoke checklist; fix plugin header version (1.0.0 vs 2.21.3).
+- Derive the REST settings allowlist from the settings defaults.
+- Help-docs audit against current behavior.
+
+**LATER (only on demonstrated need)**
+Calendar-grade scheduling, SMS, partner self-signup, richer reporting and
+trends, IP/VPN intelligence, 1099 e-filing, Wise in production (PayPal is the
+launch rail), email drip/broadcast via ONE existing CRM/ESP (decision pending;
+GAS stays the contacts/consent source, never a sending engine).
+
+**PARKED (built, frozen, no further work)**
+Campaign variants, marketing assets, lead magnets, partner-prospecting
+fields/REST import, theme presets beyond the current pick, per-affiliate
+personal color, Demo Admin role, buyer cashback (until a partner actually uses
+it), vestigial fields (`default_cut_*`, `installments_json`) pending removal.
+
+---
+
 Living status doc for the shared `gemz-affiliate-suite` plugin (powers both
 solar.gemzonline.com and homes.gemzonline.com). Unlike `SWAP-with-HOMES.md`
 (a running conversation log between the two sessions), this is meant to stay

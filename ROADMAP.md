@@ -6,8 +6,10 @@ solar.gemzonline.com and homes.gemzonline.com). Unlike `SWAP-with-HOMES.md`
 current — update it in place as features land or plans change, rather than
 appending entries.
 
-Last written: 2026-09-11, by the Solar Referral session. Current
-`GAS_VERSION`: 2.19.1 / `GAS_DB_VERSION`: 18.
+Last written: 2026-09-11, by the Solar Referral session (header updated
+2026-09-19). Current `GAS_VERSION`: 2.21.3 / `GAS_DB_VERSION`: 19. For a
+verified "what is true right now" snapshot with evidence tags, see
+`STATUS.md` — it wins over this file where they disagree.
 
 **2026-09-11, latest**: fixed a real bug, not just a style pass — Get a
 Quote (`gas_lead_form`) was missing from `STYLED_SHORTCODES`, so
@@ -723,13 +725,11 @@ and Cary himself has wp-admin access to supply images there).
   above): `gas_campaign_variants` gives per-campaign alternate landing
   pages, and clicks/conversions now attribute to a campaign independent of
   which affiliate's code was used.
-- **No affiliate-agreement acceptance tracking yet.** `DRAFT-affiliate-
-  agreement.md` (repo root) is a generic starting draft — explicitly not
-  legal advice, has bracketed placeholders, needs Cary's/an attorney's
-  review before it's binding. The planned follow-up (an acceptance
-  checkbox + timestamp captured at signup) is deliberately NOT built yet —
-  holding until Cary confirms the actual text, so nothing gets built
-  against placeholder legal language.
+- ~~No affiliate-agreement acceptance tracking yet~~ — **built 2026-09-10**
+  (see the "Cary confirmed the affiliate agreement text" entry at the top):
+  required acceptance checkbox + `gas_agreement_accepted_at` on both signup
+  forms, agreement published as a real page. `DRAFT-affiliate-agreement.md`
+  remains a generic draft, not legal advice.
 - **No 1099-NEC e-filing.** The new tax-summary CSV export (see "Tax
   compliance" above) is accountant-ready, not a filer — actual filing goes
   through Cary's accountant or a service like Track1099/Tax1099.

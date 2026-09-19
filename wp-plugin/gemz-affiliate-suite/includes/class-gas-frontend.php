@@ -2399,7 +2399,11 @@ class GAS_Frontend {
 		check_admin_referer( 'gas_save_payment_info' );
 
 		$user_id = get_current_user_id();
-		GAS_Payouts::save_details( $user_id, wp_unslash( $_POST ) );
+		if ( ! GAS_Payouts::save_details( $user_id, wp_unslash( $_POST ) ) ) {
+			// Fail closed: secure storage unavailable, nothing was saved.
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( GAS_Crypto::refusal_message() ), self::account_url() ) );
+			exit;
+		}
 
 		wp_safe_redirect( add_query_arg( 'gas_notice', 'payment_updated', self::account_url() ) );
 		exit;
@@ -2479,7 +2483,10 @@ class GAS_Frontend {
 		$saved   = GAS_Payouts::save_tax_info( $user_id, wp_unslash( $_POST ) );
 
 		if ( ! $saved ) {
-			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( 'Please fill in your name, tax ID type, and country of residence — a US person also needs an SSN or EIN.' ), self::account_url() ) );
+			$message = GAS_Crypto::$refused
+				? GAS_Crypto::refusal_message()
+				: 'Please fill in your name, tax ID type, and country of residence — a US person also needs an SSN or EIN.';
+			wp_safe_redirect( add_query_arg( 'gas_error', rawurlencode( $message ), self::account_url() ) );
 			exit;
 		}
 

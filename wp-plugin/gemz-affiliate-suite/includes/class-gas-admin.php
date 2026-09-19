@@ -1645,6 +1645,9 @@ class GAS_Admin {
 		if ( isset( $_GET['saved'] ) ) {
 			echo '<div class="notice notice-success"><p>Payout API settings saved.</p></div>';
 		}
+		if ( isset( $_GET['secret_refused'] ) ) {
+			echo '<div class="notice notice-error"><p>' . esc_html( GAS_Crypto::admin_refusal_message() ) . ' Your other settings on that form were saved.</p></div>';
+		}
 		if ( isset( $_GET['payout_result'] ) ) {
 			self::render_payout_result_notice();
 		}
@@ -1664,11 +1667,11 @@ class GAS_Admin {
 		echo '<p><a href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=gas_export_ledger_csv' ), 'gas_export_ledger_csv' ) ) . '" class="button">Export CSV</a></p>';
 
 		echo '<h2>Tax summary (for your accountant)</h2>';
-		if ( GAS_Crypto::available() ) {
+		if ( GAS_Crypto::operational() ) {
 			$plain_left = GAS_Crypto::count_plaintext();
 			echo '<p class="description" style="color:#1a7a3c;"><strong>Tax and payment details, and the PayPal/Wise API secrets, are stored encrypted</strong> (AES-256-GCM, key kept in wp-config.php, not the database).' . ( $plain_left ? ' <span style="color:#b32d2e;">' . esc_html( $plain_left ) . ' older value(s) are still unencrypted and need the one-time conversion.</span>' : '' ) . ' Keep a separate backup of the key: without it, stored tax and payment details cannot be recovered.</p>';
 		} else {
-			echo '<p class="description" style="color:#b32d2e;"><strong>Encryption is NOT active:</strong> no valid GAS_DATA_KEY is set in wp-config.php, so tax IDs and payment details are stored unencrypted.</p>';
+			echo '<p class="description" style="color:#b32d2e;"><strong>Encryption is NOT active:</strong> no valid GAS_DATA_KEY is set in wp-config.php (or encryption is failing). New tax IDs, payment details, cash-back details and PayPal/Wise API secrets are REFUSED (not saved, and never stored unencrypted) until a valid key is added. Values already stored stay as they are.</p>';
 		}
 		echo '<p class="description">Everything actually paid to each affiliate in one calendar year, plus their tax info on file &mdash; hand this to your accountant or a 1099 e-filing service (e.g. Track1099). This plugin doesn\'t file with the IRS itself. <strong>Contains full, unmasked SSNs/EINs</strong> &mdash; handle the downloaded file as sensitive.</p>';
 		$current_year = (int) current_time( 'Y' );
@@ -2371,9 +2374,14 @@ class GAS_Admin {
 		update_option( 'gas_paypal_client_id', sanitize_text_field( wp_unslash( $_POST['gas_paypal_client_id'] ?? '' ) ) );
 		// Secrets are stored encrypted; a blank field keeps the saved value,
 		// and removing one needs the explicit checkbox.
+		// Fail closed: if encryption is not operational a new secret is REFUSED
+		// (not stored, not stored in plaintext) and the admin is told.
+		$refused   = false;
 		$pp_secret = sanitize_text_field( wp_unslash( $_POST['gas_paypal_client_secret'] ?? '' ) );
 		if ( '' !== $pp_secret ) {
-			GAS_Crypto::update_secret_option( 'gas_paypal_client_secret', $pp_secret );
+			if ( ! GAS_Crypto::update_secret_option( 'gas_paypal_client_secret', $pp_secret ) ) {
+				$refused = true;
+			}
 		} elseif ( ! empty( $_POST['gas_paypal_clear_secret'] ) ) {
 			update_option( 'gas_paypal_client_secret', '' );
 		}
@@ -2382,14 +2390,16 @@ class GAS_Admin {
 		update_option( 'gas_wise_env', 'live' === ( $_POST['gas_wise_env'] ?? '' ) ? 'live' : 'sandbox' );
 		$wise_token = sanitize_text_field( wp_unslash( $_POST['gas_wise_api_token'] ?? '' ) );
 		if ( '' !== $wise_token ) {
-			GAS_Crypto::update_secret_option( 'gas_wise_api_token', $wise_token );
+			if ( ! GAS_Crypto::update_secret_option( 'gas_wise_api_token', $wise_token ) ) {
+				$refused = true;
+			}
 		} elseif ( ! empty( $_POST['gas_wise_clear_token'] ) ) {
 			update_option( 'gas_wise_api_token', '' );
 		}
 		update_option( 'gas_wise_profile_id', sanitize_text_field( wp_unslash( $_POST['gas_wise_profile_id'] ?? '' ) ) );
 		update_option( 'gas_wise_source_currency', strtoupper( sanitize_text_field( wp_unslash( $_POST['gas_wise_source_currency'] ?? 'USD' ) ) ) );
 
-		wp_safe_redirect( admin_url( 'admin.php?page=gas-ledger&saved=1' ) );
+		wp_safe_redirect( admin_url( 'admin.php?page=gas-ledger&' . ( $refused ? 'secret_refused=1' : 'saved=1' ) ) );
 		exit;
 	}
 
@@ -2745,7 +2755,7 @@ class GAS_Admin {
 		<p>Gross commission on a sale is a fixed pool, split across up to 3 tiers (Settings controls the percentages): the affiliate who made the sale, their sponsor (whoever recruited them), and the sponsor's own sponsor. A tier with no one in it keeps its share as net to <?php echo esc_html( $site_name ); ?> — it's never redistributed to the tiers that do have someone in them. Every tier amount rounds up to the nearest $10, both on the real Payout Ledger and in the marketing-page estimates shown to affiliates and prospects. A partner can also be configured to pay the buyer cash back, separate from the tier split — see "Buyer cash back" below.</p>
 
 		<h2>Tax compliance and minimum payout</h2>
-		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself). Tax IDs, legal names, payment details and the PayPal/Wise API secrets are stored encrypted when a GAS_DATA_KEY is set in wp-config.php (a saved API secret is never shown back on the settings form: leave the field blank to keep it) (the Ledger page shows whether it is active); keep a separate backup of that key, because without it the stored values cannot be recovered.</p>
+		<p>An affiliate must have a W-9 (US) or W-8BEN (non-US) on file before ANY payout goes out — not just once they'd cross the IRS's $600/year threshold, which avoids a partial-year tracking edge case. The automated and manual PayPal/Wise payout runs both hold anyone missing this (or below the $50 minimum payout threshold in Settings) rather than paying them, and email the affiliate why — see the Payout Ledger for a per-run breakdown of who was held and why, and the Tax Summary CSV export for a per-affiliate, per-year total to hand your accountant (not a 1099 e-filer itself). Tax IDs, legal names, payment details and the PayPal/Wise API secrets are stored encrypted when a GAS_DATA_KEY is set in wp-config.php (a saved API secret is never shown back on the settings form: leave the field blank to keep it). Without a working key, saving new tax or payment details, cash-back details or API secrets is refused with a clear message rather than stored unencrypted (the Ledger page shows whether it is active); keep a separate backup of that key, because without it the stored values cannot be recovered.</p>
 
 		<h2>Buyer cash back</h2>
 		<p>If a partner is configured with buyer cash back, entering that sale in the Payout Calculator with a customer email automatically emails the customer a link to claim it — they choose PayPal/Wise/other themselves, the same way an affiliate sets their own payout method. You see a masked summary and a manual "Mark cashback paid" button on the Ledger once they've claimed; it's not wired into the automated PayPal/Wise batch runs.</p>

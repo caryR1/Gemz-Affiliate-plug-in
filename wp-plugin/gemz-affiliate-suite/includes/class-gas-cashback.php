@@ -107,11 +107,18 @@ class GAS_Cashback {
 			'notes'         => isset( $post['payment_notes'] ) ? sanitize_textarea_field( wp_unslash( $post['payment_notes'] ) ) : '',
 		);
 
+		// Fail closed: if it cannot be encrypted, store nothing and say why.
+		$encrypted = GAS_Crypto::encrypt( wp_json_encode( $details ), 'p' . (int) $payout_id . ':cashback' );
+		if ( false === $encrypted ) {
+			GAS_Crypto::$refused = true;
+			return false;
+		}
+
 		global $wpdb;
 		$wpdb->update(
 			GAS_DB::table( 'payouts' ),
 			array(
-				'cashback_payment_details' => GAS_Crypto::encrypt( wp_json_encode( $details ), 'p' . (int) $payout_id . ':cashback' ),
+				'cashback_payment_details' => $encrypted,
 				'cashback_claimed_at'      => current_time( 'mysql' ),
 			),
 			array( 'id' => $payout_id )
@@ -305,8 +312,12 @@ class GAS_Cashback {
 			self::render_thank_you( $payout );
 		}
 
+		GAS_Crypto::$refused = false;
 		$saved = self::save_payment_details( $payout->id, wp_unslash( $_POST ) );
 		if ( ! $saved ) {
+			if ( GAS_Crypto::$refused ) {
+				wp_die( esc_html( GAS_Crypto::refusal_message() ), 'Cash Back Claim', array( 'response' => 503 ) );
+			}
 			wp_die( 'Please choose a payout method.', 'Cash Back Claim', array( 'response' => 400 ) );
 		}
 

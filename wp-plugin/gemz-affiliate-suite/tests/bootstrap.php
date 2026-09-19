@@ -62,8 +62,32 @@ function get_userdata( $user_id ) {
 	return null;
 }
 
+/**
+ * In-memory user meta (added 2026-09-19 for the fail-closed tests). Unset
+ * keys still read as '' exactly as before, so existing compute() tests are
+ * unaffected.
+ */
+$GLOBALS['gas_test_usermeta'] = array();
+
 function get_user_meta( $user_id, $key = '', $single = false ) {
-	return '';
+	return isset( $GLOBALS['gas_test_usermeta'][ $user_id ][ $key ] ) ? $GLOBALS['gas_test_usermeta'][ $user_id ][ $key ] : '';
+}
+
+function update_user_meta( $user_id, $key, $value ) {
+	$GLOBALS['gas_test_usermeta'][ $user_id ][ $key ] = $value;
+	return true;
+}
+
+function sanitize_email( $value ) {
+	return trim( (string) $value );
+}
+
+function sanitize_textarea_field( $value ) {
+	return trim( (string) $value );
+}
+
+function current_time( $type ) {
+	return '2026-09-19 12:00:00';
 }
 
 /**

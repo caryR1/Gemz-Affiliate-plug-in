@@ -49,7 +49,7 @@ current — update it in place as features land or plans change, rather than
 appending entries.
 
 Last written: 2026-09-11, by the Solar Referral session (header updated
-2026-09-19). Current `GAS_VERSION`: 2.21.3 / `GAS_DB_VERSION`: 19. For a
+2026-09-19). Current `GAS_VERSION`: 2.22.2 / `GAS_DB_VERSION`: 19. For a
 verified "what is true right now" snapshot with evidence tags, see
 `STATUS.md` — it wins over this file where they disagree.
 

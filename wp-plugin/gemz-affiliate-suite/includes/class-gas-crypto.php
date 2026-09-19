@@ -33,6 +33,16 @@ class GAS_Crypto {
 	/** For tests only: a raw 32-byte key that replaces the wp-config constant. */
 	public static $key_override = null;
 
+	/** For tests only: makes encrypt() behave as if the cipher call failed. */
+	public static $test_fail = false;
+
+	/**
+	 * Set to true by any sensitive write that was refused because encryption
+	 * was not operational, so a caller can show the right message instead of
+	 * a validation error. Reset at the start of each sensitive write.
+	 */
+	public static $refused = false;
+
 	private static function key() {
 		if ( null !== self::$key_override ) {
 			return 32 === strlen( self::$key_override ) ? self::$key_override : null;
@@ -55,19 +65,51 @@ class GAS_Crypto {
 	}
 
 	/**
-	 * Empty values are left empty (so "is anything set?" checks keep working).
-	 * Without a valid key the plaintext is returned unchanged.
+	 * True only when a valid key is configured AND a real encrypt/decrypt
+	 * round trip works right now. Sensitive writes depend on this, not just on
+	 * the key being present.
+	 */
+	public static function operational() {
+		if ( ! self::available() ) {
+			return false;
+		}
+		$probe = self::encrypt( 'gas-probe', 'probe' );
+		return false !== $probe && 'gas-probe' === self::decrypt( $probe, 'probe' );
+	}
+
+	/** Shown to an affiliate, partner or customer whose save was refused. */
+	public static function refusal_message() {
+		return 'Your information could not be saved because secure storage is not available on this site right now. Nothing was stored. Please contact the site administrator and try again later.';
+	}
+
+	/** Shown to an admin whose API-secret save was refused. */
+	public static function admin_refusal_message() {
+		return 'Not saved: encryption is not active (no valid GAS_DATA_KEY in wp-config.php, or encryption is failing), so the API secret was refused rather than stored unencrypted. Add a valid key, then save again.';
+	}
+
+	/**
+	 * Fail closed. Empty values return '' (nothing to protect, and "is it set"
+	 * checks keep working). A non-empty value returns ciphertext, or FALSE if it
+	 * cannot be encrypted right now (no key, invalid key, or a cipher error).
+	 * It never returns the plaintext, so a caller that stores the result
+	 * unchecked cannot silently save unencrypted data: it must handle false.
 	 */
 	public static function encrypt( $plain, $context = '' ) {
 		$plain = (string) $plain;
-		if ( '' === $plain || self::is_encrypted( $plain ) || ! self::available() ) {
+		if ( '' === $plain ) {
+			return '';
+		}
+		if ( self::is_encrypted( $plain ) ) {
 			return $plain;
+		}
+		if ( self::$test_fail || ! self::available() ) {
+			return false;
 		}
 		$iv  = random_bytes( 12 );
 		$tag = '';
 		$ct  = openssl_encrypt( $plain, self::CIPHER, self::key(), OPENSSL_RAW_DATA, $iv, $tag, (string) $context, 16 );
 		if ( false === $ct || 16 !== strlen( $tag ) ) {
-			return $plain;
+			return false;
 		}
 		return self::PREFIX . base64_encode( $iv . $tag . $ct );
 	}
@@ -107,8 +149,15 @@ class GAS_Crypto {
 		return '' !== (string) get_option( $name, '' );
 	}
 
+	/** Returns false (and stores nothing) if the value cannot be encrypted. */
 	public static function update_secret_option( $name, $value ) {
-		update_option( $name, self::encrypt( $value, 'opt:' . $name ) );
+		$enc = self::encrypt( $value, 'opt:' . $name );
+		if ( false === $enc ) {
+			self::$refused = true;
+			return false;
+		}
+		update_option( $name, $enc );
+		return true;
 	}
 
 	/**

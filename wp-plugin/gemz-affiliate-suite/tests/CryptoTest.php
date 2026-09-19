@@ -63,12 +63,45 @@ final class CryptoTest extends TestCase {
 		$this->assertNull( GAS_Crypto::decrypt( $enc, 'c' ) );
 	}
 
-	public function test_no_key_means_plaintext_writes_and_unreadable_ciphertext(): void {
+	public function test_invalid_key_fails_closed_and_old_ciphertext_is_unreadable(): void {
 		$enc = GAS_Crypto::encrypt( 'secret value', 'c' );
 		GAS_Crypto::$key_override = 'too-short';
 		$this->assertFalse( GAS_Crypto::available() );
-		$this->assertSame( 'plain', GAS_Crypto::encrypt( 'plain', 'c' ), 'fail-open: stored as-is, the Ledger page warns' );
+		$this->assertFalse( GAS_Crypto::operational() );
+		$this->assertFalse( GAS_Crypto::encrypt( 'plain', 'c' ), 'fail closed: never returns the plaintext' );
 		$this->assertNull( GAS_Crypto::decrypt( $enc, 'c' ), 'encrypted data is unreadable without the key' );
+	}
+
+	public function test_missing_key_fails_closed(): void {
+		GAS_Crypto::$key_override = null; // and no GAS_DATA_KEY constant in this harness
+		$this->assertFalse( GAS_Crypto::available() );
+		$this->assertFalse( GAS_Crypto::operational() );
+		$this->assertFalse( GAS_Crypto::encrypt( 'plain', 'c' ) );
+		$this->assertSame( '', GAS_Crypto::encrypt( '', 'c' ), 'empty values are still fine (clearing a field)' );
+	}
+
+	public function test_cipher_failure_fails_closed(): void {
+		GAS_Crypto::$test_fail = true;
+		try {
+			$this->assertFalse( GAS_Crypto::encrypt( 'plain', 'c' ) );
+			$this->assertFalse( GAS_Crypto::operational(), 'a failing cipher is not operational even with a good key' );
+		} finally {
+			GAS_Crypto::$test_fail = false;
+		}
+	}
+
+	public function test_working_key_is_operational(): void {
+		$this->assertTrue( GAS_Crypto::available() );
+		$this->assertTrue( GAS_Crypto::operational() );
+	}
+
+	public function test_secret_option_refused_without_a_working_key_and_nothing_is_stored(): void {
+		$GLOBALS['gas_test_options'] = array();
+		GAS_Crypto::$key_override = 'too-short';
+		GAS_Crypto::$refused      = false;
+		$this->assertFalse( GAS_Crypto::update_secret_option( 'gas_wise_api_token', 'tok-secret' ) );
+		$this->assertTrue( GAS_Crypto::$refused );
+		$this->assertArrayNotHasKey( 'gas_wise_api_token', $GLOBALS['gas_test_options'], 'nothing written, not even plaintext' );
 	}
 
 	public function test_secret_option_is_stored_encrypted_and_read_back(): void {

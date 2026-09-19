@@ -73,8 +73,28 @@ class GAS_Payouts {
 		return $plain;
 	}
 
-	private static function write_secret( $user_id, $meta_key, $value ) {
-		update_user_meta( $user_id, $meta_key, GAS_Crypto::encrypt( $value, 'u' . (int) $user_id . ':' . $meta_key ) );
+	/**
+	 * Fail closed and all-or-nothing: encrypts EVERY value first and only then
+	 * writes any of them. If any non-empty value cannot be encrypted (no key,
+	 * invalid key, cipher error) nothing is written, GAS_Crypto::$refused is
+	 * set, and false is returned. Empty values are allowed (clearing a field).
+	 * Never falls back to storing plaintext.
+	 */
+	private static function write_secrets( $user_id, array $values ) {
+		GAS_Crypto::$refused = false;
+		$encrypted = array();
+		foreach ( $values as $meta_key => $value ) {
+			$enc = GAS_Crypto::encrypt( $value, 'u' . (int) $user_id . ':' . $meta_key );
+			if ( false === $enc ) {
+				GAS_Crypto::$refused = true;
+				return false;
+			}
+			$encrypted[ $meta_key ] = $enc;
+		}
+		foreach ( $encrypted as $meta_key => $enc ) {
+			update_user_meta( $user_id, $meta_key, $enc );
+		}
+		return true;
 	}
 
 	public static function get_details( $user_id ) {
@@ -95,19 +115,29 @@ class GAS_Payouts {
 	 * from an admin screen.
 	 */
 	public static function save_details( $user_id, array $post ) {
+		GAS_Crypto::$refused = false;
 		$method = isset( $post['payout_method'] ) && in_array( $post['payout_method'], array( 'paypal', 'wise', 'other' ), true )
 			? $post['payout_method']
 			: '';
 
+		// Sensitive values first, all-or-nothing: if they can't be stored
+		// encrypted, refuse and change nothing (returns false).
+		$stored = self::write_secrets( $user_id, array(
+			self::META_PAYPAL_EMAIL => isset( $post['paypal_email'] ) ? sanitize_email( wp_unslash( $post['paypal_email'] ) ) : '',
+			self::META_WISE_NAME    => isset( $post['wise_account_name'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_name'] ) ) : '',
+			self::META_WISE_ACCOUNT => isset( $post['wise_account_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_number'] ) ) : '',
+			self::META_WISE_ROUTING => isset( $post['wise_routing_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_routing_number'] ) ) : '',
+			self::META_NOTES        => isset( $post['payment_notes'] ) ? sanitize_textarea_field( wp_unslash( $post['payment_notes'] ) ) : '',
+		) );
+		if ( ! $stored ) {
+			return false;
+		}
+
 		update_user_meta( $user_id, self::META_METHOD, $method );
-		self::write_secret( $user_id, self::META_PAYPAL_EMAIL, isset( $post['paypal_email'] ) ? sanitize_email( wp_unslash( $post['paypal_email'] ) ) : '' );
-		self::write_secret( $user_id, self::META_WISE_NAME, isset( $post['wise_account_name'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_name'] ) ) : '' );
 		update_user_meta( $user_id, self::META_WISE_CURRENCY, isset( $post['wise_currency'] ) ? strtoupper( sanitize_text_field( wp_unslash( $post['wise_currency'] ) ) ) : '' );
 		$transfer = isset( $post['wise_transfer_type'] ) && in_array( $post['wise_transfer_type'], array( 'aba', 'iban' ), true ) ? $post['wise_transfer_type'] : '';
 		update_user_meta( $user_id, self::META_WISE_TRANSFER, $transfer );
-		self::write_secret( $user_id, self::META_WISE_ACCOUNT, isset( $post['wise_account_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_account_number'] ) ) : '' );
-		self::write_secret( $user_id, self::META_WISE_ROUTING, isset( $post['wise_routing_number'] ) ? sanitize_text_field( wp_unslash( $post['wise_routing_number'] ) ) : '' );
-		self::write_secret( $user_id, self::META_NOTES, isset( $post['payment_notes'] ) ? sanitize_textarea_field( wp_unslash( $post['payment_notes'] ) ) : '' );
+		return true;
 	}
 
 	/**
@@ -152,6 +182,7 @@ class GAS_Payouts {
 	 * field — everything else is required for either form type.
 	 */
 	public static function save_tax_info( $user_id, array $post ) {
+		GAS_Crypto::$refused = false;
 		$form_type = isset( $post['tax_form_type'] ) && in_array( $post['tax_form_type'], array( 'w9', 'w8ben' ), true )
 			? $post['tax_form_type']
 			: '';
@@ -166,10 +197,18 @@ class GAS_Payouts {
 			return false; // required for a W-9; optional for a W-8BEN
 		}
 
+		// Fail closed: if the sensitive fields can't be stored encrypted,
+		// nothing is written (GAS_Crypto::$refused tells the caller why).
+		$stored = self::write_secrets( $user_id, array(
+			self::META_TAX_LEGAL_NAME => $legal_name,
+			self::META_TAX_ID         => $tax_id,
+			self::META_TAX_COUNTRY    => $country,
+		) );
+		if ( ! $stored ) {
+			return false;
+		}
+
 		update_user_meta( $user_id, self::META_TAX_FORM_TYPE, $form_type );
-		self::write_secret( $user_id, self::META_TAX_LEGAL_NAME, $legal_name );
-		self::write_secret( $user_id, self::META_TAX_ID, $tax_id );
-		self::write_secret( $user_id, self::META_TAX_COUNTRY, $country );
 		update_user_meta( $user_id, self::META_TAX_SUBMITTED_AT, current_time( 'mysql' ) );
 		return true;
 	}

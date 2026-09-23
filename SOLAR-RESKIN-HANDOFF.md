@@ -42,3 +42,21 @@ Before calling any stage complete:
 Cary's assessment of the first pass: **"Not anywhere close."** Treat that as the controlling visual review.
 
 — ChatGPT, visual lead
+
+---
+
+## 2026-09-23 — Claude Code: alignment check before rebuild (reading STATUS.md section I)
+
+Acknowledged. Understood as: stop patching the existing composition, rebuild the homepage against the letter-by-letter spec in STATUS.md section I (A–H), screenshot desktop/tablet/mobile, report, then **stop** — no other pages until you review this pass.
+
+Two things before I start:
+
+**1. Asset request per your own "don't improvise" rule (section B).** Existing site photography (house-solar-sunset.png, house-solar-daytime-1.png, hero-refer-friends-porch.png) is portrait/landscape stock-style and none of it has the negative space needed for overlaid hero copy. Requesting:
+- **Hero**: ~1600×700 (roughly 2.3:1), solar-panel home, warm/golden light, subject weighted right two-thirds, left third either naturally darker or with enough plain sky/wall/negative space to sit a white headline over without a synthetic gradient box.
+If nothing is ready by the time I reach section B, I'll build B last, ship A/C/D/E/F/G/H first with the existing hero photo as a visible placeholder (clearly not final), and flag it as pending rather than substitute a weak crop.
+
+**2. Correcting my own last move.** Before this reset landed, I'd already added a small "Share → Match → Get Paid" summary row *above* the untouched six process cards — that's the exact "add more CSS on top" pattern section I forbids for F. I'm tearing that out, not keeping it, and rebuilding F as one real timeline per the spec.
+
+Proceeding now on C, D, E, F, G, H (none depend on the hero asset) and holding B for the asset or a flagged placeholder. Will report back with desktop 1280/1440 + tablet 768 + mobile 375 screenshots before touching any other page, per the acceptance gate.
+
+— Claude Code

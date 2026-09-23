@@ -187,6 +187,36 @@ Cary questioned my "almost certainly not configured" wording. He was right to: i
 - **Docs:** Admin Help updated (saves are refused without a working key) and the Ledger warning reworded. **Affiliate Help and Partner Help are unaffected** (the refusal only appears when the site's key is broken, and it explains itself on screen).
 - **Consequence for other sites (Homes):** a site running this version without a valid `GAS_DATA_KEY` can no longer save tax or payment information, or API secrets, until the key is set. The key step in the Homes deploy instructions is now mandatory before affiliates use those forms, not just recommended. See the 2026-09-19 correction in `SWAP-with-HOMES.md`.
 
+## G. Solar homepage visual reskin (2026-09-23, ChatGPT direction, Cary-approved; content-only, no plugin code touched)
+
+Scope note: this section covers `solar-referral`, not the plugin repo — recorded here anyway per ChatGPT's instruction, since `STATUS.md` is the shared file both parties read.
+
+**Direction and resolution.** Cary supplied a reference screenshot (a "SunBright Solar Solutions" homepage: white nav, dark navy headings, green accents, real house photography, pill buttons, numbered process steps, footer trust bar with a testimonial and stats). ChatGPT then posted the visual-reskin brief in the shared draft: same engine/new skin, carry the reference's layout language site-wide, use "bright solar/electric blue" (not the reference's actual green), and explicitly do not copy the reference's fabricated stats ("10,000+ homeowners," "25+ years") or its testimonial. Cary confirmed twice: first to use the image's own colors, then — after ChatGPT's written amendment explicitly ruling green out and specifying navy/electric-blue/white (tying Solar Gemz visually to the GemzOnline parent brand) — to follow that amendment instead. Final direction executed: **Solar Gemz's own existing blue brand, adapted to the reference's structural language, not the reference's literal green.**
+
+**What changed — Home page (`solar-referral` post ID 6) only, via Elementor content, no plugin code, no theme file:**
+- Hero: replaced the dark-gradient panel + dashboard-mockup graphic with a light background, dark-navy headline (copy unchanged, verbatim), and a real photorealistic solar-home photo (existing site asset, `house-solar-sunset.png`, media ID 123) on a golden-hour sunset — closely matching the reference's photographic hero treatment. Added a second CTA: "Get a Free Quote" (solid electric-blue pill, primary) alongside the existing "Get Your Referral Link" (blue-outline pill, secondary) — satisfies ChatGPT's "primary quote CTA, referral entry point available but not dominant" without changing either link's destination or any form/logic.
+- All buttons site homepage-wide: pill-shaped (`border-radius:999px`), electric-blue `#1E6FD9` fill or outline, replacing the prior 8px-radius blue buttons.
+- Icon-benefit cards ("Why Solar Gemz"): existing emoji icons wrapped in white circular badges with a blue ring, card background lightened, an uppercase blue eyebrow label added above each section heading (matches the reference's small label-above-headline pattern) — copy unchanged.
+- Numbered process section (the existing 6-step "How A Referral Actually Moves Through The System," copy unchanged): given a full-bleed dark navy/blue gradient background with electric-blue numbered circles and light text, mirroring the reference's dark 3-step "It's Easy to Go Solar" strip (ours keeps its real 6 steps; only the container type changed, not the count or wording).
+- New "credibility/trust" strip inserted between the "Why Solar Gemz" cards and the "You handle / We handle" section (ChatGPT's homepage item 4). **Contains only substantiated Solar Gemz facts** — vetted local partners, real cash payouts (PayPal/ACH/Wise), no cost to join — deliberately with **no invented numbers and no testimonial**, per the truth guard both Cary and ChatGPT required.
+- Nav, footer, and every other page (Solar Benefits, Get a Quote, Refer a Friend, FAQ, Blog, Build a Team, Become an Affiliate, dashboards) were **not touched** — still the prior styling. A site-wide extension (matching nav/footer/other-page treatment to the same palette) was in ChatGPT's brief but not completed this pass; see "Not done" below.
+
+**What was deliberately left alone:** GAS plugin code, database schema, referral/attribution cookies and logic, quote/consent form processing, partner matching, commissions/payouts, all shortcodes, all functional URLs, admin/back-office screens, the WordPress theme itself. Nothing in this pass touched anything outside post 6's Elementor content.
+
+**Verification:**
+- Pre-change backup of post 6's full `_elementor_data` saved locally at `solar-referral/backups/home-backup-pre-reskin-2026-09-23.json` before any edit.
+- Elementor JSON re-encode/re-decode checked byte-for-byte after every write (same safe pattern as prior Elementor edits this project); `wp_slash()` used before `update_post_meta()`.
+- Elementor CSS cache flushed and LiteSpeed/CDN purged after each change; verified with cache-busted fetches.
+- Visual check via live screenshots at desktop (1280px) and mobile (375px) width: hero, icon cards, trust strip, and dark process section all render as intended; mobile stacks and wraps cleanly, buttons go full-width, nav collapses to its existing hamburger (theme behavior, unchanged).
+- Regression check: all 8 public pages return 200 (through their normal trailing-slash redirect, unchanged from before); the `/go/{campaign}?ref={code}` referral link still sets both attribution cookies and redirects to Get a Quote exactly as before — confirms the plugin's referral/attribution path is untouched.
+- Tablet width not separately screenshotted this pass (flagged as pending below).
+
+**Not done / pending:**
+- Site-wide extension of this palette/style to the nav bar itself, footer, and other public pages (Solar Benefits, Get a Quote, etc.) — ChatGPT's brief asked for this "across the whole public Solar site, not just the homepage"; only the homepage was completed this pass given scope/time. A small site-wide CSS pass (nav CTA styling, consistent card/button treatment) would close this without touching the theme, using the same mu-plugin CSS mechanism already used for Solar's other presentation tweaks.
+- Tablet-width (768px) screenshot not taken; desktop and mobile both checked.
+- Hero photo is an existing stock-style site asset (`house-solar-sunset.png`), not a custom-generated image. Cary noted Claude Chat can generate images; a purpose-made hero (and matching imagery for other sections) could replace this placeholder.
+- No A/B or analytics comparison of the old vs. new homepage conversion — purely a visual/structural change.
+
 ## E. Recommended first tests (real coverage gaps)
 1. **Confirm the pool value with Cary**, then run one full chain end to end: referral from code 6 → lead completed → payout created; expect tier1 code 6, tier2 code 5, tier3 code 3, code 2 nothing, each rounded up. Never done post-rounding. Do it on staging or delete the test rows after.
 2. Update the PHPUnit payout tests for rounding and run them on the server.

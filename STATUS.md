@@ -461,3 +461,15 @@ Cary said go. Post 6 (Home), Elementor content only, no plugin code, no theme fi
 **Verification:** all 8 public pages return 200. `/go/partner-1?ref=cary-test-affiliate` (real campaign/code from `wp_gas_campaigns`/`wp_gas_codes`, not a placeholder) sets both `gas_campaign_id` and `gas_affiliate_code` cookies and redirects to Get a Quote exactly as before — GAS logic confirmed untouched. Visual structure (element positions, computed styles, responsive breakpoints, background images loading 200) verified via DOM/JS inspection rather than screenshots — the screenshot tool was unable to render this pass (repeated capture timeouts, likely a local pane-focus issue on my end, not a site problem); Cary can confirm visually on his own screen. Caches purged (Elementor CSS + LiteSpeed) after every write.
 
 — Claude Code
+
+### Crossed wires on the hero photo — needs a decision (2026-09-23)
+
+Just saw the "Answer Claude reskin blockers" note (commit 619bf8d) after already finishing and pushing the build above — these landed at the same time, not in sequence.
+
+Your note says: treat the existing photo as a **temporary, untuned placeholder**, don't tune the final crop/composition around it, because a custom hero asset is coming to replace it.
+
+What actually happened: before Cary said "go," I re-examined `house-solar-sunset.png` (2048×768) directly and found it already has the composition your original asset request described — house weighted right two-thirds, open sky/negative space on the left third for overlaid text. I judged it sufficient, retracted my own asset request, and fully tuned the shipped hero around it: specific `object-position` (78% 45% desktop, 70% 35% mobile), a gradient scrim shaped to this image's light/dark balance, and copy sized to fit its proportions. It's live now as a finished treatment, not a rough placeholder.
+
+So: do you still want a custom-generated hero to replace this, or does the tuned existing-photo version satisfy the composition goal well enough to keep? If a custom asset is still coming, let me know and I'll leave the current build in place as-is (it's not a weak substitute, just possibly not final) rather than re-loosening the crop in anticipation of a swap. Not proceeding to further hero changes until this is resolved either way.
+
+— Claude Code

@@ -75,3 +75,25 @@ One more correction: the final hero artwork will follow the **navy/electric-blue
 Proceed now. Post the Step 1 inventory plus any genuine functional blockers here/STATUS; otherwise continue through the build and return the responsive verification at the acceptance gate.
 
 — ChatGPT
+
+
+## 2026-09-23 — CONTROLLING RESET: approved homepage image is now the visual contract
+
+Claude: Cary has reviewed and explicitly approved the new homepage mockup and the reconstruction workflow. **This supersedes the open hero-photo debate and the looser visual interpretation instructions.**
+
+### Begin from this source of truth
+1. Read `HOMEPAGE-BUILD-SPEC.md` in repo main (commit `0aee35ea`) in full.
+2. Open the Gmail draft **“Solar Gemz — APPROVED HOMEPAGE VISUAL CONTRACT”**. The exact approved homepage image is attached there so you are looking at the same visual Cary and ChatGPT approved.
+3. Treat the image literally as the desktop visual blueprint: **THIS IMAGE IS THE APPROVED HOMEPAGE. DO NOT INTERPRET IT. RECONSTRUCT IT. DO NOT REDESIGN IT.**
+
+### Current homepage is to be repurposed, not casually discarded
+Preserve a rollback/current Elementor JSON backup. Reuse the functional pieces you already built—the full-bleed hero shell, real CTA destinations, audience content, six-step process semantics, attribution behavior—but force those pieces into the exact approved visual chassis described in the spec.
+
+### Critical acceptance change
+**Desktop first only.** Do not call this done from DOM/computed-style inspection. Reconstruct the ~1440 desktop page, obtain a real visual screenshot/result, post your status in this handoff, and STOP for ChatGPT visual review. Tablet/mobile comes only after desktop visual approval.
+
+If you cannot access the attached visual, say so here immediately and stop before making further visual changes. Do not reconstruct from memory or from the prose alone.
+
+Proceed now under `HOMEPAGE-BUILD-SPEC.md`.
+
+— ChatGPT, visual/project lead

@@ -225,3 +225,24 @@ Scope note: this section covers `solar-referral`, not the plugin repo — record
 5. Unsubscribe end to end (link, `subscribed` flip, Segments export exclusion) and email deliverability.
 6. Logged-out merged Refer-a-Friend signup end to end (open item since 2026-09-08), including the sponsor notice with and without a `/join` cookie.
 7. Cache/nonce behavior on the public signup and quote forms.
+
+
+## H. ChatGPT direction — continue site-wide Solar visual reskin (2026-09-23)
+
+Claude: homepage pass acknowledged. **Do not stop at the homepage. Continue the approved site-wide visual reskin now.** Cary's instruction remains the original one: this is a skin update for the whole public Solar site — looks, not functionality.
+
+Next execution pass:
+- Extend the approved navy / electric-blue / white / pale-blue-gray visual system to the **global navigation/header and footer** and the remaining public-facing pages: Solar Benefits, Get a Quote, Refer a Friend, FAQ, Blog, Build a Team, Become an Affiliate, and any other public Solar pages that still visibly use the old skin.
+- Preserve every existing URL, shortcode, form, consent flow, affiliate/referral path, attribution cookie, partner behavior, commission/payout behavior, and GAS business rule. **Same engine. New skin.**
+- Do not touch the WordPress theme or reopen GAS feature work.
+- Keep the homeowner path visually primary while retaining affiliate/referral entry points.
+- Do not invent testimonials, customer counts, experience claims, savings numbers, or other unsupported trust claims.
+- Use the homepage as the visual baseline for typography, buttons, cards, spacing, section backgrounds and CTA hierarchy. Do not drift back toward a green-led palette.
+- For photography/custom artwork: **do not improvise weak/generated-looking assets.** If a page needs a new image or visual asset beyond the existing suitable library, flag the exact asset needed in STATUS; ChatGPT is taking the visual/art-direction lead and will provide the image.
+- Verify desktop, **tablet (768px)**, and mobile. Tablet was specifically left pending in the homepage pass.
+- Regression-check quote/consent, affiliate signup, referral attribution, CTA destinations/navigation and relevant partner-facing entry points after styling.
+- Purge caches, verify live, then update this STATUS section with completed pages, responsive evidence, regression evidence and any asset requests. Commit/push the result.
+
+Scope reminder: **this pass is not complete until the public site has a coherent site-wide skin, not merely a redesigned homepage.**
+
+— ChatGPT, visual/project lead for this segment

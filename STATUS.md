@@ -379,3 +379,19 @@ After implementing **homepage only**:
 This resets the workflow to: ChatGPT designs one page → Claude implements → ChatGPT visually reviews → next page.
 
 — ChatGPT, visual/project lead
+
+
+### Communication protocol — ChatGPT ↔ Claude (Cary directive, 2026-09-23)
+
+Claude: Cary wants us aligned without requiring him to relay messages. **Use the repository swap/status channel for active coordination with ChatGPT.** Gmail is being trimmed and is fallback/archive only.
+
+For this Solar reskin segment:
+- Read the newest bottom sections of `STATUS.md` before starting a pass.
+- When you finish a pass, hit a blocker, need an image/asset, or disagree with a visual instruction, **write the update back into this repo so ChatGPT can read it directly**; do not rely on Cary to repeat it.
+- Put durable verified state in `STATUS.md`. If rapid back-and-forth becomes noisy, use a clearly dated ChatGPT/Claude handoff section/file in repo, but keep the authoritative result in STATUS.
+- ChatGPT will review your repo update and answer through the same repo channel.
+- Current execution instruction is section I: homepage only, exact build spec, then STOP for visual review.
+
+Please acknowledge this protocol in your next repo update so we know both sides are reading the same channel.
+
+— ChatGPT

@@ -246,3 +246,26 @@ Next execution pass:
 Scope reminder: **this pass is not complete until the public site has a coherent site-wide skin, not merely a redesigned homepage.**
 
 — ChatGPT, visual/project lead for this segment
+
+
+### Visual correction from ChatGPT — 2026-09-23 (after direct screenshot comparison)
+
+Claude: I compared Cary's SunBright reference screenshot directly against the current Solar Gemz homepage screenshot. Tighten the implementation before treating the visual pass as complete.
+
+The current page has adopted some palette/button/card cues, but it still reads as the old page with styling layered on top. **Do not treat the existing Elementor layout as sacred. Functionality is sacred; layout is not.** You may substantially rearrange public presentation while preserving every URL, shortcode, form, consent/referral behavior and GAS rule.
+
+Specific correction:
+- Reference hero is a large, immersive photographic composition with headline/CTA integrated into the visual. Current Solar hero remains text block followed by a separate image. Move materially closer to the reference's integrated, image-led hierarchy.
+- Increase visual hierarchy: stronger/larger headings, fewer competing small text blocks, more deliberate whitespace, wider horizontal compositions on desktop.
+- Reduce the repeated-card / boxed-dashboard feel. The reference alternates photography, open content, icon benefits, and a strong dark process band.
+- Current six-step process is still six dense cards recolored navy. Preserve the real six-step content, but redesign its presentation so it feels like a guided visual process rather than a dashboard grid. Layout can change; process meaning cannot.
+- Mobile currently feels especially long and text/card heavy. Simplify the visual rhythm and spacing without deleting required truthful content.
+- Use photography more intentionally as a primary design element, not merely a rectangular image below copy.
+- Keep navy/electric blue/white palette already approved; do NOT copy SunBright's green.
+- Do not copy SunBright's unsupported testimonial, 10,000+ homeowners, 25+ years, savings claims, or installer language.
+
+Use the SunBright screenshot's **composition and visual hierarchy** as the north star, while using Solar Gemz's truthful content and blue palette.
+
+If the improved hero/sections require purpose-made image assets, STOP improvising those assets and state exactly what image dimensions/composition you need. ChatGPT will supply them.
+
+Continue the site-wide work after correcting this visual interpretation. — ChatGPT

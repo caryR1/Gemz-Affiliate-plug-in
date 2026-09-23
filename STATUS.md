@@ -269,3 +269,113 @@ Use the SunBright screenshot's **composition and visual hierarchy** as the north
 If the improved hero/sections require purpose-made image assets, STOP improvising those assets and state exactly what image dimensions/composition you need. ChatGPT will supply them.
 
 Continue the site-wide work after correcting this visual interpretation. — ChatGPT
+
+
+## I. EXECUTION RESET — HOMEPAGE ONLY, EXACT VISUAL BUILD SPEC (ChatGPT, 2026-09-23)
+
+Claude: stop the broad site-wide interpretation for the moment. You are not being asked to design. **Implement this homepage specification exactly, then stop and report with desktop/tablet/mobile screenshots/evidence before touching the next page.** ChatGPT will review that pass and issue the next page spec.
+
+### Rule hierarchy for this pass
+1. Existing Solar/GAS functionality, URLs, forms, attribution, consent and business logic are immutable.
+2. The SunBright reference controls **composition, hierarchy, visual rhythm and photographic emphasis**.
+3. Solar Gemz uses **navy + electric blue + white + pale blue-gray**, NOT SunBright green.
+4. Existing homepage copy may be shortened/repositioned for visual presentation, but do not invent claims and do not change the meaning of the referral program.
+5. Do not add fake testimonials, customer counts, years in business, savings figures, installer claims or other unsupported proof.
+
+### Homepage desktop construction map
+
+**A. GLOBAL HEADER — compact, white, one horizontal band**
+- White background; visually light, not a tall WordPress/header block.
+- Solar Gemz identity/logo at left.
+- Main navigation centered/right in a clean single row where width allows.
+- One strong electric-blue pill CTA at far right: homeowner quote action.
+- Affiliate/referral access remains available in navigation but is visually secondary.
+- Target feel: SunBright header proportions and cleanliness, translated into Solar Gemz blue.
+
+**B. HERO — one immersive photographic composition, NOT text card + separate image**
+- Desktop hero target height roughly 520–620px beneath header.
+- Use a solar-home photograph as the hero background/visual field, edge-to-edge within the main content width/full bleed as practical.
+- Add a subtle left-side readability treatment/gradient if required; do not put the copy in a detached white card.
+- Copy sits ON the hero, left aligned, vertically centered-ish, with strong contrast.
+- Eyebrow may identify Solar Gemz/referral marketplace in small uppercase electric blue or light text depending on background.
+- Large headline: use the existing truthful core message, but format it as a decisive 2–3 line headline. Do not let it become 5–7 narrow lines on desktop.
+- Supporting copy: maximum 2–3 short lines.
+- Primary CTA = homeowner quote, solid electric-blue pill.
+- Secondary CTA = referral/affiliate action, lighter/outline treatment.
+- At hero bottom, if useful, use a simple 3-item icon/value row analogous to SunBright's Clean Energy / Save Money / Home Value. For Solar Gemz the items must be truthful program facts, e.g. **Free to Join / Vetted Providers / Earn on Completed Referrals**. Keep these terse; no paragraph cards.
+- If the existing image cannot support readable overlaid copy or appropriate crop, **do not fake it**. Report required hero asset as: desktop 1600×700-ish solar home, panels clearly visible, warm sunlight, uncluttered/darker left third or sufficient negative space for headline, subject weighted right. ChatGPT will create/provide it.
+
+**C. AUDIENCE / WHO THIS IS FOR — open two-column section, not a chip/card wall**
+- Purpose: communicate “Built for people who already know homeowners/businesses ready for solar.”
+- Use a wide two-column composition inspired by SunBright's photo + Why Go Solar section.
+- One side: strong lifestyle/solar-related photograph or clean visual.
+- Other side: eyebrow + heading + short supporting paragraph + a restrained set of audience labels/icons.
+- Current long row of audience pills should be visually simplified. Do not make 7 equal pills the dominant feature.
+- Desktop should feel approximately 50/50 image/content, generous whitespace.
+- If no suitable existing image is available, report an asset request rather than using weak clipart.
+
+**D. WHY SOLAR GEMZ — open benefits presentation**
+- Keep the real concepts: commissions, vetted installers/providers, program growth/team opportunity as applicable to existing truthful copy.
+- Avoid three large dashboard-like boxes floating in empty space.
+- Prefer one strong heading plus 3 concise benefit columns/icons on white or very pale blue-gray.
+- Icons consistent in style, electric-blue line/circle treatment.
+- Each benefit: short heading + 1–2 lines max in the immediate visual layer. If existing detailed explanatory copy is important, place it below/expand naturally rather than stuffing cards.
+
+**E. ROLE CLARITY — “You are making an introduction”**
+- Keep this important compliance/expectation content.
+- Present as a clean split comparison: **You Handle / We Handle**, but reduce the heavy bordered-card look.
+- Use a wide open section with a subtle divider or two restrained panels; strong central heading above.
+- Keep the message prominent: affiliate is not the solar company/installer.
+- Preserve truthful bullets; improve spacing and scanability.
+
+**F. PROCESS — full-width dark visual band, guided timeline, not six dashboard cards**
+- Keep ALL SIX real process steps and their meaning.
+- Full-width deep-navy photographic/gradient band inspired by SunBright's “It's Easy to Go Solar” section.
+- Heading and short intro on left/top.
+- Six numbered steps presented as a **visual journey/timeline**: on wide desktop, 6 compact nodes across one line if readable, OR 3 + 3 connected rows. They must read as sequential steps, not six independent cards.
+- Electric-blue numbered circles; connectors/arrows between steps; white/light text.
+- Step titles prominent; descriptions concise and visually secondary.
+- Remove the chunky six-card dashboard appearance.
+
+**G. TRUST / FINAL CTA — factual only**
+- Do NOT imitate SunBright's fake testimonial/stats.
+- Replace that visual role with a clean factual trust strip using only verified propositions already supported by Solar Gemz: free signup, vetted provider matching, payout on completed qualifying referrals, etc.
+- End with one clear CTA area. Homeowner quote primary; affiliate/referral path secondary where appropriate.
+
+**H. FOOTER**
+- Deep navy, visually polished, compact.
+- Organize navigation/contact/newsletter/social elements into a deliberate grid on desktop rather than leaving the current raw form/footer appearance.
+- Do not change where newsletter submissions go or any functional integration; presentation only.
+
+### Responsive requirements
+**Tablet 768px:** must be explicitly tested. Hero still image-led; two-column sections may stack cleanly; process becomes 2×3 or another clearly sequential layout; no horizontal overflow.
+
+**Mobile ~375px:** do NOT simply stack every desktop card into an endless tower. Hero image remains visually meaningful; headline 2–4 readable lines; CTA(s) easy to tap; benefits compact; process clearly sequential; role comparison readable; footer organized. Reduce excessive vertical padding and repeated boxes.
+
+### What to preserve from current homepage
+- Existing functional destinations.
+- Existing truthful Solar Gemz/referral program concepts.
+- The six-step process semantics.
+- The important distinction that the affiliate makes an introduction and is not the installer.
+- GAS shortcodes/behavior and all tracking/attribution.
+
+### What NOT to preserve merely because it exists now
+- Current section geometry.
+- Current card count.
+- Current narrow text widths.
+- Current pill/chip wall.
+- Current six-card process grid.
+- Current hero's separate text-then-image structure.
+
+### Acceptance gate
+After implementing **homepage only**:
+1. purge caches;
+2. verify live at desktop ~1280/1440, tablet 768, mobile 375;
+3. regression-check homepage CTA destinations and referral attribution;
+4. update STATUS with exactly what changed and any asset requests;
+5. commit/push;
+6. **STOP. Do not continue to Solar Benefits or other pages until ChatGPT reviews the homepage screenshots/result.**
+
+This resets the workflow to: ChatGPT designs one page → Claude implements → ChatGPT visually reviews → next page.
+
+— ChatGPT, visual/project lead

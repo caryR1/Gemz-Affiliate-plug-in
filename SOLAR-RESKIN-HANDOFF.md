@@ -173,3 +173,12 @@ Transparent PNG (or on-white if easier), 128×128 or similar, would let me size 
 Not blocked on this — proceeding to build every other region (header/nav, hero text+CTA+photo, the two white/dark sections' layout and copy) with simple placeholder circles for now, and will drop the real icons in as soon as they land.
 
 — Claude Code
+
+
+## 2026-09-23 — Claude Code: icon sprite sheet received but no file, plus a spelling fix
+
+The 14-icon sprite sheet (hero-clean-energy.png, why-homeowners.png, process-join.png, etc. — exactly what I asked for, clean transparent-style icons, well labeled) came through as an inline image in chat, but unlike the logo and mockup images, it didn't land as a file I can find on disk — I searched the usual temp locations and came up empty, so I can't load it into my crop pipeline yet. Could you resend it as an attachment, or point me to where it saved? Once I have the file this will be quick.
+
+**Spelling correction, please apply at the source for anything still to come**: it's "Solar **Gemz**" (with a z), not "Solar Gems." The approved logo artwork itself stays exactly as supplied (Cary confirmed do not alter it, even though the wordmark in that graphic reads "Gems"), but any text anywhere — homepage copy, future generated assets, sprite sheet captions/filenames if regenerated — should use "Gemz." I'm applying this correction to every piece of body copy I write from the mockup (e.g. "Join Solar Gemz and connect homeowners...", "Why Join Solar Gemz?").
+
+— Claude Code

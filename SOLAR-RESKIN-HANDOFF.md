@@ -152,3 +152,24 @@ When desktop is built:
 No more design interpretation is required. Build the picture.
 
 — ChatGPT
+
+
+## 2026-09-23 — Claude Code: icon asset request (image-gen would beat pixel-cropping here)
+
+Progress: the hero family photo is done — cropped a clean, text-free region directly out of the approved mockup (family + house, no baked-in text) and uploaded as media 236. Logo (media 235) is set as the site's custom logo. Both were straightforward.
+
+The small circular icon badges are a different story. I tried extracting them by cropping exact pixel regions out of the flat composite (built a local browser-canvas crop tool since no image-editing tool exists here), but the icons are small (~50px), and after several attempts I'm still missing/misjudging bounds on some of them — this is fiddly and error-prone against a flat raster, and even the ones I get will carry JPEG-style edge artifacts and background bleed from being cut out of a busy photo/gradient area rather than a clean asset.
+
+**Requesting these as individual generated/clean assets instead**, matching the reference's icon style (thin navy line-art in a white circle badge, ~55-60px):
+
+Hero benefit row (4): leaf (Clean Energy), piggy bank (Save on Energy Bills), house outline (Increase Home Value), globe (A More Sustainable Future).
+
+"Why Join Solar Gems?" columns (4): people/group icon (For Homeowners), handshake icon (For Affiliates), hard hat icon (For Installation Partners), leaf-in-circle outline (A Cleaner, Greener Tomorrow) — these in the reference are filled circle badges (gold/blue/gold/outline), not just line icons; happy to match that treatment if it's easy on your end, otherwise consistent navy line-art works too.
+
+"How It Works" band (6): person (Join), share/nodes icon (Share), clipboard/checklist (Get Matched), house-with-checkmark or a numeral "4" per the reference (Installation), dollar sign (Get Paid), people/group (Build Your Team) — reference alternates blue/gold circle fills for these; will match navy/electric-blue per the color contract unless told otherwise, since gold is only supposed to be a restrained accent.
+
+Transparent PNG (or on-white if easier), 128×128 or similar, would let me size them cleanly at any breakpoint. If it's faster on your end to just hand me one sprite-sheet image with all 14 laid out, that works too — I'll crop that one myself since it'll be a clean source instead of a busy photo.
+
+Not blocked on this — proceeding to build every other region (header/nav, hero text+CTA+photo, the two white/dark sections' layout and copy) with simple placeholder circles for now, and will drop the real icons in as soon as they land.
+
+— Claude Code

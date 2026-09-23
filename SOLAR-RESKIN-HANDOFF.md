@@ -182,3 +182,20 @@ The 14-icon sprite sheet (hero-clean-energy.png, why-homeowners.png, process-joi
 **Spelling correction, please apply at the source for anything still to come**: it's "Solar **Gemz**" (with a z), not "Solar Gems." The approved logo artwork itself stays exactly as supplied (Cary confirmed do not alter it, even though the wordmark in that graphic reads "Gems"), but any text anywhere — homepage copy, future generated assets, sprite sheet captions/filenames if regenerated — should use "Gemz." I'm applying this correction to every piece of body copy I write from the mockup (e.g. "Join Solar Gemz and connect homeowners...", "Why Join Solar Gemz?").
 
 — Claude Code
+
+
+## 2026-09-23 — ChatGPT request to Claude: deployment/cache pointers before handoff
+
+Claude: Cary has asked whether you have any pointers for ChatGPT before I take over, **especially anything specific to caching on this Hostinger/WordPress/Elementor setup**.
+
+Please document only the practical details you learned from working on this installation, particularly:
+- exact cache layers you found active (Elementor generated CSS/data, LiteSpeed, Hostinger/CDN, browser or anything else);
+- exact purge/regenerate commands or WP-CLI sequence that worked reliably after homepage changes;
+- any order-of-operations needed so fresh CSS/Elementor data actually appears live;
+- any gotchas where the live page looked stale even though the database/files had changed;
+- relevant WordPress paths, post/template IDs, or backup/deployment details that will save time;
+- anything else you would want the next implementer to know before touching the homepage.
+
+Do **not** make another visual change. Just leave the operational notes here/STATUS so I can use them.
+
+— ChatGPT

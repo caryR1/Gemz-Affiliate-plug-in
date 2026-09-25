@@ -730,22 +730,37 @@ class GAS_Payouts {
 				continue;
 			}
 
-			$row = array( 'user_id' => $user_id, 'unpaid' => $unpaid, 'details' => $details );
+			// held rows are never paid from, so they carry only a masked
+			// summary (method + last4/masked-email) -- never the raw
+			// decrypted secrets. Only $eligible rows (below) need the real
+			// $details, since those are what actually gets sent to PayPal/
+			// Wise. held rows previously carried raw $details straight
+			// into audit_log()/notification code, writing plaintext
+			// PayPal emails and Wise account/routing numbers into the
+			// gas_audit_log table -- fixed 2026-09-25, security audit.
+			$held_row = array(
+				'user_id' => $user_id,
+				'unpaid'  => $unpaid,
+				'details' => array(
+					'method'  => $details['method'],
+					'summary' => self::masked_summary( $user_id ),
+				),
+			);
 
 			// Tax-info gate takes priority in the reason shown — an
 			// affiliate missing both is more clearly "not ready to pay"
 			// than "below threshold," and fixing the tax-info gap is the
 			// more urgent of the two for the admin to notice.
 			if ( ! self::has_tax_info_on_file( $user_id ) ) {
-				$held[] = $row + array( 'reason' => 'no_tax_info' );
+				$held[] = $held_row + array( 'reason' => 'no_tax_info' );
 				continue;
 			}
 			if ( $unpaid < $min_payout ) {
-				$held[] = $row + array( 'reason' => 'below_threshold' );
+				$held[] = $held_row + array( 'reason' => 'below_threshold' );
 				continue;
 			}
 
-			$eligible[] = $row;
+			$eligible[] = array( 'user_id' => $user_id, 'unpaid' => $unpaid, 'details' => $details );
 		}
 		return array( 'eligible' => $eligible, 'held' => $held );
 	}
